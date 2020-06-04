@@ -9,10 +9,10 @@ This repository list of proposals for the Strimzi project
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-|  4  | [GitHub repository restructuring](./4-github-repository-restructuring.md) |
-|  3  | [Remove deprecated Topic Operator deployment in Kafka CRD](./3-remove-deprecated-topic-operator-from-kafka-crd.md) |
-|  2  | [Documentation improvements](./2-documentation-improvements.md) |
-|  1  | [Move Strimzi Kafka operators to Java 11](./1-move-strimzi-kafka-operators-to-java-11.md) |
+|  4  | [GitHub repository restructuring](./004-github-repository-restructuring.md) |
+|  3  | [Remove deprecated Topic Operator deployment in Kafka CRD](./003-remove-deprecated-topic-operator-from-kafka-crd.md) |
+|  2  | [Documentation improvements](./002-documentation-improvements.md) |
+|  1  | [Move Strimzi Kafka operators to Java 11](./001-move-strimzi-kafka-operators-to-java-11.md) |
 
 ---
 
