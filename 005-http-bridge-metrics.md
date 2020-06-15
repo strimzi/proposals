@@ -57,7 +57,25 @@ This metrics can be exposed in the Prometheus format (as the previous Vert.x rel
 
 Useful metrics about Kafka part could be the following.
 
-TBD
+* Number of consumers
+* Producer:
+    * The average number of records sent per second
+    * The number of outgoing bytes sent to all brokers per second
+    * The averate number of records per second that resulted in errors (could be useful for alerts)
+* Consumer:
+    * The average number of records consumed per second
+    * The average number of bytes consumed per second
+    * The number of fetch requests per second
+
+The producer and consumer metrics are for the overall cluster and "per topic".
+
+It seems that the JMX Kafka client metrics don't have any information related to consumer groups.
+They bring a `client-id` label which the bridge set as the `instance-id` when a consumer is created.
+Of course, we have the information about which consumer group it joined.
+We could create a custom metric:
+
+* Size (number of consumers) per consumer group
+* Number of partitions assigned to each consumer in the consumer group
 
 ## Rejected alternatives
 
