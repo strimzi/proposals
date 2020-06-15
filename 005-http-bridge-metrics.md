@@ -3,7 +3,7 @@
 This proposal is about defining useful metrics we can expose from the HTTP Kafka bridge and a related Grafana dashboard.
 Right now, they are just Vert.x metrics from the HTTP server provided out of the box.
 
-# Vert.x provided HTTP server metrics
+## Vert.x provided HTTP server metrics
 
 Following a list of HTTP server related metrics and corresponding Grafana panels.
 
@@ -50,26 +50,22 @@ Maybe using another available metric about response time for processing each HTT
 
 They are not reported here but we are also getting JVM related metrics as for the operators about memory, GC, and so on.
 
-# Custom bridge metrics
+## Kafka clients provided metrics
 
-While the above metrics provides information about the HTTP part of the bridge, we are lacking the Kafka part.
-We could add some custom metrics which could have more info than the ones provided via HTTP requests:
+The Kafka clients (admin, consumer and producer) used by the bridge exports metrics via JMX.
+This metrics can be exposed in the Prometheus format (as the previous Vert.x related ones) for monitoring the Kafka part of the bridge.
 
-* Created consumers
-    * Could bring labels like “consumergroup”, “instanceid”, “base_uri” (not sure if this one is really useful). It could increase a consumers counter on the dashboard.
-* Subscription (requests)
-    * Could bring labels as “topics” but it should be a list, how to leverage that? What when the client uses “topic_pattern” and not specific topics in the request?
-* Deleted consumer
-    * Could bring labels like “consumergroup”, “instanceid”. It could decrease the previous consumers counter on the dashboard.
-* Poll (requests)
-    * Could bring labels like “consumergroup”, “instanceid”, number of “records” polled
-* Send (requests)
-    * Could bring labels like “topic” and number of “records” sent
+Useful metrics about Kafka part could be the following.
 
-Maybe implementing these specific ones, we could get rid the HTTP requests related ones for the various bridge operations but leaving the more general ones about rates by methods and by response codes (which could raise some malfunctions in the bridge or clients if too many 4xx or 5xx are there). The same could apply to the response time metrics.
+TBD
+
+## Rejected alternatives
+
+Creating custom metrics for the Kafka part was rejected thanks to the JMX ones already available out-of-box.
 
 # Next steps
 
 Agreeing on which kind of HTTP server metrics we should keep and if some aggregation/filtering could make more sense.
-Agreeing on the proposed custom bridge metrics for the Kafka part of the bridge itself.
+Exporting the Kafka clients JMX metrics in the Prometheus format.
+Agreeing on which Kafka client metrics to use for the Kafka part of the bridge itself.
 Building a final Grafana dashboard for the bridge.
