@@ -1,37 +1,60 @@
 # HTTP Kafka bridge metrics
 
-This proposal is about defining useful metrics we can expose from the HTTP Kafka bridge and a related Grafana dashboard.
-Right now, they are just Vert.x metrics from the HTTP server provided out of the box.
+This proposal is about defining "how to" expose useful metrics from the HTTP Kafka bridge, "which ones" and a related Grafana dashboard.
+It's about exposing HTTP server related metrics on one side, and Apache Kafka clients (producer/consumer) related metrics on the other side.
 
-## Vert.x provided HTTP server metrics
+## Exposing metrics
 
-Following a list of HTTP server related metrics and corresponding Grafana panels.
+### Current status
 
-The number of opened HTTP connections to the bridge.
+After working on [#423](https://github.com/strimzi/strimzi-kafka-bridge/pull/423), [#426](https://github.com/strimzi/strimzi-kafka-bridge/pull/426) and [#431](https://github.com/strimzi/strimzi-kafka-bridge/pull/431), the bridge is already able to expose metrics in this way:
 
-![HTTP connections](/images/005-http-bridge-metrics/http_connections.png)
+* HTTP server metrics are provided by Vert.x metrics library and exposed directly in the Prometheus format on the `/metrics` endpoint.
+* Apache Kafka metrics are exposed via JMX by the native clients library and then an "embedded" JMX to Prometheus collector is used to expose them on the `/metrics` endpoint.
 
-Requests being processed.
+I also already have a Grafana dashboard which shows these metrics.
 
-![Requests being processed](/images/005-http-bridge-metrics/requests_being_processed.png)
+The JMX-Prometheus collector is the official one provided by Prometheus project and it's also the one used internally by the [JMX Exporter](https://github.com/prometheus/jmx_exporter) which Strimzi is using as an "agent" for exposing all the Kafka metrics to Prometheus.
+It means that it uses a JMX Exporter configuration (YAML) file for mapping (filtering, relabeling, hiding ...) from JMX to Prometheus.
 
-Requests processed/secs grouped by HTTP method.
+For the `Kafka` custom resource we already have such a configuration file in the `metrics` section which is used to enable/disable and configure metrics.
+There is no such integration in the `KafkaBridge` custom resource right now.
 
-![Requests by HTTP method](/images/005-http-bridge-metrics/requests_by_method.png)
+Leaving the way bridge metrics are exposed right now means:
 
-The requests rate in total and even grouped by response codes (2XX, 4XX, 5XX).
+* no HTTP server metrics are exposed via JMX. There is no way to filter, relabeling, hiding them; no way for customization.
+* the `metrics` field to add in the `KafkaBridge` custom resource is going to configure the Kafka clients metrics only which could create confusion for the users.
+* JMXTrans integration cannot leverage on bridge HTTP server metrics but only on the Kafka ones.
 
-![Requests and Response codes](/images/005-http-bridge-metrics/requests_by_code.png)
+### Proposal 1
 
-Bytes received /sec and Bytes sent /sec.
+This proposal is about exposing the bridge HTTP server metrics via JMX first.
+It will be consistent with having the Kafka clients metrics via JMX as well.
 
-![Bytes received](/images/005-http-bridge-metrics/bytes_received.png)
+Removing the embedded JMX to Prometheus collector and using the same approach as we do for the Kafka brokers metrics, using the JMX Exporter as an "agent".
 
-![Bytes sent](/images/005-http-bridge-metrics/bytes_sent.png)
+* both HTTP server and Kafka clients metrics are exposed through JMX.
+* the `metrics` field to add in the `KafkaBridge` custom resource can be used for configuring both bridge HTTP and Kafka metrics.
+* JMXTrans integration can leverage all the bridge metrics.
+* consistency on how we are providing metrics in Strimzi: JMX first, JMX Exporter to make them available via Prometheus, JMXTrans for more different outputs.
 
-Furthermore, I used an HTTP requests metrics with different regex for getting information on different endpoints.
-These HTTP requests/sec metrics bring labels like `code` (HTTP response code), `local` (bridge server listening), `remote` (client issuing the request), `method`, and `path`.
-I created each one based on `method` and `path` as the following (which reflect some of the operations we have on the bridge).
+### Proposal 2
+
+It's quite the same as Proposal 1 with the only difference to leave the embedded JMX to Prometheus collector inside the bridge itself instead of using an external JMX Exporter running as an agent.
+
+## Metrics to expose
+
+### HTTP server metrics
+
+The HTTP metrics could be:
+
+* The number of opened HTTP connections to the bridge.
+* Requests being processed.
+* Requests processed/secs grouped by HTTP method.
+* The requests rate in total and even grouped by response codes (2XX, 4XX, 5XX).
+* Bytes received /sec and Bytes sent /sec.
+
+Furthermore, the HTTP requests/sec metrics coming from Vert.x bring labels like `code` (HTTP response code), `local` (bridge server listening), `remote` (client issuing the request), `method`, and `path` that can be useful for some filtering to define following metrics:
 
 * SEND to `/topics/<topic>`
 * SEND TO PARTITIONS to `/topics/<topic>/partitions/<partition>`
@@ -41,41 +64,31 @@ I created each one based on `method` and `path` as the following (which reflect 
 * POLL to `/consumers/<group>/instances/<consumer>/records`
 * COMMIT to `/consumers/<group>/instances/<consumer>/offsets`
 
-![HTTP requests](/images/005-http-bridge-metrics/http_requests.png)
+Even JVM and GC metrics are exposed out-of-box.
 
-Maybe for the above, it could be useful just doing the sum and not having the rate for each `remote` client on each `path` and `method`.
-I was thinking about filtering them by topics but it’s possible only for the producer part because the topic is in the `path` while when a consumer subscribes to a topic, it’s specified in the body which is not available from this metrics; maybe it could be part of a custom metric to add.
-
-Maybe using another available metric about response time for processing each HTTP request (always provided with same label).
-
-They are not reported here but we are also getting JVM related metrics as for the operators about memory, GC, and so on.
-
-## Kafka clients provided metrics
-
-The Kafka clients (admin, consumer and producer) used by the bridge exports metrics via JMX.
-This metrics can be exposed in the Prometheus format (as the previous Vert.x related ones) for monitoring the Kafka part of the bridge.
+### Kafka clients metrics
 
 Useful metrics about Kafka part could be the following.
 
 * Number of consumers
 * Producer:
-    * The average number of records sent per second
-    * The number of outgoing bytes sent to all brokers per second
-    * The averate number of records per second that resulted in errors (could be useful for alerts)
+    * The average number of records sent per second (grouped by topic)
+    * The number of outgoing bytes sent to all brokers per second (grouped by topic)
+    * The averate number of records per second that resulted in errors (grouped by topic)
 * Consumer:
-    * The average number of records consumed per second
-    * The average number of bytes consumed per second
-    * The number of fetch requests per second
+    * The average number of records consumed per second (grouped by clientId-topic)
+    * The average number of bytes consumed per second (grouped by clientId-topic)
+    * Partitions assigned (grouped by clientId)
 
-The producer and consumer metrics are for the overall cluster and "per topic".
+They all bring labels like the `clientId` and the `topic`.
 
-It seems that the JMX Kafka client metrics don't have any information related to consumer groups.
-They bring a `client-id` label which the bridge set as the `instance-id` when a consumer is created.
-Of course, we have the information about which consumer group it joined.
-We could create a custom metric:
+### Grafana Screenshots
 
-* Size (number of consumers) per consumer group
-* Number of partitions assigned to each consumer in the consumer group
+![Metrics 01](/images/005-http-bridge-metrics/metrics_01.png)
+
+![Metrics 02](/images/005-http-bridge-metrics/metrics_02.png)
+
+![Metrics 03](/images/005-http-bridge-metrics/metrics_03.png)
 
 ## Rejected alternatives
 
@@ -83,7 +96,7 @@ Creating custom metrics for the Kafka part was rejected thanks to the JMX ones a
 
 # Next steps
 
-Agreeing on which kind of HTTP server metrics we should keep and if some aggregation/filtering could make more sense.
-Exporting the Kafka clients JMX metrics in the Prometheus format.
-Agreeing on which Kafka client metrics to use for the Kafka part of the bridge itself.
+Agreeing on changing or not the way metrics are exposed choosing between current status, proposal 1 and proposal 2.
+Agreeing on the current metrics used for the Grafana dashboard.
 Building a final Grafana dashboard for the bridge.
+Integrating bridge metrics configuration in the Strimzi Cluster Operator.
