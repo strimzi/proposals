@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+|  5  | [HTTP Kafka bridge metrics](./005-http-bridge-metrics.md) |
 |  4  | [GitHub repository restructuring](./004-github-repository-restructuring.md) |
 |  3  | [Remove deprecated Topic Operator deployment in Kafka CRD](./003-remove-deprecated-topic-operator-from-kafka-crd.md) |
 |  2  | [Documentation improvements](./002-documentation-improvements.md) |
