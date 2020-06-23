@@ -26,22 +26,6 @@ Leaving the way bridge metrics are exposed right now means:
 * the `metrics` field to add in the `KafkaBridge` custom resource is going to configure the Kafka clients metrics only which could create confusion for the users.
 * JMXTrans integration cannot leverage on bridge HTTP server metrics but only on the Kafka ones.
 
-### Proposal 1
-
-This proposal is about exposing the bridge HTTP server metrics via JMX first.
-It will be consistent with having the Kafka clients metrics via JMX as well.
-
-Removing the embedded JMX to Prometheus collector and using the same approach as we do for the Kafka brokers metrics, using the JMX Exporter as an "agent".
-
-* both HTTP server and Kafka clients metrics are exposed through JMX.
-* the `metrics` field to add in the `KafkaBridge` custom resource can be used for configuring both bridge HTTP and Kafka metrics.
-* JMXTrans integration can leverage all the bridge metrics.
-* consistency on how we are providing metrics in Strimzi: JMX first, JMX Exporter to make them available via Prometheus, JMXTrans for more different outputs.
-
-### Proposal 2
-
-It's quite the same as Proposal 1 with the only difference to leave the embedded JMX to Prometheus collector inside the bridge itself instead of using an external JMX Exporter running as an agent.
-
 ## Metrics to expose
 
 ### HTTP server metrics
@@ -92,7 +76,21 @@ They all bring labels like the `clientId` and the `topic`.
 
 ## Rejected alternatives
 
-Creating custom metrics for the Kafka part was rejected thanks to the JMX ones already available out-of-box.
+### Proposal 1
+
+This proposal is about exposing the bridge HTTP server metrics via JMX first.
+It will be consistent with having the Kafka clients metrics via JMX as well.
+
+Removing the embedded JMX to Prometheus collector and using the same approach as we do for the Kafka brokers metrics, using the JMX Exporter as an "agent".
+
+* both HTTP server and Kafka clients metrics are exposed through JMX.
+* the `metrics` field to add in the `KafkaBridge` custom resource can be used for configuring both bridge HTTP and Kafka metrics.
+* JMXTrans integration can leverage all the bridge metrics.
+* consistency on how we are providing metrics in Strimzi: JMX first, JMX Exporter to make them available via Prometheus, JMXTrans for more different outputs.
+
+### Proposal 2
+
+It's quite the same as Proposal 1 with the only difference to leave the embedded JMX to Prometheus collector inside the bridge itself instead of using an external JMX Exporter running as an agent.
 
 # Next steps
 
