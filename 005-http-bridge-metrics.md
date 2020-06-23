@@ -74,6 +74,27 @@ They all bring labels like the `clientId` and the `topic`.
 
 ![Metrics 03](/images/005-http-bridge-metrics/metrics_03.png)
 
+## Enabling metrics
+
+We should allow users to enable/disable the metrics exposure through Prometheus on the `/metrics` endpoint.
+The proposal is to add a boolean `spec.metrics` property in the `KafkaBridge` custom resource, which is `false` as default when not specified.
+
+```yaml
+apiVersion: kafka.strimzi.io/v1alpha1
+kind: KafkaBridge
+metadata:
+  name: my-bridge
+spec:
+  replicas: 1
+  bootstrapServers: my-cluster-kafka-bootstrap:9092
+  http:
+    port: 8080
+  metrics: true
+```
+
+The Cluster Operator would set an env var `BRIDGE_METRICS_ENABLED` based on the above property.
+The bridge should configure the Vert.x options for HTTP metrics and the JMX - Prometheus collector for Kafka metrics accordingly to this env var; it should also expose or not the `/metrics` endpoint.
+
 ## Rejected alternatives
 
 ### Proposal 1
