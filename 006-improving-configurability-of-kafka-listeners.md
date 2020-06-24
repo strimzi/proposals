@@ -77,7 +77,7 @@ In some situations, having multiple external listener could be very useful.
 Apart from the obvious such as multiple authentication mechanisms or listeners with and without encryption, multiple listeners can be also useful to handle access from different networks outside the Kubernetes cluster.
 
 For example in AWS, you can have two types of load balancers: public and internal.
-Public load balancers are exposed tot he Internet and can be used by applications running anywhere online.
+Public load balancers are exposed to the Internet and can be used by applications running anywhere online.
 On the other hand internal load balancers are exposed only within the VPC (Virtual Private Cloud) - and accessible only to the applications running outside of Kubernetes but inside the private network of the user.
 
 ### Configurability of internal listeners
@@ -85,7 +85,7 @@ On the other hand internal load balancers are exposed only within the VPC (Virtu
 Some users heavily customize their Kubernetes network.
 One of the examples is joining their Kubernetes network with their network outside of Kubernetes.
 In such case, a common problem is using or not using the cluster service DNS suffix (`.cluster.local` by default) which is in some cases needed and in some not.
-Having the ability to override the advertised hostnames on internal listeners similarly to how they can be treated on the external listener or being able to have ore internal listeners could help in these situations.
+Having the ability to override the advertised hostnames on internal listeners similarly to how they can be treated on the external listener or being able to have one internal listeners could help in these situations.
 
 ## Proposed changes
 
@@ -118,7 +118,7 @@ The new configuration can look like this:
         type: service
         tls: true
         authentication:
-          type: acram-sha-512
+          type: scram-sha-512
       - name: routes
         port: 9094
         type: route
@@ -134,12 +134,12 @@ The new configuration can look like this:
 ```
 
 The listeners will be configurable as array.
-Each listener will have its own unique name and will specify the port and type as required values.
+Each listener will have its own unique name and will specify a type and unique port as required values.
 The port can be set to anything apart from `9091` (internal replication listener) and `9404` (Prometheus).
 A new type service will be introduced for the internal listeners designed for apps running inside the same Kubernetes cluster.
 Additionally, all the types from the existing external listeners will be supported as well.
 
-together with this change, I suggest to change the default value of the listener `tls` flag from `true` to `false`.
+Together with this change, I suggest to change the default value of the listener `tls` flag from `true` to `false`.
 The current situation, when TLS is enabled by default without using the `tls` field and needed to explicitly use the `tls: false` to disable TLS seems unintuitive and confusing.
 
 ### Backwards compatibility
