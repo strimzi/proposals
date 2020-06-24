@@ -66,10 +66,10 @@ The current implementation has many limitations
 * 2 out of the 3 listeners have fixed roles in terms of encryption, so when you want to use for example encrypted listeners only, you have effectively only 2 available listeners.
 * The `plain` and `tls` listeners do not offer some additional configuration options such as overriding advertised hosts etc.
 * Only one listener can be used for outside of the Kubernetes cluster.
-* Since Kafka listeners can have each only single authentication mechanism, possibilities for offering different authentication to different clients are limited.
+* Since each Kafka listener can have only a single authentication mechanism, possibilities for offering different authentication to different clients are limited.
 * Port numbers are assigned and are not configurable.
 
-Some of the use cases raised by out users in the past are listed here:
+Some of the use cases raised by our users in the past are listed here:
 
 ### Multiple external listeners
 
@@ -213,7 +213,7 @@ listeners:
           # ...
 ```
 
-In the `api` module, the setter and getter for the `listeners` field will use generic `JsonNode` type and inside the `api` module decide whether it should be decoded into the new or old format when the getter or setter is called.
+In the `api` module, the setter and getter for the `listeners` field will either use generic `JsonNode` type and inside the `api` module decide whether it should be decoded into the new or old format when the getter or setter is called or will implement their own custom `JsonSerializer` to (de)serialize the values.
 The `api` module will keep both the old and new format to be able to also serialize back to the original CRD.
 When the old format is used, it will be converted in the `fromCrd` method inside the `KafkaCluster` class in the `cluster-operator` module and from there on, only the new format will be used to configure the pods, services etc.
 Since all listeners will be part of the same array, it should be possible to simplify the code configuring the listeners and just pass all of them through a single loop.
@@ -221,7 +221,7 @@ Since all listeners will be part of the same array, it should be possible to sim
 ### Multiple external listeners
 
 Having multiple external listeners would require to have multiple sets of external services.
-For backwards compatibility, when the name of the external listener is `external`, the current names of the services will be used.
+For backwards compatibility, when the name of the external listener is `external`, the current names of the services, routes and ingresses will be used.
 For any other external listeners, a separate set of services will be created and named after the name of the listener.
 
 _Note: separate services are needed to create different external listeners with different configurations._
