@@ -54,7 +54,7 @@ Even JVM and GC metrics are exposed out-of-box.
 
 Useful metrics about Kafka part could be the following.
 
-* Number of consumers
+* Number of consumers, producers and related opened connections
 * Producer:
     * The average number of records sent per second (grouped by topic)
     * The number of outgoing bytes sent to all brokers per second (grouped by topic)
@@ -73,6 +73,8 @@ They all bring labels like the `clientId` and the `topic`.
 ![Metrics 02](/images/005-http-bridge-metrics/metrics_02.png)
 
 ![Metrics 03](/images/005-http-bridge-metrics/metrics_03.png)
+
+![Metrics 04](/images/005-http-bridge-metrics/metrics_04.png)
 
 ## Enabling metrics
 
