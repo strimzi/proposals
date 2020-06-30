@@ -14,7 +14,7 @@ The benefits of adding design documentation to Strimzi are:
 
 ## Where is Strimzi today
 
-Currently there are no design documents for Strimzi, the closest thing Strimzi has would probably be the generated docs for classes, but these are more user oriented than design oriented.
+Currently there are no design documents for Strimzi, the closest thing Strimzi has would probably be the generated docs for classes - these are more user oriented than design oriented. Some classes also have extensive documentation comments found at the top of their files explaining their usage and design.
 
 
 ## Proposal
