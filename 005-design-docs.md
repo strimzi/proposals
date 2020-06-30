@@ -5,6 +5,12 @@ This document is intended to progress discussion about how to write and maintain
 The main goal of design documents for Strimzi is to make contributors more effective by forcing all involved to think through the design and gather feedback from others. People often think the point of a design doc is to to teach others about some system or serve as documentation later on. While those can be beneficial side effects, they are not the goal in and of themselves.
 By having a set of design documentation, behaviours of Strimzi as a whole and each of the components are well defined and are agreed upon.
 
+The benefits of adding design documentation to Strimzi are:
+- Design docs/additions could help when there is conflict about the direction of a proposal/code change.
+- It's hard for new contributors to get into the project and understand behaviours of certain components, this may be fixed by extra technical documentation.
+- If just a couple of named contributors moved on to other things, the velocity of the project would drop considerably. Design doc would help in this case too, capturing conventions and behaviour enforcements that normally only get picked up and tweaked at review time.
+
+
 
 ## Where is Strimzi today
 
