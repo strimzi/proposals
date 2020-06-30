@@ -16,7 +16,7 @@ Currently there are no design documents for Strimzi, the closest thing Strimzi h
 ### When to write a design document
 
 It would be appropriate to add a design document when a significant new feature is being added, examples of this being:
-- A new custom resource type being added, a design document explaining how its configuratioon would be implemented.
+- A new custom resource type being added, a design document explaining how its configuration would be implemented.
 - A new feature to a pre-existing custom resource type, e.g. new component
 - A reworking of an old feature, deprecating the old feature, including if applicable of how a user would migrate.
 
@@ -31,7 +31,7 @@ A design document is considered complete when the reviewers and maintainers beli
 
 ### How to write a design document
 
-The design documents would live alongside the code for simplicity, so that code changes could be audited with their corresponding design doc changes.
+The design documents would live in the strimzi-kafka-operator repo and would match the current code state, so that code changes could be audited with their corresponding design doc changes.
 
 A design document would be split into `X` parts
 
@@ -68,7 +68,7 @@ Walk through the flows in great detail to concertise the implementation. Feel fr
 
 Alongside code changes, behavioural changes of the operator will also be documented in the above described design documentation format.
 
-Newly contributed proposals or issues would describe how their changes might alter the design documentation and are expected to be delivery alongside their code changes.
+Newly contributed proposals or issues would describe how their changes might alter the design documentation and are expected to be delivered alongside their code changes.
 
 Design documents accumulate and form a body of design information for the project, and should be kept up to date with design changes. 
 
