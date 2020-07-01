@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+|  6  | [Securing the Kafka Connect REST API endpoint](./006-securing-kafka-connect-rest-endpoint.md) |
 |  5  | [Improving configurability of Kafka listeners](./005-improving-configurability-of-kafka-listeners.md) |
 |  4  | [GitHub repository restructuring](./004-github-repository-restructuring.md) |
 |  3  | [Remove deprecated Topic Operator deployment in Kafka CRD](./003-remove-deprecated-topic-operator-from-kafka-crd.md) |
