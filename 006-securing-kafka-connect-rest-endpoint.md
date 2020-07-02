@@ -78,7 +78,65 @@ This proposal is backwards compatible - the `spec.rest` property is optional and
 It is also worth noting that this opens Strimzi up to further extensions in the future, such as:
  - adding support for client authentication at the Kafka Connect REST API endpoint.
  - adding external listeners (such as new routes explicitly for Kafka Connect REST calls).
+ - adding `networkPolicyPeers` support to the `spec.rest.tls` property, allowing users to define additional network policies as part of the CR. The default network policy that only permits access from the operator pod would continue to exist.
 
+### Proposed schema
+```
+openAPIV3Schema:
+  type: object
+  properties:
+    spec:
+      type: object
+      properties:
+        rest:
+          type: array
+          items:
+            type: object
+            properties:
+              port:
+                type: integer
+                minimum: 1024
+                description: The port number of the REST listener.
+              tls:
+                type: object
+                properties:
+                  configuration:
+                    type: object
+                    properties:
+                      brokerCertChainAndKey:
+                        type: object
+                        properties:
+                          certificate:
+                            type: string
+                            description: The name of the file certificate in
+                              the Secret.
+                          key:
+                            type: string
+                            description: The name of the private key in the
+                              Secret.
+                          secretName:
+                            type: string
+                            description: The name of the Secret containing the
+                              certificate.
+                        required:
+                        - certificate
+                        - key
+                        - secretName
+                        description: Reference to the `Secret` which holds the
+                          certificate and private key pair. The certificate
+                          can optionally contain the whole chain. If this field is
+                          missing, the operator generates keys and certificates
+                          stored in a secret.
+                    description: Configuration of TLS listener.
+                description: Configures TLS on the REST listener.
+            required:
+            - port
+            description: Configuration of a REST listener.
+          description: List of configurations for Kafka Connect REST API listeners.  
+            If this field is empty or missing, the default Kafka Connect REST API
+            listener on port 8083 without TLS is created.
+        ...
+```
 
 ## Rejected alternatives
 
@@ -129,15 +187,8 @@ spec:
     config.providers: file
     config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
 
-    # non-HTTPS related config
-    group.id: connect-cluster-2
-    offset.storage.topic: connect-cluster-offsets
-    config.storage.topic: connect-cluster-configs
-    status.storage.topic: connect-cluster-status
-
-    config.storage.replication.factor: 1
-    offset.storage.replication.factor: 1
-    status.storage.replication.factor: 1
+    # other config
+    ...
 ```
 
 This works to secure the Kafka Connect REST API endpoint, but requires several modifications to the operator to allow it to send REST API requests:
