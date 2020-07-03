@@ -28,7 +28,7 @@ spec:
   ...
 ```
 
-This CR would generate a cert and key in a secret (for use by the operator clients), create SSL truststores and keystores from the cert and key and set the following properties in the generated connect configuration to enable an HTTPS connection:
+This CR would cause the operator to generate a certificate (signed by the cluster CA certificate) and a key, both stored in a secret for use by the operator clients and the Kafka Connect pods. The certificate and key would be mounted in each Kafka Connect pod, which would then create SSL truststores and keystores from the cert and key and set the following properties in the generated connect configuration to enable an HTTPS connection:
 
 ```
 listeners: https://:8443
