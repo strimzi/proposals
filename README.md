@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+|  9  | [Strimzi UI](./009-strimzi-ui.md) |
 |  8  | [TLS encrypting the Kafka Connect REST API](./008-tls-encrypt-the-kafka-connect-rest-api.md)  |
 |  7  | [Restarting Kafka Connect connectors and tasks](./007-restarting-kafka-connect-connectors-and-tasks.md) |
 |  6  | [Design Documentation](./006-design-docs.md) |
