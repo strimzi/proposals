@@ -14,15 +14,15 @@ This proposal will describe a Kafka administration UI capability. It will descri
 
 At a high level, I would propose a UI implemented as follows:
 
-- It would be a [React](https://reactjs.org/) based UI
+- It would be a Javascript based UI (using [babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
 - This UI is hosted and provided via an [Express](https://expressjs.com/) server
 - This UI is built in a modular/metadata driven manner - allowing for easy extensibility, modification, and dynamic behaviour at runtime
 - Uses a [GraphQL](https://graphql.org/) API
 - Should be fully translatable, and accessible
 
-I would suggest that the UI implementation to follow the Model View Controller (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
+I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
 
-![Topics mock up](./008-topicsdesign.png)
+![Topics mock up](./006-topicsdesign.png)
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
@@ -67,7 +67,7 @@ I am more than happy to elaborate and collaborate on any of these points here, a
 
 #### Topic list page
 
-Given the prerequisites are satisfied, the first user task I would suggest is implemented is a listing of all the topics in a given cluster. This will exercise all the prerequisites, as well as offer a user of Strimzi a new way to interact with their deployment. Using a [gherkin](https://cucumber.io/docs/gherkin/reference/) behavioural syntax to describe the capability, it would:
+Given the prerequisites are satisfied, the first user task I would suggest is implemented is a listing of all the topics (along with partition and replica information per topic) in a given cluster. This will exercise all the prerequisites, as well as offer a user of Strimzi a new way to interact with their deployment. Using a [gherkin](https://cucumber.io/docs/gherkin/reference/) behavioural syntax to describe the capability, it would:
 
 ```
 Scenario: Seeing all available topics:
@@ -81,6 +81,7 @@ Given I am a user of the UI
 When I navigate to the topic listing
 And I filter for topic 'SampleTopic'
 Then I see topic 'SampleTopic' in the topic list
+And Topic 'SampleTopic' has '3' partitions and '2' replicas
 
 Scenario: Viewing a specific topic (when it does not exist in the cluster):
 Given I am a user of the UI
