@@ -21,66 +21,93 @@ Currently there are no design documents for Strimzi, the closest thing Strimzi h
 
 ### When to write a design document
 
-It would be appropriate to add a design document when a significant new feature is being added, examples of this being:
-- A new custom resource type being added, a design document explaining how its configuration would be implemented.
-- A new feature to a pre-existing custom resource type, e.g. new component
-- A reworking of an old feature, deprecating the old feature, including if applicable of how a user would migrate.
+It would be appropriate to add a design document when anything which touches a 'Public API'.
+Any of the following should be considered a "public API":
+- Additional Custom Resource Definitions (CRD) or structure changes of any of the project's CRDs (excluding documentation of field)
+- Changes in how CRDs are used or function (e.g. annotation changes)
+- Anything which would add, remove or change any other public Strimzi APIs (e.g. New endpoints in the bridge, or new REST APIs).
+- Anything which changes the accessibility of any of Kafka's public APIs (e.g. changes to how metrics get exposed, changing which broker configs are reserved to the operators, or locking/exposing functionality either via the network, or Kafka protocol, such as authorization)
+
 
 ### Where to write a design document
 
-A design document should be a markdown file located in the `design` directory of the `strimzi-kafka-operator` project.
-Design documents for other Strimzi projects such as Oauth should also be located here as the intent is that the design documents are all colocated and that all components are a part of 'the operator' project.
+A design document should be a markdown file located in the `design` directory of the repository they are located in, for instance all design documents relating to the strimzi operator(s) should be located in the `strimzi-kafka-operator` repository under the `design` folder.
+
+#### Strimzi Design Document Organization
+Design documents should be splt into logical areas, for repositories that aren't `strimiz-kafka-operator` I suspect this would start as a single or just a few succinct documents.
+For `strimzi-kafka-operator` I would suggest splitting design documentation from 'public API' perspective, that is to say all documents relating to the `Kafka` custom resource would be separated into its own folder called `Kafka`, similarly for `KafkaConnect` etc.
+For design documentation that would cover the whole operator and not just any single custom resource I would suggest a folder named `operator` this would describe behaviours not unique to any one specific reconcile loop or verticle.
+
 
 ### When is a design document complete
 
 A design document is considered complete when the reviewers and maintainers believe the document to accurately reflect the current implementation of the components behaviour. Once approved the document is merged and is understood to be correct, any mistakes or changes to behaviour should be corrected in the form of a pull request.
 
+A lot of implementation issues, problems and compromises are only clear during or after development of a feature or change, so a design doc is recommended to be written alongside the code development, this helps in avoiding the writing of invalid design documents. 
+
+Having the design document within the pull request allows contributors and reviewers to evolve the design while developing and during the review. This allows tweaks to the design, for current discussion and future reading, as well as to the code accordingly. This ensures the code and design docs evolve in parallel.
+
+A design document should be trusted by readers to be right, as part of this it would be highly recommended that test scenarios be included with the design document in the form of behaviour driven tests in the [Gherkin Syntax](https://cucumber.io/docs/bdd/better-gherkin/). This would allow reviewers to better identify potential missing tests and more easily link up test scenarios with their associated unit, integration and system tests.
+An example of this might be something like:
+```
+Given a user deletes the CA certificate
+When the operator reconciles
+Then the operator will replace it
+```
+or
+```
+Given a KafkaRebalance proposal is approved
+When the KafkaRebalance enters the Ready state
+Then the cluster will be rebalanced to 'X' state
+When the KafkaRebalance is refreshed
+Then the KafkaRebalance has no proposal
+And the KafkaRebalance will be in the Ready state
+```
+
+
 ### How to write a design document
 
-The design documents would live in the strimzi-kafka-operator repo and would match the current code state, so that code changes could be audited with their corresponding design doc changes.
+The design documents would live in the related repository in the Strimzi Organization and would match the current code state, so that code changes could be audited with their corresponding design doc changes.
 
-A design document would be split into `X` parts
+A design document would be split into the following parts:
 
 **Title**
 
-The title of the design doc, normally this would pertain to a single component or one larger aspect of the whole of the Strimzi project. New pages would be discussed and decided on as part of a proposal where needed.
+The title of the design doc, normally this would pertain to a single component or one larger aspect of the whole of Strimzi. New pages would be discussed and decided on as part of a proposal where needed.
 
-**Overview**
+**Overview and Context**
 
-A high level summary that any user of Strimzi should be able understand and use to decide if it’s useful for them to read the rest of the doc. It should be 3 paragraphs max.
-
-**Context**
-
-A description of the problem the program/code tackles, why the program/code is necessary, what people need to know to assess this project, and how it fits into the technical strategy of Strimzi.
+A high level summary that any user of Strimzi should be able understand and use to decide if it’s useful for them to read the rest of the doc.
+A description of the problem the program/code tackles, why the program/code is necessary, what people need to know to assess the success of this design.
+Optionally include a high level description describing the current implementation as well as example flow(s) to illustrate how users interact with this system and/or how data flow through it.
 
 **Goals and Non-Goals**
 
 The Goals section should describe the user-driven impact of the code and specify how to measure success using metrics, normally that would be tested.
 Non-Goals are equally important to describe which problems you won’t be fixing so everyone is on the same page.
 
-**Milestones**
-
-A list of measurable checkpoints, if there is future progress planned, including a milestone for the future in the design doc maye be useful for a reader to understand where the project is heading.
-
-**High Level Description**
-
-High level description describing the current implementation as well as example flow(s) to illustrate how users interact with this system and/or how data flow through it. This should build on the context.
-
 **Technical Architecture section**
 
-Walk through the flows in great detail to concertise the implementation. Feel free to include diagrams where relevant and sub-sections for edge-cases and implementation details.
+Walk through the flows in great detail of the implementation. Feel free to include diagrams where relevant and sub-sections for edge-cases and implementation details.
+This section would contain test scenarios in the form of behaviour driven tests in the [Gherkin Syntax](https://cucumber.io/docs/bdd/better-gherkin/) if applicable.
+
 
 ## Summary of changes
 
+In an effort to improve where we are, the above guidelines are suggestions for future contributors but no enforced or mandated. This means that we will not place the entire burden on the first person to come along who wants to make a change in a given area. 
+Instead with larger coontributions and proposed changes we would request contributors to add to whatever framework of design documentation already exists.
+
 Alongside code changes, behavioural changes of the operator will also be documented in the above described design documentation format.
 
-Newly contributed proposals or issues would describe how their changes might alter the design documentation and are expected to be delivered alongside their code changes.
+Newly contributed proposals or issues would preferably describe how their changes might alter the design documentation and would be requested to be delivered alongside their code changes.
 
 Design documents accumulate and form a body of design information for the project, and should be kept up to date with design changes. 
 
 
 
-## Alternative implementation - Strimzi Improvement Proposal (SIP)
+## Rejected Alternative implementation - Strimzi Improvement Proposal (SIP)
+
+**NOTE:** After discussion the concepts of proposals and design documents shoudl be separated for the moment.
 
 Inspired and closely resembling [Kafka Improvement Proposals (KIP)](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Improvement+Proposals), we merge the concept of design documentation and proposals together, meaning that each proposal is a point in time descriptor of current Strimzi behaviour and a proposal as to how it should change.
 
