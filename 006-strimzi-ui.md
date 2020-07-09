@@ -26,16 +26,25 @@ I would suggest that the UI implementation to follow the [Model View Controller]
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
-I would also suggest using Express as a server for this UI. This is due to it's small footprint, modularity and available 3rd party modules, such as [helmet for http security](https://helmetjs.github.io/), [Passport.js for authentication and authorization support](http://www.passportjs.org/) or [the graphql and express-graphql modules for GraphQL server support](https://graphql.org/graphql-js/running-an-express-graphql-server/).
+I would also suggest using Express as a server for this UI. This is due to its small footprint, modularity and available 3rd party modules, such as [helmet for http security](https://helmetjs.github.io/), [Passport.js for authentication and authorization support](http://www.passportjs.org/) or [the graphql and express-graphql modules for GraphQL server support](https://graphql.org/graphql-js/running-an-express-graphql-server/).
 
 This UI would also be provided with a full set of supporting elements - such as end to end tests, automation (examples of which are [in this section](#a-ui-repository-and-ways-of-working-in-the-repository)) to manage common tasks, and documentation around implementation approach, UI best practise and so on.
+
+The below shows how these pieces could integrate.
+
+![Suggested topology](./006-topology.png)
+
+Where:
+
+- 'Strimzi-api' is a backend server for Kafka data/requests
+- 'Supporting elements' could be other Kafka related deployments such as Mirror Maker, Kafka Connect and Cruise control. These could also be non Kafka related deployments (not deployed as a part of Strimzi), such as LDAP servers, metric stores etc.
 
 ### A UI repository, and ways of working in the repository
 
 In addition to the implementation detailed above, I would propose that any UI contributed to Strimzi be managed and developed as follows:
 
 - Be developed in a dedicated repository inside the Strimzi Github organisation
-- Both the server and client are contained in this repo - worked as sub modules in a monorepo
+- Both the UI server and client are contained in this repo - worked as sub modules in a monorepo
 - That design/discussion/implementation and defect issues are kept solely in this repository
 - All development is done in a behavioural manner - focusing on the end user, and the task they are trying to achieve (see [topic list](#topic-list-page) for an example)
 - That the repository operate in a cloud like CI/CD manner; lots of small/little and often deliveries of new function, appropriately sized and gated, allowing for the UI to be shipped at any time
