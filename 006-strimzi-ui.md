@@ -36,7 +36,7 @@ The below shows how these pieces could integrate.
 
 Where:
 
-- 'Strimzi-api' is a backend server for Kafka data/requests
+- 'strimzi-api' is a backend server for Kafka data/requests
 - 'Supporting elements' could be other Kafka related deployments such as Mirror Maker, Kafka Connect and Cruise control. These could also be non Kafka related deployments (not deployed as a part of Strimzi), such as LDAP servers, metric stores etc.
 
 ### A UI repository, and ways of working in the repository
