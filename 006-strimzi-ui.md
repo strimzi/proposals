@@ -22,7 +22,7 @@ At a high level, I would propose a UI implemented as follows:
 
 I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
 
-![Topics mock up](./006-topicsdesign.png)
+![Topics mock up](./images/006-topicsdesign.png)
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
@@ -32,7 +32,7 @@ This UI would also be provided with a full set of supporting elements - such as 
 
 The below shows how these pieces could integrate.
 
-![Suggested topology](./006-topology.png)
+![Suggested topology](./images/006-topology.png)
 
 Where:
 
@@ -59,7 +59,7 @@ A UI is more than just what a user sees. It also needs to be supported by backen
 In order to provide any UI, the whole stack which will support it will need to be discussed and considered. This will include (but not be limited to):
 
 - Setting up the required UI build/packaging for deployment to Strimzi
-- Integrating the UI with Strimzi itself
+- [Integrating the UI with Strimzi itself](#proposed-deployment)
 - A Kafka backend server for Kafka data/requests the UI server can call
 - UI server configurability/capability - including aspects such as;
   - Transport security
@@ -113,6 +113,28 @@ If desired, additional Strimzi provided capabilities, such as Kafka Users, could
 Finally, one capability which may be of interest (which may have bearing on how this is surfaced in Strimzi itself) is having a single UI, which can manage multiple Kafka clusters deployed via the Strimzi operator.
 
 In all of these cases, capabilities can be added in a prioritised order, and should be added in a phased manner themselves (for example, add a view of the brokers and their configuration, then the ability to modify select configuration).
+
+#### Proposed deployment
+
+This UI could be deployed as a part of Strimzi as follows:
+
+![Suggested deployment](./images/006-deployment.png)
+
+Where:
+
+- The UI is deployed standalone, akin to how the Kafka bridge, Kafka Connect are currently for example (so a new CRD would be required, with configuration needed to reference which cluster(s) to interact with).
+- The UI's spec would contain 0 to N Kafka clusters, which: 
+  - Contain 1 or more 'backend' entries. These represent backend sources of data which can be surfaced in the UI.
+  - One of these entries will be the `strimzi-api` (ie each Kafka kind will contain its own api server).
+  - Each of these entries will define items such as the address to use to connect to it, any auth credentials required, Transport security required, etc.
+- The UI's spec will contain general configuration for the UI - such as certificates to expose to clients etc.
+
+I am suggesting this approach for the following reasons:
+
+- It follows the model of similar supporting capabilities currently available in Strimzi
+- It allows for multiple Kafka clusters to be managed via a single UI (a potential future work item)
+
+I would also suggest a name from the CRD of `kafka-web-ui`.
 
 ## Affected projects
 
