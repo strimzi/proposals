@@ -123,16 +123,44 @@ This UI could be deployed as a part of Strimzi as follows:
 Where:
 
 - The UI is deployed standalone, akin to how the Kafka bridge, Kafka Connect are currently for example (so a new CRD would be required, with configuration needed to reference which cluster(s) to interact with).
-- The UI's spec would contain 0 to N Kafka clusters, which: 
+- The UI's spec would contain 0 to N Kafka clusters the UI will operate against, which will: 
   - Contain 1 or more 'backend' entries. These represent backend sources of data which can be surfaced in the UI.
-  - One of these entries will be the `strimzi-api` (ie each Kafka kind will contain its own api server).
+    - One of these entries will be the `strimzi-api` (ie each Kafka kind will contain its own api server).
   - Each of these entries will define items such as the address to use to connect to it, any auth credentials required, Transport security required, etc.
 - The UI's spec will contain general configuration for the UI - such as certificates to expose to clients etc.
+
+This could look as follows in a CR configured by a user (note that common fields such as image, or readiness and liveness probes have been omitted here for conciseness, but would be present in a full CR). Comments are included inline for clarification of intent/type:
+
+```
+...
+spec:
+  clusters: # Array/list
+  - name: 'dev-cluster' # string - metadata, but could be used in the UI (eg for cluster selection if more than one cluster) in the clusters array (order of which respected by the UI)
+    clientCert: <mounted TLS cert to serve to clients> # optional - if omitted, UI server will serve via http rather than https
+    uiConfig: <stringified JSON, containing general UI config - eg features to disable/enable, logging> # string - optional - if provided will override default configuration values
+    authAuthzMechanism: KafkaUser # string (although perhaps a custom type may be better). 'none' to mean disabled (ie no authentication or authorisation) - see assumptions below.
+    useAuthentication: true # boolean - only valid if authAuthzMechanism is not 'none'. Should the UI check a user's identity - see assumptions below 
+    useAuthorization: true # boolean - only valid if useAuthentication is true - should resources be protected/operated on by authoised users only. If false all users can access/modify all resources (eg topics) - see assumptions below 
+    backend: # Array/list
+    - name: 'strimzi-api' # string - metadata
+      address: 'https://route-to-strimzi-api-for-dev-cluster:port' # string - endpoint address for this backend
+      version: 1 # integer - the version of the API this UI will use
+      useTls: true # boolean - should TLS transport security be used
+      tlsCert: <mounted TLS certificate for backend server> # required if useTls true - certificate used in SSL handshake with backend
+      tlsKey: <mounted TLS key for tlsCert> # required if useTls true - key used in SSL handshake with backend
+...
+```
 
 I am suggesting this approach for the following reasons:
 
 - It follows the model of similar supporting capabilities currently available in Strimzi
 - It allows for multiple Kafka clusters to be managed via a single UI (a potential future work item)
+
+This approach does have a few assumptions. These being:
+- A `strimzi-api` being deployed as a part of the Kafka cluster (ie one per namespace/cluster). This deployment is then referenced in the UI's CR (as above). 
+- A handshake/metadata exchange will be required for the UI to discover and integrate with each backend. I expect this exchange to be the retrieval of a GraphQL schema, so they can be combined/unified by the UI server, as well as any other metadata appropriate to that backend (eg Kakfa version of the cluster a `strimzi-api` is configured to use).
+- The backend's registered with the UI will need to be version aware and backwards compatible - ie version 2 of an api also needs to support the version 1 api.
+- Both the UI, and any backend requiring authentication and authorization (eg `strimzi-api`) will need to align on how authentication and authorization will work. My suggestion would be to have a separation between resources (eg topics) and actions upon them, and the backing implementation which represent/persist them. As shown above, this could be provided via KafkaUsers, or other mechanisms, such as OAuth.
 
 I would also suggest a name from the CRD of `kafka-web-ui`.
 
@@ -148,4 +176,3 @@ I would expect that the main development effort for a UI will be in a new reposi
 
 - Discuss and iterate the proposal
 - Offer (as a draft PR into an appropriate repository) low level design documentation for a UI, covering architecture, build, test, for further review
-
