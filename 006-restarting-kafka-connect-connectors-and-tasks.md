@@ -101,7 +101,7 @@ metadata:
 
 The `KafkaConnector` and `KafkaMirrorMaker2` operators will have new default behaviour that automatically restarts connectors or tasks that are in the `FAILED` state. For each connector or task that is in the `FAILED` state, the operator will call the Connect REST API `restart` endpoint once per reconcile cycle to attempt to restart the connector/task.
 
-To disable the new default behaviour a new field in the `KafkaConnector` spec named `autoRestart` with a value of `false` can be applied. This will be useful when users know that external factors will cause connectors/tasks to be in the `FAILED` state and they do not want the operator attempting automatic restarts. It also means users can keep the current behaviour of the `KafkaConnector` and `KafkaMirrorMaker2` operators if they wish.
+To disable the new default behaviour a new field in the `KafkaConnector` spec named `autoRestart` with an `enabled` field value of `false` can be applied. This will be useful when users know that external factors will cause connectors/tasks to be in the `FAILED` state and they do not want the operator attempting automatic restarts. It also means users can keep the current behaviour of the `KafkaConnector` and `KafkaMirrorMaker2` operators if they wish.
 
 For example, the following `KafkaConnector` CR disables the automatic restarting of the connector and it's tasks when they are in the `FAILED` state:
 ```
@@ -110,11 +110,12 @@ kind: KafkaConnector
 metadata:
   name: my-source-connector
 spec:
-  autoRestart: "false"
+  autoRestart:
+    enabled: false
   ...
 ```
 
-Similarly, a new field in the `KafkaMirrorMaker2` spec named `autoRestartConnectorsAndTasks` with a value of `false` can be applied, to disable auto-restarting connectors and tasks.
+Similarly, a new field in the `KafkaMirrorMaker2` spec named `autoRestartConnectorsAndTasks` with an `enabled` field value of `false` can be applied, to disable auto-restarting connectors and tasks.
 
 For example, the following `KafkaMirrorMaker2` CR disables the automatic restarting of the connector and it's tasks when they are in the `FAILED` state:
 ```
@@ -123,8 +124,51 @@ kind: KafkaMirrorMaker2
 metadata:
   name: my-mm2-cluster
 spec:
-  autoRestartConnectorsAndTasks: "false"
+  autoRestartConnectorsAndTasks:
+    enabled: false
   ...
+```
+
+
+#### Repeated automatic restarts
+
+Connectors and tasks that are in the `FAILED` state and are automatically restarted might cause other connectors and tasks to be rebalanced across the Kafka Connect cluster.
+If the connectors and tasks repeatedly transition to the `FAILED` state, repeated auto-restarts could be detrimental to the health of the Kafka Connect cluster.
+A back-off algorithm is applied to automatic restarts of each connector and it's tasks, incrementing the time between automatic restarts by 2 minutes, up to a maximum of 30 minutes, at which point no further automatic restarts are attempted, and the connector or tasks are left in the `FAILED` state.
+
+For example, if a connector repeatedly transitions to the `FAILED` state, it is automatically restarted at minute 0, 2, 6, 12, 20 and 30.
+
+
+#### Status of automatic restarts
+
+A new field in the resource `status` records the number of times that connectors and tasks have been auto-restarted. The restart count is incremented every time the restart REST API is invoked and record the time when it was last auto-restarted:
+
+In the `KafkaConnector` resource, the field is named `autoRestart`. For example:
+
+```
+apiVersion: strimzi.io/v1alpha1
+kind: KafkaConnector
+...
+status:
+  autoRestart:
+    count: 2
+    lastRestartTimestamp: "2020-07-13T21:59:09.832Z"
+```
+
+In the `KafkaMirrorMaker2` resource, the field is named `autoRestartConnectorsAndTasks` and records the number of times that each connector has been auto-restarted. For example:
+
+```
+apiVersion: strimzi.io/v1alpha1
+kind: KafkaConnector
+...
+status:
+  autoRestartConnectorsAndTasks:
+  - count: 2
+    connectorName: "source-cluster->target-cluster.MirrorSourceConnector"
+    lastRestartTimestamp: "2020-07-13T21:59:09.832Z"
+  - count: 1
+    connectorName: "source-cluster->target-cluster.MirrorCheckpointConnector"
+    lastRestartTimestamp: "2020-07-14T20:55:34.678Z"
 ```
 
 ## Compatibility
