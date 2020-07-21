@@ -116,6 +116,8 @@ In all of these cases, capabilities can be added in a prioritised order, and sho
 
 #### Proposed deployment
 
+*EDIT*: This is being reviewed and will be revised given the community meeting (on 16/07/2020) discussion around the deployment options and security model ([minutes](https://docs.google.com/document/d/1V1lMeMwn6d2x1LKxyydhjo2c_IFANveelLD880A6bYc).
+
 This UI could be deployed as a part of Strimzi as follows:
 
 ![Suggested deployment](./images/006-deployment.png)
@@ -129,27 +131,34 @@ Where:
   - Each of these entries will define items such as the address to use to connect to it, any auth credentials required, Transport security required, etc.
 - The UI's spec will contain general configuration for the UI - such as certificates to expose to clients etc.
 
-This could look as follows in a CR configured by a user (note that common fields such as image, or readiness and liveness probes have been omitted here for conciseness, but would be present in a full CR). Comments are included inline for clarification of intent/type:
+This could look as follows in a CR configured by a user (note that common fields such as image, or readiness and liveness probes have been omitted here for conciseness, but would be present in a full CR).:
 
 ```
 ...
 spec:
-  clusters: # Array/list
-  - name: 'dev-cluster' # string - metadata, but could be used in the UI (eg for cluster selection if more than one cluster) in the clusters array (order of which respected by the UI)
-    clientCert: <mounted TLS cert to serve to clients> # optional - if omitted, UI server will serve via http rather than https
-    uiConfig: <stringified JSON, containing general UI config - eg features to disable/enable, logging> # string - optional - if provided will override default configuration values
-    authAuthzMechanism: KafkaUser # string (although perhaps a custom type may be better). 'none' to mean disabled (ie no authentication or authorisation) - see assumptions below.
-    useAuthentication: true # boolean - only valid if authAuthzMechanism is not 'none'. Should the UI check a user's identity - see assumptions below 
-    useAuthorization: true # boolean - only valid if useAuthentication is true - should resources be protected/operated on by authoised users only. If false all users can access/modify all resources (eg topics) - see assumptions below 
-    backend: # Array/list
-    - name: 'strimzi-api' # string - metadata
-      address: 'https://route-to-strimzi-api-for-dev-cluster:port' # string - endpoint address for this backend
-      version: 1 # integer - the version of the API this UI will use
-      useTls: true # boolean - should TLS transport security be used
-      tlsCert: <mounted TLS certificate for backend server> # required if useTls true - certificate used in SSL handshake with backend
-      tlsKey: <mounted TLS key for tlsCert> # required if useTls true - key used in SSL handshake with backend
+  clientCert: <mounted TLS cert> # (1)
+  clusters:
+  - name: 'dev-cluster' # (2)
+    uiConfig: <mounted config map> # (3)
+    backend:
+    - name: 'strimzi-api' # (4)
+      address: 'https://route-to-strimzi-api-for-dev-cluster:port' # (5)
+      version: 1 # (6)
+      tls: # 7
+        cert: <mounted tls certificate>
+        version: TLS_1.3
 ...
 ```
+
+Where:
+
+1. Optional, certificate used between client and UI server. If omitted, UI server will serve via http rather than https.
+2. Required, string - the name of this cluster. Should be the same value as `metadata.name` in the Kafka CR.
+3. Optional, a config map containing JSON. If provided, values in this config map will override default configuration values.
+4. Required, string - a unique identifier of this 'backend'.
+5. Required, string - endpoint address for this backend.
+6. Required, integer - the version of the API this UI will use.
+7. Optional, object. Contains tls configuration (certificate to use, protocol versions etc. If omitted, traffic between these two endpoints will be in the clear.
 
 I am suggesting this approach for the following reasons:
 
