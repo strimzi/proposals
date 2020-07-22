@@ -73,8 +73,9 @@ Is this intended for a single Kafka cluster or to interact with multiple.
 
 ### When is a design document complete
 
-A design document is considered complete when the reviewers and maintainers believe the document to accurately reflect the implementation of the components behaviour. 
+Design document change us considered complete when the reviewers and maintainers believe the updated document to accurately reflect the implementation of the components behaviour. 
 Once approved the document is merged and is understood to be correct, any mistakes or changes to behaviour should be corrected in the form of a pull request alongside the code that changes the behavior.
+A design document is never truly 'completed', as the code evolves the document(s) evolve with it.
 
 A lot of implementation issues, problems and compromises are only clear during or after development of a feature or change, so a design doc is recommended to be written alongside the code development, this helps in avoiding the writing of invalid design documents and help highlight potentially problematic elements of implementation or important holes in the testing strategy. 
 
