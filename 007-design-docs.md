@@ -77,9 +77,9 @@ Design document change us considered complete when the reviewers and maintainers
 Once approved the document is merged and is understood to be correct, any mistakes or changes to behaviour should be corrected in the form of a pull request alongside the code that changes the behavior.
 A design document is never truly 'completed', as the code evolves the document(s) evolve with it.
 
-A lot of implementation issues, problems and compromises are only clear during or after development of a feature or change, so a design doc is recommended to be written alongside the code development, this helps in avoiding the writing of invalid design documents and help highlight potentially problematic elements of implementation or important holes in the testing strategy. 
-
-Having the design document within the pull request allows contributors and reviewers to evolve the design while developing and during the review. This allows tweaks to the design, for current discussion and future reading, as well as to the code accordingly. This ensures the code and design docs evolve in parallel.
+A lot of implementation issues, problems and compromises are only clear during or after development of a feature or change, so a design doc is to be written alongside the code development, this helps in avoiding the writing of invalid design documents and help highlight potentially problematic elements of implementation or important holes in the testing strategy. 
+Having the design document within the pull request allows contributors and reviewers to evolve the design while developing a pull request and during the review.
+This strategy of design document development allows tweaks to the design document as a result of discussion, as well as to the code that implements the behaviour that the document described. This ensures the code and design docs evolve in parallel.
 
 
 ## Summary of changes
