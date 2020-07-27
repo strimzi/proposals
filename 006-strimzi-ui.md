@@ -14,11 +14,16 @@ This proposal will describe a Kafka administration UI capability. It will descri
 
 At a high level, I would propose a UI implemented as follows:
 
-- It would be a Javascript based UI (using [babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
+- It would be a Javascript based UI (using [Babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
+- That the last 2 major versions of the following browsers are supported (via Babel transpiling/polyfilling):
+  - Google Chrome
+  - Mirosoft Edge
+  - Mozillia Firefox
+  - Apple Safari
 - This UI is hosted and provided via an [Express](https://expressjs.com/) server
 - This UI is built in a modular/metadata driven manner - allowing for easy extensibility, modification, and dynamic behaviour at runtime
 - Uses a [GraphQL](https://graphql.org/) API
-- Should be fully translatable, and accessible
+- Should be fully translatable, and accessible (using a superset of [US Section 508](https://www.section508.gov/) and [WCAG 2.1](https://www.w3.org/WAI/standards-guidelines/wcag/glance/) rulesets).
 
 I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
 
