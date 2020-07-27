@@ -17,8 +17,8 @@ At a high level, I would propose a UI implemented as follows:
 - It would be a Javascript based UI (using [Babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
 - That the last 2 major versions of the following browsers are supported (via Babel transpiling/polyfilling):
   - Google Chrome
-  - Mirosoft Edge
-  - Mozillia Firefox
+  - Microsoft Edge
+  - Mozilla Firefox
   - Apple Safari
 - This UI is hosted and provided via an [Express](https://expressjs.com/) server
 - This UI is built in a modular/metadata driven manner - allowing for easy extensibility, modification, and dynamic behaviour at runtime
