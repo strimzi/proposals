@@ -39,7 +39,7 @@ The above is just an example but I think it demonstrates the value of a deeper c
 
 ### Where to write a design document
 
-A design document should be a markdown file located in the `design` directory of the repository the component code is located in, for instance all design documents relating to the strimzi operator(s) should be located in the `strimzi-kafka-operator` repository under the `design` folder.
+A design document should be a markdown file located in the `design` directory of the repository the component code is located in, for instance all design documents relating to the strimzi operator(s) should be located in the `strimzi-kafka-operator` repository under the `design` directory.
 
 #### Strimzi Design Document Organization
 Design documents should be split into logical areas, for repositories that aren't `strimzi-kafka-operator` I suspect this would start as a single or just a few succinct documents.
@@ -73,8 +73,8 @@ Is this intended for a single Kafka cluster or to interact with multiple.
 
 ### When is a design document complete
 
-Design document change us considered complete when the reviewers and maintainers believe the updated document to accurately reflect the implementation of the components behaviour. 
-Once approved the document is merged and is understood to be correct, any mistakes or changes to behaviour should be corrected in the form of a pull request alongside the code that changes the behavior.
+Design document change is considered complete when the reviewers and maintainers believe the updated document to accurately reflect the implementation of the components behaviour. 
+Once approved, the document is merged and is understood to be correct, any mistakes or changes to behaviour should be corrected in the form of a pull request alongside the code that changes the behavior.
 A design document is never truly 'completed', as the code evolves the document(s) evolve with it.
 
 A lot of implementation issues, problems and compromises are only clear during or after development of a feature or change, so a design doc is to be written alongside the code development, this helps in avoiding the writing of invalid design documents and help highlight potentially problematic elements of implementation or important holes in the testing strategy. 
