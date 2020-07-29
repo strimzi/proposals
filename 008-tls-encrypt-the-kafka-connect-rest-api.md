@@ -85,14 +85,14 @@ openAPIV3Schema:
 ### Certificate renewals
 
 The self-signed TLS certificate will have a 1-year expiration.
-Thirty day before the self-signed TLS certificate expires, the operator will automatically renew the certificate, replace the old self-signed certificate, and restart the pods in a controlled manner to ensure the new certificates are in use by Kafka Connect.
+Thirty days before the self-signed TLS certificate expires, the operator will automatically renew the certificate, replace the old self-signed certificate, and restart the pods in a controlled manner to ensure the new certificates are in use by Kafka Connect without losing availability.
 
 This would need to be a multi-phase process consisting of the following steps:
 
 1. Generate new certificate
-2. Distribute the public key to all pods and cluster operator truststores
+2. Distribute the new certificate to all pods and cluster operator truststores
 3. Replace the key and roll all Connect pods
-4. Remove the old public key from the truststores and roll all Connect pods
+4. When the old certificate expires, remove it from the truststores and roll all Connect pods
 
 
 ## Compatibility
