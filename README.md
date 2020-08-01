@@ -9,7 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-|  7  | [Restarting Kafka Connect connectors and tasks](./007-restarting-kafka-connect-connectors-and-tasks) |
+|  7  | [Restarting Kafka Connect connectors and tasks](./007-restarting-kafka-connect-connectors-and-tasks.md) |
 |  6  | [Design Documentation](./006-design-docs.md) |
 |  5  | [Improving configurability of Kafka listeners](./005-improving-configurability-of-kafka-listeners.md) |
 |  4  | [GitHub repository restructuring](./004-github-repository-restructuring.md) |
