@@ -27,7 +27,7 @@ At a high level, I would propose a UI implemented as follows:
 
 I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
 
-![Topics mock up](./images/006-topicsdesign.png)
+![Topics mock up](./images/009-topicsdesign.png)
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
@@ -37,7 +37,7 @@ This UI would also be provided with a full set of supporting elements - such as 
 
 The below shows how these pieces could integrate.
 
-![Suggested topology](./images/006-topology.png)
+![Suggested topology](./images/009-topology.png)
 
 Where:
 
@@ -125,7 +125,7 @@ In all of these cases, capabilities can be added in a prioritised order, and sho
 
 This UI could be deployed as a part of Strimzi as follows:
 
-![Suggested deployment](./images/006-deployment.png)
+![Suggested deployment](./images/009-deployment.png)
 
 Where:
 
@@ -190,3 +190,5 @@ I would expect that the main development effort for a UI will be in a new reposi
 
 - Discuss and iterate the proposal
 - Offer (as a draft PR into an appropriate repository) low level design documentation for a UI, covering architecture, build, test, for further review
+  - [Build](https://github.com/strimzi/strimzi-ui/blob/master/docs/Build.md)
+  - [Architecture](https://github.com/strimzi/strimzi-ui/pull/10)
