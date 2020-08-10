@@ -45,7 +45,7 @@ This mechanism should be straightforward to setup using a `passport.js` strategy
 The Strimzi UI is served from an Express server and that Express server will be inside the Strimzi cluster allowing the Express Server to talk to the Zookeeper on the secure port 2181.
 The login would not go through the Admin Server which hides the process from the external network but it may be desirable to add a `login` endpoint to the Admin Server which would allow session based applications to use the Admin Server in a natural way.
 
-The Strimzi Admin Server API could be called directly by the user creting an auth header on the request.
+The Strimzi Admin Server API could be called directly by the user creating an auth header on the request.
 Like the UI flow, the credentials would be retrieved from the auth header and placed into the Kafka client properties as SCRAM credentials.
 
 ## OAuth 2
