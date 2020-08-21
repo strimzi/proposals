@@ -56,22 +56,58 @@ In the OAuth 2 scenario, Strimzi currently requires the user to configure the Ka
 The client will then obtain an access token from the identity provider which is KeyCloak and that token flows to the broker.
 In the broker, calls to KeyCloak will be made based on the type of token that was requested by the client and passed to the broker.
 
+In order to call the Admin Server, the user would need to obtain a token from KeyCloak manually and then store that token in an Authorization header on the call to the Admin Server. That can then be passed directly to Kafka using the `oauth.access.token` property in the Kafka OAuth libraries.
+
+The behaviour when the AdminServer receives a request from the UI will be identical as above due to the same use of the Authorization header.
+
+### UI Authentication (OIDC)
+
 ![Strimzi UI using Oauth2](./images/oauth-ui.png)
 
-In the UI model, the user will be presented with a login dialogue box when the UI is loaded into the browser and requires the user to enter a userId and password.
-The userId needs to be pre-defined to KeyCloak through the KeyCloak user interface.
-When the user enters their userId and password, the UI will contact KeyCloak to authorise the user and obtain an access token.
-This process will be controlled by `passport.js`.
-KeyCloak will either return an access token or reject the request.
-If an access token is returned, it will be stored in the session data for the session.
-When the UI requires data from the Admin Server, the token is recovered from the session data and placed as an auth header on the request.
-The Admin Server receives the request and configures the Kafka client in preparation for calling the Kafka broker.
-The token is retrieved from the auth header and is added to the Kafka client JAAS configuration properties before executing the call to the Kafka broker.
-The Kafka broker, which is running a custom SASL plugin, retrieves the token and sets up the Kafka Principal for the user.
-The request then passes through the KeyCloak Authorizer for authorization.
+An admin user will register a client with the OpenID Provider (OP) - to create an OIDC client that provides the `authorization_code` OAuth 2.0 flow. The UI server can then be configured to use the OpenID Provider (OP) for authentication, and generating access tokens.
 
-In order to call the Admin Server directly, the user would need to obtain a token from KeyCloak manually and then store that token in an auth header on the call to the Admin Server.
-The behaviour when the AdminServer received the request would be identical to the flow for the UI calling the Admin Server with a token.
+The UI server will use Passport.js to provide/handle an `authorization_code` interaction to authenticate user and retrieve an access token from the OP. Passport will also handle updating the session for the user to contain the access token, and refreshing/reauthentication when the token expires. 
+
+The access token can then be passed to admin API as a Bearer token Authorization header. Admin API can then use this to issue requests to Kafka via OAUTHBEARER (Kafka will authenticate against the OP).
+
+A OIDC compliant server is required over OAuth 2.0 for following reasons:
+1. It provides metadata at `<hostname>/.well-known/openid-configuration` - which can be used for service discovery by Passport, instead of requiring configuration of a series of endpoints.
+2. It can provide user profile information (if we eventually want to display that in the UI)
+
+![Authentication flow](./images/009-authentication-flow.svg)
+
+#### Example CR
+
+Much like the authentication section of `Kafka` oauth listeners, similar would be applied to the UI configuration. The difference being that a single 'dicoveryURI' is needed for discovering the OIDC endpoints.
+
+```
+backends:
+  - name: "cluster2"
+    authentication :
+      discoveryURI: "https://cluster2/auth/realms/{realm-name}"
+      clientSecret: 
+          name: "mysecret"
+          idKey: "clientId"
+          passwordKey: "clientSecret"
+      certificate:
+        name: "mycert"
+        certKey: "ca.p12"
+    adminApi:
+      uri: "https://admin-api"
+      certificate:
+        name: "mycert"
+        certKey: "ca.p12"
+
+``` 
+
+#### Proposed libraries
+- https://www.npmjs.com/package/passport - authentication middleware
+- https://www.npmjs.com/package/openid-client - Passport compatible OIDC client for communicating with an OP
+
+#### Outstanding questions
+1. Who is responsible for "authorization" checks that the UI will make to hide features from user. E.g - can user create a topic, can user access the UI, can user produce a message etc.
+2. If the user authentication is based on a Kafka user - how do we federate/reconcile that user against other applications. E.g, k8s permission to create a KafkaUser or read a Secret, or prometheus access tokens
+3. Can an access_token be set on an admin client basis; currently docs suggest setting a system property of `oauth.access.token`.
 
 ## Mutual TLS
 
