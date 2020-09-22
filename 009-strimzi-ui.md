@@ -14,7 +14,7 @@ This proposal will describe a Kafka administration UI capability. It will descri
 
 At a high level, I would propose a UI implemented as follows:
 
-- It would be a Javascript based UI (using [Babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
+- It would be a TypeScript based UI (using [Babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
 - That the last 2 major versions of the following browsers are supported (via Babel transpiling/polyfilling):
   - Google Chrome
   - Microsoft Edge
@@ -31,9 +31,11 @@ I would suggest that the UI implementation to follow the [Model View Controller]
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
+I would also suggest the use of TypeScript for this UI. TypeScript (vs regular JavaScript) is better fit for larger UI code bases, by enforcing typing and structure definition. The main benefit of this is the early detection of potential bugs in code early at 'compile' rather than runtime - e.g a function being called with an unexpected type. In addition, given this typing and structure, IDEs can then use this to enable easier navigation of the codebase (eg jump to implementation, type-ahead support). Secondly, it introduces a number of more typical programming language constructs, such as generics and interfaces, which will make the code base more approachable to those who have not worked with a UI previously. The main benefit to the Strimzi-ui however will be the ability to use (and enforce) shared data structures across view layer implementations, enabling the easy addition and contribution of other view layer implementations.
+
 I would also suggest using Express as a server for this UI. This is due to its small footprint, modularity and available 3rd party modules, such as [helmet for http security](https://helmetjs.github.io/), [Passport.js for authentication and authorization support](http://www.passportjs.org/) or [the graphql and express-graphql modules for GraphQL server support](https://graphql.org/graphql-js/running-an-express-graphql-server/).
 
-This UI would also be provided with a full set of supporting elements - such as end to end tests, automation (examples of which are [in this section](#a-ui-repository-and-ways-of-working-in-the-repository)) to manage common tasks, and documentation around implementation approach, UI best practise and so on.
+This UI would also be provided with a full set of supporting elements - such as end to end tests, automation (examples of which are [in this section](#a-ui-repository-and-ways-of-working-in-the-repository)) to manage common tasks, and documentation around implementation approach, UI best practice and so on.
 
 The below shows how these pieces could integrate.
 
@@ -65,7 +67,7 @@ In order to provide any UI, the whole stack which will support it will need to b
 
 - Setting up the required UI build/packaging for deployment to Strimzi
 - [Integrating the UI with Strimzi itself](#proposed-deployment)
-- A Kafka backend server for Kafka data/requests the UI server can call
+- A Kafka backend server for Kafka data/requests the UI server can call, [covered by proposal](https://github.com/strimzi/proposals/pull/9)
 - UI server configurability/capability - including aspects such as;
   - Transport security
   - [User session, authentication and authorization capabilities](#session-management-and-authentication))
@@ -77,7 +79,7 @@ In order to provide any UI, the whole stack which will support it will need to b
   - Routing and navigation logic
   - Maintenance/tracing capabilities
 
-I am more than happy to elaborate and collaborate on any of these points here, and would suggest these (and any follow items identified while discussing this proposal) are completed before any client side UI work begins.
+I am more than happy to elaborate and collaborate on any of these points either in the proposal, or via a number of follow on issues, worked as a part of the UI's development.
 
 #### Topic list page
 
@@ -108,7 +110,7 @@ Then I am told topic 'SampleTopic' does not exist in the cluster
 
 Additional Kafka capabilities which could be added later include (but would not be limited to):
 
-- Create, update and delete topics on the topics list page (recontextualised as a Topics page - as per mock up)
+- Create, update and delete topics on the topics list page (re-contextualised as a Topics page - as per mock up)
 - View Consumer group status for a given topic, or the whole cluster
 - View the Brokers in a given cluster, their configuration, and where appropriate, allow modification of broker configuration
 - Provide details of Kafka listener/bootstrap addresses, along with sample configuration, to allow streamline client connectivity
@@ -120,8 +122,6 @@ Finally, one capability which may be of interest (which may have bearing on how 
 In all of these cases, capabilities can be added in a prioritised order, and should be added in a phased manner themselves (for example, add a view of the brokers and their configuration, then the ability to modify select configuration).
 
 #### Proposed deployment
-
-_EDIT_: This is being reviewed and will be revised given the community meeting (on 16/07/2020) discussion around the deployment options and security model ([minutes](https://docs.google.com/document/d/1V1lMeMwn6d2x1LKxyydhjo2c_IFANveelLD880A6bYc).
 
 This UI could be deployed as a part of Strimzi as follows:
 
@@ -173,7 +173,7 @@ Where:
 6.  Required, string - endpoint address for this backend.
 7.  Required, integer - the version of the API this UI will use.
 8.  Optional, object. Contains tls configuration (certificate to use, protocol versions etc. If omitted, traffic between these two endpoints will be in the clear.
-9.  Optional, object. Contains autherntication configuration for the UI to allow a user to login and view that backend
+9.  Optional, object. Contains authentication configuration for the UI to allow a user to login and view that backend
     1. Required, string - the type of authentication that this 'backend' supports (bearer token, basic auth)
     2. Optional, string - depending on authentication type, UI may need to register OIDC callback urls and generate a client id/secret
     3. Optional, string - path to use for token exchange (bearer)
@@ -193,11 +193,15 @@ This approach does have a few assumptions. These being:
 
 I would also suggest a name from the CRD of `kafka-web-ui`.
 
+The above is a suggestion of how the UI could be deployed as a part of a Strimzi deployment. Given the scope/range of options available, I would suggest the exact implementation details are decided upon in a follow on issue, worked as a part of the UI's development/delivery to Strimzi.
+
 ## Session management and Authentication
+
+This section describes how a UI deployed as a part of Strimzi could be secured. [The following is based on the work done as a part of the security proposal, and how the UI would/could utilise the available security mechanisms.](https://github.com/strimzi/proposals/pull/13). The exact implementation, as well as any other required discussion around security I would suggest is had as a part of the UI's development/delivery to Strimzi.
 
 ### Aim:
 
-Provide a mechanism for UI users to log into Strimzi and make authorized requests to Kafka
+Provide a mechanism for UI users to log into Strimzi and make authorized requests to Kafka.
 
 ### Overview:
 
@@ -217,9 +221,9 @@ This session must be shared between HTTP and WebSocket traffic – as the UI wil
 
 ### Proposed technology:
 
-The UI is being hosted by an Express server. Express has session middleware - https://www.npmjs.com/package/express-session - that can create and persist server-side sessions, using a cookie as a key to hydrate a session into the incoming express request. Proposed session store is a `redis` contianer as it's a lightweight key/value (and the session will just be storing a token value).
+The UI is being hosted by an Express server. Express has session middleware - https://www.npmjs.com/package/express-session - that can create and persist server-side sessions, using a cookie as a key to hydrate a session into the incoming express request. Proposed session store is a `redis` container as it's a lightweight key/value (and the session will just be storing a token value).
 
-Authentication in node/Express can be achieved through by http://www.passportjs.org/ which provides a large collection of “strategies” for authenticating a user. This can include oidc flows for a UI oauth dance.
+Authentication in node/Express can be achieved through by http://www.passportjs.org/ which provides a large collection of “strategies” for authenticating a user. For purposes of the proposal, the below diagrams show an oidc flows for a UI oauth dance, although other authentication mechanisms could be used.
 
 ### Sequence diagrams:
 
@@ -253,9 +257,6 @@ I would expect that the main development effort for a UI will be in a new reposi
 
 - A Vert.X based UI Server: The server hosting the static files for a UI will also need to support the UI in number of ways. It may need to do session management, enforce security, process responses and perform other general logic. In my experience, Express can be easily augmented to have these capabilities (and more) in a highly configurable manner, while maintaining a small footprint (vs say a whole JVM) and performance. Generally speaking as well, it is part of the defacto stack for React UIs, alongside things like Webpack for build.
 
-## Proposed next steps
+## Further details
 
-- Discuss and iterate the proposal
-- Offer (as a draft PR into an appropriate repository) low level design documentation for a UI, covering architecture, build, test, for further review
-  - [Build](https://github.com/strimzi/strimzi-ui/blob/master/docs/Build.md)
-  - [Architecture](https://github.com/strimzi/strimzi-ui/pull/10)
+The proposal covers at a high level how and what a UI for Strimzi could provide. For more lower level detail, please see the [Strimzi-ui](https://github.com/strimzi/strimzi-ui) repository, which is being populated with further, [lower level details](https://github.com/strimzi/strimzi-ui/tree/master/docs) of how the UI would work.
