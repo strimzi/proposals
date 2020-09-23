@@ -3,67 +3,64 @@
 This proposal is supplementary to the security documentation in the [Using Strimzi](https://strimzi.io/docs/operators/latest/using.html#security-str) guide.
 
 ## Problem description
-Strimzi currently supports SCRAM-SHA-512, Oauth2 and Mutual TLS for authentication of clients connecting to the Kafka brokers.
+This proposal discusses amendments to support authentication and authorization with the new [Strimzi UI](https://github.com/strimzi/proposals/pull/6) and [Strimzi Admin Server](https://github.com/strimzi/proposals/pull/9).
+
+### Authentication
+Strimzi currently supports SCRAM-SHA-512, OAuth2 and Mutual TLS for authentication of clients connecting to the Kafka brokers.
 The Strimzi cluster operator can be configured to support all 3 mechanisms for authentication for clients inside or outside the Kubernetes cluster.
-The SCRAM-SHA and Mutual TLS support uses the native support in Kafka for authentication and for Oauth2, authentication is delegated to [keyCloak](https://www.keycloak.org/). 
+The SCRAM-SHA-512 and Mutual TLS support uses the native support in Kafka for authentication and for OAuth2, Strimzi provides an [OAuth2 library](https://github.com/strimzi/strimzi-kafka-oauth) which has a generic OAuth2 interface allowing you to connect to multiple different OAuth2 servers. 
+Browser based UIs do not traditionally use mutual TLS so the proposed mechanisms for authentication on the UI only covers OAuth2 and SCRAM-SHA-512.
+The admin server proposal similarly only covers SCRAM-SHA-512 and OAuth2 support.
+The OAuth2 and SCRAM-SHA-512 mechanisms for the admin server propagates the SCRAM credentials or the OAuth token to Kafka where the Kafka broker performs the authentication.
+Implementing mutual TLS support in the admin server would require a mechanism that could propagate the identity of the client to Kafka as the admin server will be the TLS termination point and authentication would be between the external client and the admin server. Implementing this in a secure way is not trivial and is not included in this proposal.
 
-Authorization is available through native Kafka ACL support with the use of the Kafka `simpleACLAuthorizer`.
-Alternatives are available with Kafka authorizers being supplied for [keyCloak](https://www.keycloak.org/) and [Open Policy](https://www.openpolicyagent.org/docs/latest/).
+Both the UI and the admin server will also support a scenario with no security.
 
-The configuration of Oauth2 is described in the [Strimzi documentation](https://strimzi.io/docs/operators/latest/using.html#assembly-oauth-authentication_str) as well as in the [strimzi-kafka-oauth](https://github.com/strimzi/strimzi-kafka-oauth) repository on github. SCRAM and Mutual TLS configuration is documented in the relevant places throughout the [Strimzi documentation](https://strimzi.io/documentation/).
+### Authorization
+Both security mechanisms allow authorization to be done using the standard Kafka authorizers along with ACL support.
+Alternatives are available with Kafka authorizers being supplied for [KeyCloak](https://www.keycloak.org/) and [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) as documented in the Strimzi documentation. The proposed authentication mechanisms for the UI and the admin server will allow these documented authorization methods to be used without requiring any additional changes to the documented methods.
 
-This proposal discusses amendments to support security with the new [Strimzi UI](https://github.com/strimzi/proposals/pull/6) and [Strimzi Admin Server](https://github.com/strimzi/proposals/pull/9) and outlines how this can be done for SCRAM and OAuth2. Browser based UIs do not traditionally use mutual TLS for authentication and authorization but the Admin server API needs to be considered and this proposal suggests a mechanism that can be used to do that. 
+## Proposed Authentication Implementations
+### Admin server using SCRAM-SHA-512
+The following describes the flow for authentication and authorization using SCRAM SHA512 as the authentication type when a web client calls a Kafka client API through the admin server.
+In the diagram:
+1. The credentials are encoded in a base64 encoded Basic Auth header and are passed to the admin server.
+2. The admin server decodes the credentials and populates the Kafka client properties JAAS login string with the userid and password.
+3. The Kafka client api is called from the admin server which authenticates the credentials on the Kafka Broker.
+4. If authentication is successful, the principal is passed to a Kafka authorizer for authorization.
+5. If authorization is successful, the command completes and returns the result to the admin server.
+6. The admin server encodes the response in an HTTP response and returns to the web client.
 
-The outlined proposal relies on Kafka to perform authentication or authorization and the Admin Server itself does not.
-In a Kafka environment, this may be acceptable but it is plausible that a UI and Admin Server may wish to communicate with non-Kafka environments in the future like the Kube API.
-In these environments authentication and authorization can again be delegated to the backend system.
-A discussion and agreement is needed whether we wish to implement authentication and authorization on the Admin Server itself.
+![Strimzi Admin server using SCRAM-SHA512](images/009-scram-sha512-admin-server.png)
 
-Proceeding with the delegated model, I have 3 sets of diagrams showing a SCRAM-SHA-512 solution, an OAuth2 solution and a Mutual TLS solution with the last one only being relevant to the Admin Server.
+The credentials that are used need to be setup through the Strimzi User Operator.
+The admin server is stateless, so the credentials will need to be provided on every request.
 
-## SCRAM-SHA-512
-![Kafka Client using SCRAM-SHA512](./images/scram-sha512-client.png)
+### UI using SCRAM-SHA-512
+The UI calls the admin server to satisfy requests against Kafka so will use the same mechanism as described in the previous section where credentials are encoded in an Authorization header and passed on to the admin server which will propagate the credentials through to the Kafka broker for authentication.
+As the admin server is stateless, the user credentials will need to be passed on every request.
+The UI will store the credentials in a session cookie for use on each request to the admin server.
+The credentials will be initially obtained from the user by forcing the user through a login mechanism.
+The login mechanism will consist of a UI dialogue prompting for a username and password.
+The dialogue will be presented when the user first logs in or when the login session expires after a set period of inactivity between the user and the UI.
+The Kafka clients do not have an api that is designed to specifically authenticate a user, so the UI will need to simulate the login by calling the Kafka admin client with a query that will allow the UI to determine whether the user is known to Kafka and can be authenticated against Kafka client calls.
+The proposed query that will be used is the `describeCluster()` api on the Kafka admin client.
 
-Strimzi supports SCRAM-SHA512 using native Kafka facilities, so the Kafka client is setup with credentials for the user and these credentials are passed to the broker where the broker authenticates against user credentials stored in Zookeeper.
-When the request is authenticated, the Principal is passed to a Kafka Simple ACL Authorizer which determines whether the user is authorized to access the resource.
-Access is defined through ACLs and are stored on Zookeeper.
+The following diagram shows the flow of requests to the UI:
 
-![Strimzi UI using SCRAM-SHA512](./images/scram-sha512-ui.png)
-
-This Kafka client model translates to a UI and Admin Server in a similar way.
-When the user loads up the UI in a browser, they are presented with a dialogue box requiring them to enter a userId and password.
-The userId and password they enter are pre-defined to Kafka by the creation of a Kafka user through the `User Operator` or the Kafka `bin/kafka-configs.sh ` command line tool.
-Once the userId and password have been entered, the UI validates the credentials on Zookeeper using `passport.js`.
-The result that is returned will be marked as valid or invalid.
-If the credentials are valid, they are stored in the session data associated with that browser session.
-When the UI requires data from the Admin Server, the credentials are recovered from the session data and placed as an auth header on the request.
-The Admin Server receives the request and configures the Kafka client in preparation for calling the Kafka broker.
-The SCRAM credentials are retrieved from the auth header and are added to the Kafka client configuration properties before executing the call to the Kafka broker.
-From thereon, the Kafka authentication and authorization mechanism works in an identical way to the description above for the Kafka Clients.
-
-This mechanism should be straightforward to setup using a `passport.js` strategy.
-The Strimzi UI is served from an Express server and that Express server will be inside the Strimzi cluster allowing the Express Server to talk to the Zookeeper on the secure port 2181.
-The login would not go through the Admin Server which hides the process from the external network but it may be desirable to add a `login` endpoint to the Admin Server which would allow session based applications to use the Admin Server in a natural way.
-
-The Strimzi Admin Server API could be called directly by the user creating an auth header on the request.
-Like the UI flow, the credentials would be retrieved from the auth header and placed into the Kafka client properties as SCRAM credentials.
+![Strimzi UI using SCRAM-SHA512](images/009-scram-sha512-ui-request-flow.png)
 
 ## OAuth 2
+### Admin server using OAuth2
+In the OAuth2 model, an admin user will register a client with the OpenID Provider.
+The OAuth2 support for the admin server will then be very similar to the SCRAM-SHA-512 model and will take advantage of the [Strimzi Kafka OAuth library](https://github.com/strimzi/strimzi-kafka-oauth).
+Instead of a Basic auth header being used, each request to the admin server will contain a bearer token in an Authorization header.
+The token can be a refresh token or an access token associated with the registered client which is obtained by the user using the [Strimzi cli](https://github.com/strimzi/strimzi-kafka-oauth/blob/master/examples/docker/kafka-oauth-strimzi/kafka/oauth.sh) tool.
+The admin server will extract the token from the header and configure the client properties before calling the broker using the standard Kafka OAUTHBEARER SASL mechanism.
 
-![Kafka Client using Oauth2](./images/oauth-client.png)
-
-In the OAuth 2 scenario, Strimzi currently requires the user to configure the Kafka client with a clientId and secret.
-The client will then obtain an access token from the identity provider which is KeyCloak and that token flows to the broker.
-In the broker, calls to KeyCloak will be made based on the type of token that was requested by the client and passed to the broker.
-
-In order to call the Admin Server, the user would need to obtain a token from KeyCloak manually and then store that token in an Authorization header on the call to the Admin Server. That can then be passed directly to Kafka using the `oauth.access.token` property in the Kafka OAuth libraries.
-
-The behaviour when the AdminServer receives a request from the UI will be identical as above due to the same use of the Authorization header.
-
-### UI Authentication (OIDC)
-
-![Strimzi UI using Oauth2](./images/oauth-ui.png)
-
+### UI using OAuth2 (OIDC)
+The OAuth2 flow for the UI is more complicated. The UI is responsible for obtaining the access token or refresh token to put onto the Authorization header on calls to the admin server. 
+ 
 An admin user will register a client with the OpenID Provider (OP) - to create an OIDC client that provides the `authorization_code` OAuth 2.0 flow. The UI server can then be configured to use the OpenID Provider (OP) for authentication, and generating access tokens.
 
 The UI server will use Passport.js to provide/handle an `authorization_code` interaction to authenticate user and retrieve an access token from the OP. Passport will also handle updating the session for the user to contain the access token, and refreshing/reauthentication when the token expires. 
@@ -108,13 +105,3 @@ backends:
 1. Who is responsible for "authorization" checks that the UI will make to hide features from user. E.g - can user create a topic, can user access the UI, can user produce a message etc.
 2. If the user authentication is based on a Kafka user - how do we federate/reconcile that user against other applications. E.g, k8s permission to create a KafkaUser or read a Secret, or prometheus access tokens
 3. Can an access_token be set on an admin client basis; currently docs suggest setting a system property of `oauth.access.token`.
-
-## Mutual TLS
-
-![Admin server using Mutual TLS](./images/mtls-admin.png)
-
-With Mutual TLS, authentication takes place in the TLS handshake between the external web client and the Admin Server.
-The server side can only detect a userId for the client so credentials cannot be propagated to the Kafka Broker that woud allow the broker to authenticate and authorize the request.
-This proposal recommends that the Kafka clients running under the Admin Server can use a valid Kafka User for the connection between the Kafka client and the broker and pass the external web client's userId to the broker login module.
-The Kafka broker then uses a SASL plugin to create a custom authentication module which sets up the Kafka principal which flows through to authorizer.
-This allows the authorizer to take advantage of the ACL authorizer mechanism that is native to Kafka.
