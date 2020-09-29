@@ -40,12 +40,22 @@ This should work on Kubernetes 1.16-1.20. It can’t work on lower versions beca
 
 We need to:
 
-* Audit all existing CRD looking for things we need to change in order to have a structural schema. This is basically about checking that the type of each property is not going to need to change.
-* Prime suspects include things which are declared as a `Map<String, Object>` is Java, hence an object in JSON Schema. This includes `Kafka.spec.kafka.jvmOptions`, `Kafka.spec.zookeeper.jvmOptions`, and similar in other CRDs.
-For each of these we should make the analogous change that we did for listeners in 0.20.0.
+* Audit all existing Strimzi CRDs looking for things we need to change in order to have a structural schema. This is basically about checking that the `type` of each `property` in the schema is not going to need to change. Prime suspects include:
+    
+    - things which are declared as a `Map<String, Object>` in Java (hence an `object` in JSON Schema):
+
+        * `Kafka.spec.kafka.jvmOptions`, `Kafka.spec.zookeeper.jvmOptions`, and `jvmOptions` in other CRDs. JVM options have to be specified in a certain order and the API presented by `jvmOptions` doesn't support this. 
+        
+        * Use of a `Map` in `metrics` is also worth reviewing. It ties the Strimzi API very strongly to the JMXExporter and often results in a large amount of JMXExporter configuration in the `Kafka` resource, which obscures the rest of the Kafka configuration.
+
+        * Other uses of `Map<String, Object>` are more debatable. In particular `Kafka.spec.kafka.configs` (and similar for ZK) doesn't seem like a bad representation for what is, ultimately, a properties file. For `labels` and `annotations`, the Kubernetes API sets a precedent of using `object`, which Fabric8 represents as a `Map`, so annything else would be unintuitive.
+    
+    - Things which are a declared with type `boolean` should also be looked at with an eye to how future proof they are. A `string` can be constrained to having two values which can later be relaxed to allow more values, but this is not possible with a `boolean`. 
+
+    For each of these we should make the analogous change that we did for `listeners` in 0.20.0.
 * Develop the `v1beta2` schema. This must be structural. This must be backward compatible with `v1beta1`, by which I mean any schema-valid `v1beta2` CR must be a schema-valid `v1beta1` CR (though not vice versa).
 * The Strimzi X CRD will declare `v1alpha1` (served=true, storage=false), `v1beta1` (served=true, storage=false) and `v1beta2` (served=true, storage=true)
-* The operator will access the CRs via the `v1beta2` path (it will be able to observe `v1beta1` resources because the None conversion just changes the apiVersion). 
+* The operator will access the CRs via the `v1beta2` path (it will be able to observe `v1beta1` resources because the `None` conversion just changes the `apiVersion`). 
 * Develop a tool which:
   * Can rewrite a `v1beta1` resource to an equivalent `v1beta2` resource, allowing users to easily modify their resources (e.g. in git).
   * Can apply/edit CRs in Kubernetes likewise.
@@ -58,7 +68,7 @@ For each of these we should make the analogous change that we did for listeners 
 Users will need to follow a specific procedure to upgrade:
 
 1. Install the Strimzi X CRDs using `kubectl apply|replace -f` like normal.
-2. Touch each of their CRs, changing the apiVersion to v1beta2 (the tool can do this).
+2. Touch each of their CRs, changing the `apiVersion` to `v1beta2` (the tool can do this).
 3. Edit the CRD so that `v1alpha1` and `v1beta1` are both served=false (the tool can do this).
 4. Double check that all their CRs are using v1beta2 and all their apps are still functioning (the tool can do this).
 5. Edit the CRD `status.storedVersions` to remove `v1alpha1` and `v1beta1` (the tool can do this).
@@ -70,7 +80,7 @@ This should work on Kubernetes 1.16+ (including 1.22+). This will be the first r
 
 #### Development
 
-The CRD will be CRD v1 API
+The CRD will use `apiextensions.k8s.io/v1` CRD API.
 
 #### Users
 
@@ -78,15 +88,13 @@ The upgrade will just be a matter of replacing the CRDs as usual.
 
 ### Alternative
 
-Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just preprequisites before installing CRDs which use the v1 API. As such they could equally be done by users as part of the upgrade to Strimzi Z. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi X, which might be more convenient.
+Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just preprequisites before installing CRDs which use the `apiextensions.k8s.io/v1` API. As such they could equally be done by users as part of the upgrade to Strimzi Z. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi X, which might be more convenient.
 
-## Affected/not affected projects
-
-Call out the projects in the Strimzi organisation that are/are not affected by this proposal. 
 
 ## Timing
 
 Strimzi X could be any time before the release of Kubernetes 1.22, but obviously the more time people have to upgrade the better and the more breathing space we have before 1.21 the better to iron out problems people might have in upgrading.
+
 
 
 ## Compatibility
