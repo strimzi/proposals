@@ -227,7 +227,7 @@ Authentication in node/Express can be achieved through by http://www.passportjs.
 
 ### Sequence diagrams:
 
-Note – the log in flow is assuming an oauth dance to retrieve a user token. Depending on the passport strategy and kafka auth mechanism, the UI may need to render its own basic login page.
+Note – the log in flow is assuming an oauth dance to retrieve a user token. It could however be any type of token, with an accompanying passport strategy to inspect and validate it. In addition, calls to the IDP will only be required when a token needs to be either retrieved for the first time, or refreshed if it or the session has expired. This will be determined by looking at the token previously retrieved (if any) kept in the redis session store. Finally, depending on the passport strategy and kafka auth mechanism, the UI may need to render its own basic login page.
 
 #### http flow with valid session
 
@@ -251,7 +251,7 @@ Note – the log in flow is assuming an oauth dance to retrieve a user token. De
 
 ## Affected projects
 
-I would expect that the main development effort for a UI will be in a new repository in the Strimzi Github organisation. However, given the discussion in https://github.com/strimzi/strimzi-kafka-operator/issues/2540 , one option to source backend Kafka data would be via the [Bridge](https://github.com/strimzi/strimzi-kafka-bridge). As required, this could be extended to support the various Kafka backend calls needed to surface any required information in a UI. In addition, depending on how and where the UI is provided in Strimzi, changes may be needed in the [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator) to either define a UI CRD, or deploy a UI deployment if configured to do so via the operator. I would very much welcome discussion around this, and what would make the most sense for the Strimzi project.
+I would expect that the main development effort for a UI will be in a new repository in the Strimzi Github organisation. Given the discussion in https://github.com/strimzi/strimzi-kafka-operator/issues/2540 and https://github.com/strimzi/proposals/pull/9 , the source backend Kafka data would be via the [Strimzi-admin codebase](https://github.com/strimzi/strimzi-admin). At first this would provide support for the various Kafka backend calls needed to surface any required information for the UI, but could be extended to provide other sources of data for use in the UI also. In addition, depending on how and where the UI is provided in Strimzi, changes may be needed in the [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator) to either define a UI CRD, or deploy a UI deployment if configured to do so via the operator. I would very much welcome discussion around this, and what would make the most sense for the Strimzi project.
 
 ## Rejected alternatives
 
