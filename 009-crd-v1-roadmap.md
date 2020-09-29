@@ -2,18 +2,21 @@
 
 # Roadmap to using the CRD v1 API
 
-This describes (roughly) the steps Strimzi users will need to take to get to using v1beta2 Strimzi APIs which, in turn, are using the v1 CRD API. In it we talk about Strimzi 0.21.0 and 0.22.0, but the changes described under those headings wouldn’t necessarily need to be delivered in exactly those versions. Rather the requirement is that what we’re calling Strimzi 0.22 is released around the time that Kubernetes 1.21 is.
+This describes (roughly) the steps Strimzi users will need to take to get to using v1beta2 Strimzi APIs which, in turn, are using the v1 CRD API. 
+As such it talks about future versions of Strimz. We don't yet know for sure what versions the features described would land in, so we'll use the terms
+Strimzi X and Strimzi Z, where X and Z are unknown version numbers > 0.20 with X < Z. We've used Z rather than Y because it's not a given that Z is the version following X.
+The requirement is that what we’re calling Strimzi Z is released around the same time that Kubernetes 1.21 is.
 
 ## Current situation
 
-Currently Strimzi defines numerous CustomResourceDefinitions) using the `apiextensions.k8s.io/v1beta1`. Those CRDs define the "Strimzi CRs", as v1alpha1 and v1beta1 APIS in the `kafka.strimzi.io` API group.
+Currently Strimzi defines numerous `CustomResourceDefinitions` using the `apiextensions.k8s.io/v1beta1` API. Those CRDs define the "Strimzi CRs", as `v1alpha1` and `v1beta1` APIS in the `kafka.strimzi.io` API group.
 
 Kubernetes 1.21 is expected to have removed CRD `apiextensions.k8s.io/v1beta1`. Its replacement, `apiextensions.k8s.io/v11`, has been available since Kubernetes 1.16.
 
 
 ## Motivation
 
-To work on Kubernetes 1.21 Strimzi will need to use the v1 CRD API. We can't have a single set of CRDs which support both Kubernetes 1.21 or later and also 1.15 or earlier. Furthermore, using the v1 CRD API requires that the valiation schemas in the CRD are all "structural schemas".
+To work on Kubernetes 1.21 Strimzi will need to use the `apiextensions.k8s.io/v1` CRD API. We can't have a single set of CRDs which support both Kubernetes 1.21 or later and also 1.15 or earlier. Furthermore, using `apiextensions.k8s.io/v1` requires that the valiation schemas in the CRD are all "structural schemas".
 
 ## Proposal
 
@@ -28,10 +31,10 @@ Users should:
  * Rewrite their Kafka `spec.kafka.listeners` fields to use a list. 
  * Check they’re not using any “deprecated” fields in any of their resources.
 
-### Strimzi "0.21.0"
+### Strimzi X (approximately January 2021)
 
-This release will be a gate release, meaning that all existing Strimzi users will have to pass through 0.21 in order to upgrade to 0.22.
-This should work on Kubernetes 1.16-1.20. It can’t work on lower versions because it relies on having support for per-versions validation schemas in CRDs, a feature that wasn’t available before 1.16. It can’t work on higher versions because that don’t support `v1beta1` of the CRD API.
+This release will be a gate release, meaning that all existing Strimzi users will have to pass through X in order to upgrade to Z.
+This should work on Kubernetes 1.16-1.20. It can’t work on lower versions because it relies on having support for per-versions validation schemas in CRDs, a feature that wasn’t available before 1.16. It can’t work on higher versions because that don’t support `apiextensions.k8s.io/v1beta1` of the CRD API.
 
 #### Development
 
@@ -41,7 +44,7 @@ We need to:
 * Prime suspects include things which are declared as a `Map<String, Object>` is Java, hence an object in JSON Schema. This includes `Kafka.spec.kafka.jvmOptions`, `Kafka.spec.zookeeper.jvmOptions`, and similar in other CRDs.
 For each of these we should make the analogous change that we did for listeners in 0.20.0.
 * Develop the `v1beta2` schema. This must be structural. This must be backward compatible with `v1beta1`, by which I mean any schema-valid `v1beta2` CR must be a schema-valid `v1beta1` CR (though not vice versa).
-* The 0.21.0 CRD will declare `v1alpha1` (served=true, storage=false), `v1beta1` (served=true, storage=false) and `v1beta2` (served=true, storage=true)
+* The Strimzi X CRD will declare `v1alpha1` (served=true, storage=false), `v1beta1` (served=true, storage=false) and `v1beta2` (served=true, storage=true)
 * The operator will access the CRs via the `v1beta2` path (it will be able to observe `v1beta1` resources because the None conversion just changes the apiVersion). 
 * Develop a tool which:
   * Can rewrite a `v1beta1` resource to an equivalent `v1beta2` resource, allowing users to easily modify their resources (e.g. in git).
@@ -54,16 +57,16 @@ For each of these we should make the analogous change that we did for listeners 
 
 Users will need to follow a specific procedure to upgrade:
 
-1. Install the 0.21.0 CRDs using `kubectl apply|replace -f` like normal.
+1. Install the Strimzi X CRDs using `kubectl apply|replace -f` like normal.
 2. Touch each of their CRs, changing the apiVersion to v1beta2 (the tool can do this).
 3. Edit the CRD so that `v1alpha1` and `v1beta1` are both served=false (the tool can do this).
 4. Double check that all their CRs are using v1beta2 and all their apps are still functioning (the tool can do this).
 5. Edit the CRD `status.storedVersions` to remove `v1alpha1` and `v1beta1` (the tool can do this).
-At this point they’re all set for Strimzi 0.22.0
+At this point they’re all set for Strimzi Z
 
-### Strimzi "0.22.0"
+### Strimzi Z (approximately April 2021)
 
-This should work on Kubernetes 1.16+ (including 1.21+). This will be the first release using CRD v1 API. 
+This should work on Kubernetes 1.16+ (including 1.22+). This will be the first release using `apiextensions.k8s.io/v1` CRD API. 
 
 #### Development
 
@@ -75,7 +78,7 @@ The upgrade will just be a matter of replacing the CRDs as usual.
 
 ### Alternative
 
-Steps 2-5 in the procedure ascribed to Strimzi 0.21, above are technically just preprequisites before installing CRDs which use the v1 API. As such they could equally be done by users as part of the upgrade to Strimzi 0.22. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi 0.21, which might be more convenient.
+Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just preprequisites before installing CRDs which use the v1 API. As such they could equally be done by users as part of the upgrade to Strimzi Z. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi X, which might be more convenient.
 
 ## Affected/not affected projects
 
@@ -83,13 +86,12 @@ Call out the projects in the Strimzi organisation that are/are not affected by t
 
 ## Timing
 
-Strimzi 0.21 could be any time before the release of Kubernetes 1.21, but obviously the more time people have to upgrade the better and the more breathing space we have before 1.21 the better to iron out problems people might have in upgrading.
-
+Strimzi X could be any time before the release of Kubernetes 1.22, but obviously the more time people have to upgrade the better and the more breathing space we have before 1.21 the better to iron out problems people might have in upgrading.
 
 
 ## Compatibility
 
-Under this proposal Strimzi "0.22" would not support Kubernetes 1.15 or earlier.
+Under this proposal Strimzi X would not support Kubernetes 1.15 or earlier.
 
 ## Rejected alternatives
 
