@@ -3,24 +3,24 @@
 # Roadmap to using the CRD v1 API
 
 This describes (roughly) the steps Strimzi users will need to take to get to using v1beta2 Strimzi APIs which, in turn, are using the v1 CRD API. 
-As such it talks about future versions of Strimz. We don't yet know for sure what versions the features described would land in, so we'll use the terms
-Strimzi X and Strimzi Z, where X and Z are unknown version numbers > 0.20 with X < Z. We've used Z rather than Y because it's not a given that Z is the version following X.
+As such it talks about future versions of Strimzi. We don't yet know for sure what versions the features described would land in, so we'll use the terms
+Strimzi X and Strimzi Z, where X and Z are unknown version numbers > 0.20.0 with X < Z. We've used Z rather than Y because it's not a given that Z is the version following X.
 The requirement is that what we’re calling Strimzi Z is released around the same time that Kubernetes 1.21 is.
 
 ## Current situation
 
 Currently Strimzi defines numerous `CustomResourceDefinitions` using the `apiextensions.k8s.io/v1beta1` API. Those CRDs define the "Strimzi CRs", as `v1alpha1` and `v1beta1` APIS in the `kafka.strimzi.io` API group.
 
-Kubernetes 1.21 is expected to have removed CRD `apiextensions.k8s.io/v1beta1`. Its replacement, `apiextensions.k8s.io/v11`, has been available since Kubernetes 1.16.
+Kubernetes 1.22 is expected to have removed CRD `apiextensions.k8s.io/v1beta1`. Its replacement, `apiextensions.k8s.io/v1`, has been available since Kubernetes 1.16.
 
 
 ## Motivation
 
-To work on Kubernetes 1.21 Strimzi will need to use the `apiextensions.k8s.io/v1` CRD API. We can't have a single set of CRDs which support both Kubernetes 1.21 or later and also 1.15 or earlier. Furthermore, using `apiextensions.k8s.io/v1` requires that the valiation schemas in the CRD are all "structural schemas".
+To work on Kubernetes 1.22 Strimzi will need to use the `apiextensions.k8s.io/v1` CRD API. We can't have a single set of CRDs which support both Kubernetes 1.22 or later and also 1.15 or earlier. Furthermore, using `apiextensions.k8s.io/v1` requires that the valiation schemas in the CRD are all [structural schemas](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#specifying-a-structural-schema).
 
 ## Proposal
 
-### Strimzi 0.20
+### Strimzi 0.20.0
 
 This will be the last version of Strimzi which supports Kubernetes 1.11-1.15. 
 
@@ -65,6 +65,8 @@ We need to:
 
 #### Users
 
+Users would have to be using Kubernetes 1.16 or greater.
+
 Users will need to follow a specific procedure to upgrade:
 
 1. Install the Strimzi X CRDs using `kubectl apply|replace -f` like normal.
@@ -93,8 +95,7 @@ Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just pre
 
 ## Timing
 
-Strimzi X could be any time before the release of Kubernetes 1.22, but obviously the more time people have to upgrade the better and the more breathing space we have before 1.21 the better to iron out problems people might have in upgrading.
-
+Strimzi Z could be any time before the release of Kubernetes 1.22, but obviously the more time people have to upgrade the better and the more breathing space we have before 1.22 the better to iron out problems people might have in upgrading.
 
 
 ## Compatibility
