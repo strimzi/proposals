@@ -16,7 +16,7 @@ Kubernetes 1.22 is expected to have removed CRD `apiextensions.k8s.io/v1beta1`. 
 
 ## Motivation
 
-To work on Kubernetes 1.22 Strimzi will need to use the `apiextensions.k8s.io/v1` CRD API. We can't have a single set of CRDs which support both Kubernetes 1.22 or later and also 1.15 or earlier. Furthermore, using `apiextensions.k8s.io/v1` requires that the valiation schemas in the CRD are all [structural schemas](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#specifying-a-structural-schema).
+To work on Kubernetes 1.22 Strimzi will need to use the `apiextensions.k8s.io/v1` CRD API. We can't have a single set of CRDs which support both Kubernetes 1.22 or later and also 1.15 or earlier. Furthermore, using `apiextensions.k8s.io/v1` requires that the validation schemas in the CRD are all [structural schemas](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#specifying-a-structural-schema).
 
 ## Proposal
 
