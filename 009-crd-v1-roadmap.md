@@ -48,7 +48,7 @@ We need to:
         
         * Use of a `Map` in `metrics` is also worth reviewing. It ties the Strimzi API very strongly to the JMXExporter and often results in a large amount of JMXExporter configuration in the `Kafka` resource, which obscures the rest of the Kafka configuration.
 
-        * Other uses of `Map<String, Object>` are more debatable. In particular `Kafka.spec.kafka.configs` (and similar for ZK) doesn't seem like a bad representation for what is, ultimately, a properties file. For `labels` and `annotations`, the Kubernetes API sets a precedent of using `object`, which Fabric8 represents as a `Map`, so annything else would be unintuitive.
+        * Other uses of `Map<String, Object>` are more debatable. In particular `Kafka.spec.kafka.configs` (and similar for ZK) doesn't seem like a bad representation for what is, ultimately, a properties file. For `labels` and `annotations`, the Kubernetes API sets a precedent of using `object`, which Fabric8 represents as a `Map`, so anything else would be unintuitive.
     
     - Things which are a declared with type `boolean` should also be looked at with an eye to how future proof they are. A `string` can be constrained to having two values which can later be relaxed to allow more values, but this is not possible with a `boolean`. 
 
@@ -90,7 +90,7 @@ The upgrade will just be a matter of replacing the CRDs as usual.
 
 ### Alternative
 
-Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just preprequisites before installing CRDs which use the `apiextensions.k8s.io/v1` API. As such they could equally be done by users as part of the upgrade to Strimzi Z. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi X, which might be more convenient.
+Steps 2-5 in the procedure ascribed to Strimzi X, above are technically just prerequisites before installing CRDs which use the `apiextensions.k8s.io/v1` API. As such they could equally be done by users as part of the upgrade to Strimzi Z. The benefit of doing them sooner is that users would be able to perform those steps during their use of Strimzi X, which might be more convenient.
 
 
 ## Timing
