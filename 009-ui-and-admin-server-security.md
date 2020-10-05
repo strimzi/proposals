@@ -20,11 +20,14 @@ Both the UI and the admin server will also support a scenario with no security.
 Both security mechanisms allow authorization to be done using the standard Kafka authorizers along with ACL support.
 Alternatives are available with Kafka authorizers being supplied for [KeyCloak](https://www.keycloak.org/) and [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) as documented in the Strimzi documentation. The proposed authentication mechanisms for the UI and the admin server will allow these documented authorization methods to be used without requiring any additional changes to the documented methods.
 
+### Securing traffic from clients to the Admin Server
+Connections from web clients to the Admin Server will always be encrypted using TLS except in the scenario where security is turned off. The security off scenario is where authentication and authorization is not configured in Kafka, such as the (Kafka Quickstart)[https://kafka.apache.org/quickstart] example.
+
 ## Proposed Authentication Implementations
 ### Admin server using SCRAM-SHA-512
 The following describes the flow for authentication and authorization using SCRAM SHA512 as the authentication type when a web client calls a Kafka client API through the admin server.
 In the diagram:
-1. The credentials are encoded in a base64 encoded Basic Auth header and are passed to the admin server.
+1. The credentials are base64 encoded and added as a Basic authentication schema on an `Authorization` header which is sent to the admin server.
 2. The admin server decodes the credentials and populates the Kafka client properties JAAS login string with the userid and password.
 3. The Kafka client api is called from the admin server which authenticates the credentials on the Kafka Broker.
 4. If authentication is successful, the principal is passed to a Kafka authorizer for authorization.
@@ -55,17 +58,17 @@ The following diagram shows the flow of requests to the UI:
 In the OAuth2 model, an admin user will register a client with the OpenID Provider.
 The OAuth2 support for the admin server will then be very similar to the SCRAM-SHA-512 model and will take advantage of the [Strimzi Kafka OAuth library](https://github.com/strimzi/strimzi-kafka-oauth).
 Instead of a Basic auth header being used, each request to the admin server will contain a bearer token in an Authorization header.
-The token can be a refresh token or an access token associated with the registered client which is obtained by the user using the [Strimzi cli](https://github.com/strimzi/strimzi-kafka-oauth/blob/master/examples/docker/kafka-oauth-strimzi/kafka/oauth.sh) tool.
+The token must be an access token associated with the registered client which is obtained by the user using the [Strimzi cli](https://github.com/strimzi/strimzi-kafka-oauth/blob/master/examples/docker/kafka-oauth-strimzi/kafka/oauth.sh) tool.
 The admin server will extract the token from the header and configure the client properties before calling the broker using the standard Kafka OAUTHBEARER SASL mechanism.
 
 ### UI using OAuth2 (OIDC)
-The OAuth2 flow for the UI is more complicated. The UI is responsible for obtaining the access token or refresh token to put onto the Authorization header on calls to the admin server. 
+The OAuth2 flow for the UI is more complicated. The UI is responsible for obtaining the access token to put onto the Authorization header on calls to the admin server. 
  
 An admin user will register a client with the OpenID Provider (OP) - to create an OIDC client that provides the `authorization_code` OAuth 2.0 flow. The UI server can then be configured to use the OpenID Provider (OP) for authentication, and generating access tokens.
 
 The UI server will use Passport.js to provide/handle an `authorization_code` interaction to authenticate user and retrieve an access token from the OP. Passport will also handle updating the session for the user to contain the access token, and refreshing/reauthentication when the token expires. 
 
-The access token can then be passed to admin API as a Bearer token Authorization header. Admin API can then use this to issue requests to Kafka via OAUTHBEARER (Kafka will authenticate against the OP).
+The access token can then be passed to admin API as a Bearer token Authorization header. Admin API can then use this to issue requests to Kafka via OAUTHBEARER (Kafka will validate the token against the OP or authenticate itself if needed).
 
 A OIDC compliant server is required over OAuth 2.0 for following reasons:
 1. It provides metadata at `<hostname>/.well-known/openid-configuration` - which can be used for service discovery by Passport, instead of requiring configuration of a series of endpoints.
@@ -104,4 +107,3 @@ backends:
 #### Outstanding questions
 1. Who is responsible for "authorization" checks that the UI will make to hide features from user. E.g - can user create a topic, can user access the UI, can user produce a message etc.
 2. If the user authentication is based on a Kafka user - how do we federate/reconcile that user against other applications. E.g, k8s permission to create a KafkaUser or read a Secret, or prometheus access tokens
-3. Can an access_token be set on an admin client basis; currently docs suggest setting a system property of `oauth.access.token`.
