@@ -27,7 +27,7 @@ At a high level, I would propose a UI implemented as follows:
 
 I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
 
-![Topics mock up](./images/009-topicsdesign.png)
+![Topics mock up](./images/011-topicsdesign.png)
 
 By maintaining and enforcing a thin view layer, this should not stop other view layers being designed, implemented and contributed in other frameworks, such as [PatternFly](https://www.patternfly.org/v4/) or [Material](https://material.io/) for example.
 
@@ -39,7 +39,7 @@ This UI would also be provided with a full set of supporting elements - such as 
 
 The below shows how these pieces could integrate.
 
-![Suggested topology](./images/009-topology.png)
+![Suggested topology](./images/011-topology.png)
 
 Where:
 
@@ -125,7 +125,7 @@ In all of these cases, capabilities can be added in a prioritised order, and sho
 
 This UI could be deployed as a part of Strimzi as follows:
 
-![Suggested deployment](./images/009-deployment.png)
+![Suggested deployment](./images/011-deployment.png)
 
 Where:
 
@@ -197,7 +197,7 @@ The above is a suggestion of how the UI could be deployed as a part of a Strimzi
 
 ## Session management and Authentication
 
-This section describes how a UI deployed as a part of Strimzi could be secured. [The following is based on the work done as a part of the security proposal, and how the UI would/could utilise the available security mechanisms.](https://github.com/strimzi/proposals/pull/13). The exact implementation, as well as any other required discussion around security I would suggest is had as a part of the UI's development/delivery to Strimzi.
+This section describes how a UI deployed as a part of Strimzi could be secured. [The following is based on the work done as a part of the security proposal, and how the UI would/could utilise the available security mechanisms.](./010-ui-and-admin-server-security.md). The exact implementation, as well as any other required discussion around security I would suggest is had as a part of the UI's development/delivery to Strimzi.
 
 ### Aim:
 
@@ -211,7 +211,7 @@ This session must be shared between HTTP and WebSocket traffic – as the UI wil
 
 ### Proposed architecture:
 
-![UI session component architecture](./images/009-session-architecture.png)
+![UI session component architecture](./images/011-session-architecture.png)
 
 - Admin – Graphql server, supporting HTTP and websocket connections [admin server proposal](https://github.com/strimzi/proposals/pull/9)
 - Express – UI server, handling sessions for the client
@@ -231,23 +231,23 @@ Note – the log in flow is assuming an oauth dance to retrieve a user token. It
 
 #### http flow with valid session
 
-![UI http flow with valid session](./images/009-http-valid-session.svg)
+![UI http flow with valid session](./images/011-http-valid-session.svg)
 
 #### http flow with session expiry
 
-![UI http flow with session expiry](./images/009-http-session-expiry.svg)
+![UI http flow with session expiry](./images/011-http-session-expiry.svg)
 
 #### websocket flow with valid session
 
-![UI websocket flow with valid session](./images/009-ws-valid-session.svg)
+![UI websocket flow with valid session](./images/011-ws-valid-session.svg)
 
 #### websocket handshake flow with session expiry
 
-![UI websocket handshake flow with session expiry](./images/009-ws-handshake-session-expiry.svg)
+![UI websocket handshake flow with session expiry](./images/011-ws-handshake-session-expiry.svg)
 
 #### websocket message flow with session expiry
 
-![UI websocket message flow with session expiry](./images/009-ws-message-session-expiry.svg)
+![UI websocket message flow with session expiry](./images/011-ws-message-session-expiry.svg)
 
 ## Affected projects
 
