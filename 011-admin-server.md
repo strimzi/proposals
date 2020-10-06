@@ -14,9 +14,11 @@ An API server will:
 ### The server
 The proposal is to make a modular server using the Vert.x-Web toolkit which has strong support for creating both REST and GraphQL interfaces.
 The server contains a single Vert.x verticle which listens for inbound traffic on 1 or more configurable ports.
-Allowing multiple configurable ports will allow the server to expose different functionality on each port, the simplest example of this being exposing an HTTP API on one port and a separate HTTPS API on a different port.
-The server module itself does not contain any API implementations but defines a service interface using the Java SPI and will load modules that implement that interface from the classpath.
-The implementation of the APIs that the server then exposes can be created independently and will be automatically included in the running server if they are available on the classpath when the server bootstraps.
+Allowing multiple configurable ports will allow the server to expose different functionality on each port.
+A common use will be to separate traffic using different authentication protocols so, one port can listen for SCRAM users, and a different port can be used for OAuth users on a single admin server.
+All the APIs that are supported on the server will then be available on both of the two ports. 
+The server module itself does not contain any API implementations but defines a service interface using the Java SPI and will load modules that implement that interface using the Java Service Loader.
+The implementation of the APIs that the server then exposes can be created independently and will be automatically included in the running server if they are available to the Service Loader.
 
 The reason for the modular approach is that it allows the strimzi project to create a base set of functionality that can easily be extended by a downstream project.
 Not only is it easy to extend the API but it can be done in isolation.
@@ -94,17 +96,36 @@ Vert.x networking is based on Netty and works in a very similar manner.
 When a request is received by the server, it is funneled through a pipe and that pipe has a number of interceptors or handlers that can inspect the contents at that point and ignore or modify it before allowing it to proceed through the pipe.
 Vert.x also creates a routing context that travels through the pipe with the request and is available for inspection and/or modification by all the handlers.
 A handler can decided whether the request should be passed on to the next downstream handler or the request is complete and the downstream handlers should be bypassed and they have access to the full request through the routing context.
-The handlers that are called for a particular request is defined by the Vert.x `Router` which maps patterns to particular handlers.
+The Vert.x `Router` which maps patterns to particular handlers defines the handlers that are called for a particular request.
 To implement a security handler we add a handler that matches all paths, i.e. the root path (`/`) and ensure that it appears in the router at the top of the list of patterns.
-When the handler is called, it creates a generic security context and attaches the security context to the routing context making it accessible to downstream handlers.   
+When the handler is called, it creates a generic security context and attaches the security context to the routing context making it accessible to downstream handlers.
+
+The server will support SCRAM-SHA-512 and OAuth2 as per the [security proposal](./010-ui-and-admin-server-security.md) and will be configured with 2 global security handlers corresponding to the 2 supported authentication mechanisms.
+Each handler will be capable of extracting credentials for the specific authentication type it is responsible for and placing the necessary information in the security context which itself is placed on the routing context.
+Security handlers will be loaded using the Java Service Provider Interface making it easy to add new security handlers to the server.
+
+When a backend service is called, for example the Kafka Admin Client, the information in the security context is used to set the properties for the client.
+A client service is used to create any clients that need to communicate with backend services.
+
 
 ### Client Service
-A similar model to the security handlers can be employed to create a client service.
+A similar model to the security handlers is employed to create a client service.
 Examples of client services are the Vert.x web-client for HTTP requests to backend services or the Vert.x Kafka Admin Client.
-The client service would be added to the routing context and a downstream handler could access the client service and use it to obtain a properly configured client.
+The client service is added to the routing context and a downstream handler will access the client service and use it to obtain a properly configured client.
+The client service understands how to configure the different clients based on the information contained in the security context.
 The advantages of this approach is that the combination of the security handlers and the client service hides a lot of complexity leaving the implementation of the endpoint handlers or the datafetchers to focus on the business logic.
 A second advantage is that the client service can manage the closing of clients when requests have completed.
+The client service will hold an LRU cache of clients which are keyed on information from the security context to reduce the overhead of instantiating clients on multiple requests from the same user. The cache will be a configurable maximum size and will close and discard the least recently used entry if all cache slots are in use when a new request enters the system. 
 
+### Business logic modules
+The business logic modules implement the REST and/or GraphQL api as handlers for the REST api and datafetchers for the GraphQL api.
+When a REST api handler is invoked, it is passed the `routingContext` which contain Vertx objects representing the request and the response.
+It also contains the security context and the client service in the `routingContext`.
+Any calls to backend clients should always use the client service to obtain a fully configured client.
+For GraphQL queries, the `routingContext` can be obtained from the GraphQL `DataFetchingEnvironment.getContext()` method which gives the Graphql datafetchers access to the security context and the client service.
+
+Configuration of the environment will use the Vert.x Config component to support configmaps, secrets, environment variables and system properties for all modules.
+ 
 ### Extending via a downstream project
 Using the infrastructure defined above, if a downstream project wishes to add a new feature to the API then it can proceed as follows.
 It creates a maven project that outputs a fat JAR.
@@ -114,3 +135,5 @@ They then implement the method in the REST service interface to return a fully c
 Similarly for the GraphQL, they define a GraphQL schema file which defines the api and a `RuntimeWiring` to link the schema nodes and properties to their implementing datafetchers.
 They then implement the method in the GraphQL service interface to return a fully configured `TypeDefinitionRegistry` containing the schema and the `RuntimeWiring` containing the implementation.
 The JAR file is then added to the classpath of the REST server and it will automatically load and expose the new API at startup time.
+NOTE: The extension mechanism described uses the pre-Java 9 service loader mechanism.
+This continues to be supported on Java 11+ environments but, if Vertx resolves any split package issues and fully supports Java modularity then the mechanism will use the Java Modularity service loader support.
