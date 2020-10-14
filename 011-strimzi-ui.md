@@ -14,18 +14,18 @@ This proposal will describe a Kafka administration UI capability. It will descri
 
 At a high level, I would propose a UI implemented as follows:
 
-- It would be a TypeScript based UI (using [Babel](https://babeljs.io/) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework
+- It would be a TypeScript based UI (using [Babel](https://babeljs.io/) (MIT license) to provide latest ECMAScript capabilities in a cross browser compatible manner), using the [React](https://reactjs.org/) framework (MIT license)
 - That the last 2 major versions of the following browsers are supported (via Babel transpiling/polyfilling):
   - Google Chrome
   - Microsoft Edge
   - Mozilla Firefox
   - Apple Safari
-- This UI is hosted and provided via an [Express](https://expressjs.com/) server
+- This UI is hosted and provided via an [Express](https://expressjs.com/) server (MIT license)
 - This UI is built in a modular/metadata driven manner - allowing for easy extensibility, modification, and dynamic behaviour at runtime
-- Uses a [GraphQL](https://graphql.org/) API
+- Uses a [GraphQL](https://graphql.org/) API (MIT license)
 - Should be fully translatable, and accessible (using a superset of [US Section 508](https://www.section508.gov/) and [WCAG 2.1](https://www.w3.org/WAI/standards-guidelines/wcag/glance/) rulesets).
 
-I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system, which would allow a user to view, create, edit and delete topics in a given cluster:
+I would suggest that the UI implementation to follow the [Model View Controller](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) (MVC) pattern, with clear separation between business logic, and the view logic that renders the state of the UI. This would enable/allow the view logic to be modified/swapped in/out as required, but keep the same business logic. I would suggest using the [Carbon](https://www.carbondesignsystem.com/) design system as the view layer for the contributed UI, given it is open source, is supported, and I can provide both the design and implementation using it. As an example, the following is a mock up of how a Topics page could look using the Carbon design system (Apache 2 license), which would allow a user to view, create, edit and delete topics in a given cluster:
 
 ![Topics mock up](./images/011-topicsdesign.png)
 
@@ -106,7 +106,7 @@ And I filter for topic 'SampleTopic'
 Then I am told topic 'SampleTopic' does not exist in the cluster
 ```
 
-#### Follow on capabilities
+#### Follow-on capabilities
 
 Additional Kafka capabilities which could be added later include (but would not be limited to):
 
@@ -187,8 +187,8 @@ I am suggesting this approach for the following reasons:
 This approach does have a few assumptions. These being:
 
 - A `strimzi-api` being deployed as a part of the Kafka cluster (ie one per namespace/cluster). This deployment is then referenced in the UI's CR (as above).
-- A handshake/metadata exchange will be required for the UI to discover and integrate with each backend. I expect this exchange to be the retrieval of a GraphQL schema, so they can be combined/unified by the UI server, as well as any other metadata appropriate to that backend (eg Kakfa version of the cluster a `strimzi-api` is configured to use).
-- The backend's registered with the UI will need to be version aware and backwards compatible - ie version 2 of an api also needs to support the version 1 api.
+- A handshake/metadata exchange will be required for the UI to discover and integrate with each backend. I expect this exchange to be the retrieval of a GraphQL schema, so they can be combined/unified by the UI server, as well as any other metadata appropriate to that backend (eg Kafka version of the cluster a `strimzi-api` is configured to use).
+- The backends registered with the UI will need to be version aware and backwards compatible - ie version 2 of an api also needs to support the version 1 api.
 - Both the UI, and any backend requiring authentication and authorization (eg `strimzi-api`) will need to align on how authentication and authorization will work. My suggestion would be to have a separation between resources (eg topics) and actions upon them, and the backing implementation which represent/persist them. As shown above, this could be provided via KafkaUsers, or other mechanisms, such as OAuth.
 
 I would also suggest a name from the CRD of `kafka-web-ui`.
@@ -223,7 +223,7 @@ This session must be shared between HTTP and WebSocket traffic – as the UI wil
 
 The UI is being hosted by an Express server. Express has session middleware - https://www.npmjs.com/package/express-session - that can create and persist server-side sessions, using a cookie as a key to hydrate a session into the incoming express request. Proposed session store is a `redis` container as it's a lightweight key/value (and the session will just be storing a token value).
 
-Authentication in node/Express can be achieved through by http://www.passportjs.org/ which provides a large collection of “strategies” for authenticating a user. For purposes of the proposal, the below diagrams show an oidc flows for a UI oauth dance, although other authentication mechanisms could be used.
+Authentication in node/Express can be achieved through by http://www.passportjs.org/ (MIT license) which provides a large collection of “strategies” for authenticating a user. For purposes of the proposal, the below diagrams show an oidc flows for a UI oauth dance, although other authentication mechanisms could be used.
 
 ### Sequence diagrams:
 
