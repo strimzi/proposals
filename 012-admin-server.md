@@ -23,10 +23,10 @@ The implementation of the APIs that the server then exposes can be created indep
 The reason for the modular approach is that it allows the strimzi project to create a base set of functionality that can easily be extended by a downstream project.
 Not only is it easy to extend the API but it can be done in isolation.
 This removes the requirement of the extensions needing to track the strimzi source repositories.
-For example, lets assume that strimzi only implements a Kafka administration API which provides a set of APIs based around the Kafka Admin Client.
+For example, let's assume that Strimzi only implements a Kafka administration API which provides a set of APIs based around the Kafka Admin Client.
 A downstream project then would like to add a Schema Registry to the cluster and needs to add an API in support of the new functionality.
-With the modular server, they can define the API and its implementation, bundle the new functionality into a JAR file and add the new JAR file to the classpath.
-A secondary benefit of a modular approach is that it allows the strimzi user to configure the server to only contain the functionality that they would like to use providing for a leaner server.
+With the modular server, they can define the API and its implementation, bundle the new functionality into a JAR file and add the new JAR file to the module path.
+A secondary benefit of a modular approach is that it allows the strimzi user to configure the server to only contain the functionality that they would like to use, providing for a leaner server.
 
 The classpath of the server can be configured at build time or run time.
 To configure at build time, the server and dependant modules can be bundled in a fat-JAR and obviously, at run time, the JVM can be configured in multiple ways to include JAR files on the classpath.
@@ -41,7 +41,7 @@ The Vert.x OpenAPI3 support will read an OpenAPI3 specification YAML file and al
 It creates a Vert.x Router which can be mounted on a Vert.x HTTP/S server.
 The module would implement the service interface defined by the server which will contain a method that the server can call to load the OpenAPI3 router and mount the router as a subrouter at a specified mount point to the root path.
 So, for example, if the OpenAPI3 spec defined endpoints `GET /topics` and `POST /topics` and these were mounted on the root path at the mount point `/admin` then the server would listen for incoming requests of `GET /admin/topics` and `POST /admin/topics` and route them to the handlers defined in the module.
-The mount points create a namespace so should not be empty and should be unique and the server should police that in order to prevent name clashes.  
+The mount point creates a namespace so should not be empty and should be unique, and the server will police that at startup in order to prevent name clashes.  
 
 ### GraphQL API Implementations
 GraphQL modules would use the Vert.x GraphQL Handler support.
@@ -118,8 +118,8 @@ A second advantage is that the client service can manage the closing of clients 
 The client service will hold an LRU cache of clients which are keyed on information from the security context to reduce the overhead of instantiating clients on multiple requests from the same user. The cache will be a configurable maximum size and will close and discard the least recently used entry if all cache slots are in use when a new request enters the system. 
 
 ### Business logic modules
-The business logic modules implement the REST and/or GraphQL api as handlers for the REST api and datafetchers for the GraphQL api.
-When a REST api handler is invoked, it is passed the `routingContext` which contain Vertx objects representing the request and the response.
+The business logic modules implement the REST and/or GraphQL API as handlers for the REST API and datafetchers for the GraphQL API.
+When a REST API handler is invoked, it is passed the `routingContext` which contain Vertx objects representing the request and the response.
 It also contains the security context and the client service in the `routingContext`.
 Any calls to backend clients should always use the client service to obtain a fully configured client.
 For GraphQL queries, the `routingContext` can be obtained from the GraphQL `DataFetchingEnvironment.getContext()` method which gives the Graphql datafetchers access to the security context and the client service.
@@ -130,9 +130,9 @@ Configuration of the environment will use the Vert.x Config component to support
 Using the infrastructure defined above, if a downstream project wishes to add a new feature to the API then it can proceed as follows.
 It creates a maven project that outputs a fat JAR.
 The entry point for the JAR implements the REST service interface and/or the GraphQL service interface.
-If the extension is adding a REST api, they then define an openapi yaml spec of the REST api and the implementations of the handlers for all the operations in the yaml spec.
+If the extension is adding a REST API, they then define an OpenAPI yaml spec of the REST API and the implementations of the handlers for all the operations in the yaml spec.
 They then implement the method in the REST service interface to return a fully configured `OpenAPI3RouterFactory`.
-Similarly for the GraphQL, they define a GraphQL schema file which defines the api and a `RuntimeWiring` to link the schema nodes and properties to their implementing datafetchers.
+Similarly for the GraphQL, they define a GraphQL schema file which defines the API and a `RuntimeWiring` to link the schema nodes and properties to their implementing datafetchers.
 They then implement the method in the GraphQL service interface to return a fully configured `TypeDefinitionRegistry` containing the schema and the `RuntimeWiring` containing the implementation.
 The JAR file is then added to the classpath of the REST server and it will automatically load and expose the new API at startup time.
 NOTE: The extension mechanism described uses the pre-Java 9 service loader mechanism.
