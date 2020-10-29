@@ -6,6 +6,7 @@ Free accounts will have following rate limits:
 * 200 pulls for authenticated users (on the free plan) per 6 hours
 
 In addition, images will be kept only for 6 months.
+For more details, see [Docker Hub Pricing & Subscriptions](https://www.docker.com/pricing).
 
 ## Motivation
 
@@ -36,4 +37,4 @@ The number of versions which will be backed up this way should be decided based 
 There are several available container repositories I'm aware of and which I considered:
 * Google Cloud and Amazon AWS registries are bound to an account and are not for free (AFAIK you pay for used storage and data transfers). So we would need to organize a shared Strimzi account and make sure the costs are covered.
 * GitHub container registry is currently available only as a beta. Any future pricing and availability is not clear.
-* Docker Hub offers a program for Open Source projects. But it is not even clear what does this program offer for accepted open source projects - it exists just as an application form. Sot this does not seem to be transparent.
+* Docker Hub offers a program for Open Source projects. But it is not even clear what does this program offer for accepted open source projects - it exists just as an application form. So this does not seem to be transparent.
