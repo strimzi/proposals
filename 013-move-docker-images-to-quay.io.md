@@ -19,15 +19,17 @@ The image expiration policy would also remove the images from our Docker Hub acc
 ## Proposal
 
 This proposal suggests to:
-* Start using Quay.io as our new container registry for all master builds (`:latest` images).
-* Start using Quay.io for releases starting with Strimzi Kafka Operators 0.21.0 and Strimzi Kafka Bridge 0.20.0 releases.
+* Start using [Quay.io](https://quay.io/) as our new container registry for all master builds (`:latest` images).
+* Start using [Quay.io](https://quay.io/) for releases starting with Strimzi Kafka Operators 0.21.0 and Strimzi Kafka Bridge 0.20.0 releases.
 * Move client-examples and any UI related images to as well.
 
-Additionally, we should make a copy of several latest releases to Quay.io as well in order to:
+Additionally, we should make a copy of several latest releases to [Quay.io](https://quay.io/) as well in order to:
 * Make sure the releases are not lost.
-* If needed, users can manually change their installation files for operator releases 0.20.0 and earlier and bridge releases 0.19.0 and earlier to use Quay.io as well.
+* If needed, users can manually change their installation files for operator releases 0.20.0 and earlier and bridge releases 0.19.0 and earlier to use [Quay.io](https://quay.io/) as well.
 
 The number of versions which will be backed up this way should be decided based on the required effort.
+
+[Quay.io](https://quay.io/) also offers some more advanced features such as robot (service) accounts for easier CI integration or security scanning.
 
 ## Rejected alternatives
 
