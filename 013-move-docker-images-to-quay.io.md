@@ -24,11 +24,14 @@ This proposal suggests to:
 * Start using [Quay.io](https://quay.io/) for releases starting with Strimzi Kafka Operators 0.21.0 and Strimzi Kafka Bridge 0.20.0 releases.
 * Move client-examples and any UI related images to as well.
 
-Additionally, we should make a copy of several latest releases to [Quay.io](https://quay.io/) as well in order to:
+Additionally, we should make a copy of previous releases to [Quay.io](https://quay.io/) as well in order to:
 * Make sure the releases are not lost.
 * If needed, users can manually change their installation files for operator releases 0.20.0 and earlier and bridge releases 0.19.0 and earlier to use [Quay.io](https://quay.io/) as well.
 
-The number of versions which will be backed up this way should be decided based on the required effort.
+Our container image structure (names, number of images etc.) changed significantly in Strimzi 0.12.0 release.
+So the copying to [Quay.io](https://quay.io/) should be done for all images for release 0.12.0 and later.
+This will also help to avoid confusion among users who find the old images not used anymore and believe that they are the latest versions.
+The copying should be done only for releases - release candidates or the `latest` images will not be copied (the `latest` images should be pushed from new builds instead).
 
 [Quay.io](https://quay.io/) also offers some more advanced features such as robot (service) accounts for easier CI integration or security scanning.
 
