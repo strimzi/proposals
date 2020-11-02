@@ -95,7 +95,7 @@ This would allow a module to easily create both a REST interface and a GraphQL i
 Vert.x networking is based on Netty and works in a very similar manner.
 When a request is received by the server, it is funneled through a pipe and that pipe has a number of interceptors or handlers that can inspect the contents at that point and ignore or modify it before allowing it to proceed through the pipe.
 Vert.x also creates a routing context that travels through the pipe with the request and is available for inspection and/or modification by all the handlers.
-A handler can decided whether the request should be passed on to the next downstream handler or the request is complete and the downstream handlers should be bypassed and they have access to the full request through the routing context.
+A handler can decide whether the request should be passed on to the next downstream handler or the request is complete and the downstream handlers should be bypassed and they have access to the full request through the routing context.
 The Vert.x `Router` which maps patterns to particular handlers defines the handlers that are called for a particular request.
 To implement a security handler we add a handler that matches all paths, i.e. the root path (`/`) and ensure that it appears in the router at the top of the list of patterns.
 When the handler is called, it creates a generic security context and attaches the security context to the routing context making it accessible to downstream handlers.
