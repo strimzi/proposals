@@ -5,7 +5,7 @@ Free accounts will have following rate limits:
 * 100 pulls for anonymous users per 6 hours
 * 200 pulls for authenticated users (on the free plan) per 6 hours
 
-In addition, images will be kept only for 6 months.
+In addition, it is also planned that images without any activity (image push or pull) will be kept only for 6 months (this might not start to apply already from November but only later).
 For more details, see [Docker Hub Pricing & Subscriptions](https://www.docker.com/pricing).
 
 ## Motivation
