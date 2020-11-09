@@ -16,20 +16,22 @@ The canary would provide the following in indication that the Kafka cluster is o
   * latency
 
 In future the canary can be used by the Kafka Roller to improve health checks. However this is beyond the scope of the current proposed work.
-Proposal
+
+## Proposal
+
 The canary would be run as a separate pod alongside Strimzi operator. Once the canary topic is created messages will be produced and consumed from it. Messages would be consumed at a rate not faster than 1 per second and possibly as slow as 10 per second. This rate may be configurable. 
 
 The canary will be built using Golang and metrics will be exposed in Prometheus format though a REST API. Currently Sarama is being considered as the client library.
 
-The current plan is to deploy the canary independently  alongside the Strimzi operator. However, in future, consideration should be given to integrating the canary with Strimzi in a manner similar to the Kafka Bridge. I.e. the canary would be specified (optionally) in the Kafka custom resource and then deployed by the Strimzi operator.
+The current plan is to deploy the canary independently  alongside the Strimzi operator. However, in future, consideration should be given to integrating the canary with Strimzi in a manner similar to the Kafka Exporter or Cruise Cotnrol. I.e. the canary would be specified (optionally) in the Kafka custom resource and then deployed by the Strimzi operator.
 
 ### Topic Configuration
-The topic will be configured to have a partition on each broker node and a  well defined replication factor of 3 (which is the most commonly used value).The minimum in-sync replicas should be one less than the number of replicas.
+The topic will be configured to have a partition on each broker node and a  well defined replication factor of 3 (which is the most commonly used value).The minimum in-sync The topic will be configured to have a partition on each broker node and a replication factor which will be the minimum of _number of Kafka broker nodes_ and _3 (which is the most commonly used value)_. The minimum in-sync replicas will be either 1 in case replication factor is 1 (there is only one broker in the cluster) or one less than the number of replicas.
 The configuration should be something like the following:
 
 * Partitions = N (where N is the number of brokers)
-* Replication Factor = 3
-* Min ISR = Replication Factor - 1 = 2
+* Replication Factor = Min(number-of-brokers, 3)
+* Min ISR = Max(1, Replication Factor - 1)
 
 #### Pros
 * Allows for a broker to be down, therefore accommodating rolling updates.
