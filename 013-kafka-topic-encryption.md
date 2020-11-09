@@ -1,8 +1,20 @@
 <!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
 
-# <Title>
+# Proxy Based Kafka Per-Topic Encryption
 
-Provide a brief summary of the feature you are proposing to add to Strimzi.
+There are very  stringent requirements in regard to who  is allowed to
+view certain types of enterprise data. For example, financial data may
+only be viewed by  certain mandated financial officers.  Consequently,
+relational databases  support _database level_  encryption.
+This avoid the problem whereby third parties, such as system admins due
+to their elevated privileges to the system on which the applications
+run, have direct access to the data.
+
+Typically Apache Kafka Systems use disk or file system encryption when
+encryption at rest is required. This is *NOT* sufficient for example
+to meet many enterprise's compliance standards for sensitive personal information data.
+
+The Problem then can be described are follows: *to allow Apache Kafka to support security best practices and compliance standards with broker based topic encryption*.
 
 ## Current situation
 
