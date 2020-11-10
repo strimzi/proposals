@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 14  | [Move Container Images to Quay.io](./014-move-docker-images-to-quay.io.md) |
 | 13  | [Strimzi canary](./013-kafka-canary.md) |
 | 12  | [Create an Admin Server](./012-admin-server.md) |
 | 11  | [Strimzi UI](./011-strimzi-ui.md) |
