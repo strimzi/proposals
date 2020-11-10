@@ -23,14 +23,14 @@ However this is beyond the scope of the current proposed work.
 
 ## Proposal
 
-The canary would be run as a separate pod alongside Strimzi operator. 
+The canary would be run as a separate pod alongside the Kafka cluster. 
 Once the canary topic is created messages will be produced and consumed from it. 
 Messages would be consumed at a rate not faster than 1 per second and possibly as slow as 10 per second. This rate may be configurable. 
 
 The canary will be built using Golang and metrics will be exposed in Prometheus format though a REST API. 
 Currently Sarama is being considered as the client library.
 
-The current plan is to deploy the canary independently  alongside the Strimzi operator. 
+The current plan is to deploy the canary independently  alongside the Kafka cluster. 
 However, in future, consideration should be given to integrating the canary with Strimzi in a manner similar to the Kafka Exporter or Cruise Cotnrol. I.e. the canary would be specified (optionally) in the Kafka custom resource and then deployed by the Strimzi operator.
 
 ### Topic Configuration
@@ -42,6 +42,8 @@ The configuration should be something like the following:
 * Partitions = N (where N is the number of brokers)
 * Replication Factor = Min(number-of-brokers, 3)
 * Min ISR = Max(1, Replication Factor - 1)
+
+About the storage sizing, the topic should use a smaller segment size and retention (in bytes) in order to avoid to fill the disk space.
 
 #### Pros
 
