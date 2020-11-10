@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 13  | [Strimzi canary](./013-kafka-canary.md) |
 | 12  | [Create an Admin Server](./012-admin-server.md) |
 | 11  | [Strimzi UI](./011-strimzi-ui.md) |
 | 10  | [Auth additions for UI and Admin Server](./010-ui-and-admin-server-security.md)  |
