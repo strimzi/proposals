@@ -35,6 +35,7 @@ Provide an introduction to the proposal. Use sub sections to call out considerat
 ## Affected/not affected projects
 
 Call out the projects in the Strimzi organisation that are/are not affected by this proposal. 
+here comes text
 
 ## Compatibility
 
