@@ -8,7 +8,6 @@ paying any performance penalty.
 
 This proposal is based on a complete, working implementation.
 
-
 ## Current situation
 
 Strimzi does not have a current capability in this area. 
@@ -21,16 +20,15 @@ means of transferring it from one location to another. In an
 enterprise, this means that Kafka must conform to the same security and
 compliance requirements as conventional data storage systems such as relational databases. 
 To compensate, Kafka service providers typically use disk or file system encryption. 
-This approach has well-known shortcomings, most notably the ability of anyone with appropriate file system permissions, such as system administrators, to read data.  Security best practices and compliance standards
+This approach has well-known shortcomings, most notably the ability of anyone with appropriate file system permissions, such as system administrators, to read data. Security best practices and compliance standards
 explicitly call for application- or database-level encryption to protect sensitive information against such exposures.
 This document proposes a technical solution for providing upper-layer encryption-at-rest for Kafka systems.
 
-
 ## Proposal
 
-An implementation of topic encryption is proposed whereby the message stream between client and broker is
-intercepted. Incoming data messages (Produce requests) are inspected to determine whether their payload
-should be encrypted according to a policy.  If so, the data portions are encrypted and the modified
+### Overview
+An implementation of topic encryption is proposed whereby the message stream between client and broker is intercepted. Incoming data messages (Produce requests) are inspected to determine whether their payload
+should be encrypted according to a policy. If so, the data portions are encrypted and the modified
 message is forwarded to the broker. As a result, the topic data is stored by the broker in encrypted form.
 On the reverse direction, encrypted responses (responses to Fetch requests) are decrypted prior to being sent to clients.
 
@@ -45,7 +43,8 @@ The diagram below depicts the main components of the proposal, illustrating clie
 
 ![overview](images/015-kafkaenc-overview.png)
 
-### Encryption Module
+### Components
+#### Encryption Module
 The Encryption Module is the top-level component which encapsulates encryption functionality and is embedded in a proxy.
 A central design goal is adaptability through modularity. Encrypter/decrypter(s), the policy metadata service and the key management service (KMS) are expressed as interfaces and pluggable. The Encryption Module instantiates these components during initialization, allowing a configurable combination of KMS, metadata and encryption implementations.
 
@@ -61,17 +60,56 @@ Encrypter-decrypters require a means to lookup encryption requirements and param
 For each topic to be encrypted, a policy exists detailing:
 
 - topic name
-- encryption algorithm(s), cipher suite,  and encryption/decryption steps
+- encryption algorithm(s), cipher suite, and encryption/decryption steps
 - key management server address
 - key identifier
 - optional initialization information
 
+In our reference implementation, policies are encoded in JSON. An example topic encryption policy,
+used in testing, is shown below:
 
-### Message Interception
-Message interception is concerned with facilities for inspecting messages, consulting a policy, and accordingly applying encryption so that messages are passed to the broker in encrypted form and returned to Kafka clients as decrypted plaintext. Specifically, Kafka *Produce requests* and *Fetch responses* are examined and potentially modified to respectively encrypt and decrypt messages. High quality open source libraries exist already for implementing the intercept function e.g.
+```
+[
+{
+"topic" : "juicy-topic",
+"kms_url" : "https://abc.kms.cloud.ibm.com",
+"kms_instance": "11111111-2222-3333-4444-55555555555",
+"key_ref" : "e2a73a6c4bf9",
+"credential" : "dkT4WSCnrlNE7"
+},
+{
+"topic" : "creditcard-data",
+"kms_url" : "https://abc.kms.cloud.ibm.com",
+"kms_instance": "11111111-2222-3333-4444-55555555555",
+"key_ref" : "9957cdf5f32a",
+"credential" : "dkT4WSCnrlNE7"
+}
+]
+```
+
+In this example, two topics will be encrypted with two different keys residing in the same KMS.
+
+### Message Handling
+Message handling is concerned with facilities for intercepting messages, deserializing and inspecting them, invoking encryption as accorded by policy, modifying messages, and finally serializing and forwarding messages onward to Kafka brokers and clients. To accomplish encryption and decryption of data payloads, only Kafka *Produce requests* and *Fetch responses* need to be examined and potentially modified. High quality open source libraries exist already for implementing message introspection and serialization/deseriaization, e.g.,
 https://github.com/Shopify/sarama.
 
-### Proxy
+### Message Encryption
+As described in [Kafka message format documentation](https://kafka.apache.org/documentation/#messageformat), data is transmitted as [record batches](https://kafka.apache.org/documentation/#recordbatch) within a message. Within a batch, each [record](https://kafka.apache.org/documentation/#record) is comprised of several fields of which two may contain data and therefore are of direct relevance for topic encryption: the _value_ field and the _headers_ field, an array of optional [record header structures](https://kafka.apache.org/documentation/#recordheader). _Key_ fields are never encrypted in this proposal. Therefore any functionality relying on keys such as Fetch requests, partitioning and compaction are unaffected and thus preserved by topic encryption.
+
+To illuminate the essential details of message encryption, an example is stepped through.
+The encryption module is embedded in a proxy and the proxy, as an intermediary, terminates all connections to and from the broker, placing it in the position of intercepting all Kafka traffic. The message handling component examines all messages to identify the apikey (i.e., the Kafka message type). All message types besides Produce and Fetch are passed immediately onto the broker without any processing. Produce requests are deserialized and, using the message handling component, further inspected to identify the topic for which records are destined.
+If the topic matches a topic in the encryption policy, the contents of the _value_ field of each record is encrypted and replaced with the corresponding ciphertext. Metadata about the encryption (e.g., key, nonce) is added to the record's headers in order that information necessary for later decrypting the message (also referred to as encryption metadata) is available.
+
+As mentioned, encryption metadata is currently stored in record headers. Kafka record headers are optional name value/pairs stored in an array associated with the record. Record header names are not required to be unique, thus name "collisions" are possible. Ordering and versioning are used to avoid problems arising from using header names which coincidentally equal names chosen by a Kafka client. Ordering means that the record header is rewritten such that the encryption-related headers
+occur first in the array. The first header always contains a version from which the exact
+metadata field names can be derived. The decryption algorithm therefore can discern between
+those headers of the encryption module and those of the client. Further, the version field
+is designed to handle future migration and backwards compatibility should changes, such as format or encryption options, in the semantics occur.
+
+Although not part of our reference implementation, the encryption of header values is a conceivable extension. In this case, policy would be extended to indicate that specific or all client header
+values be encrypted. Since record headers are already processed during encryption, and the algorithm can discriminate between encryption and client headers, it should be just an incremental change to logic to support encryption of header data as well. The same applies to the encryption of record header names although we recommend further investigating the implications of encrypting header names.
+
+### Embedding Topic Encryption in a Proxy
 A proxy can be deployed as a free-standing process or as a sidecar in a Kubernetes pod. 
 In both cases, the proxy needs to intercept and de-serialize Kafka messages, encrypt/decrypt the relevant records, 
 and reserialize them into a new message. The overhead of a proxy potentially has an effect on performance.
@@ -86,12 +124,11 @@ with the same configuration.
 
 Envoy is one possible framework for creating proxies. Envoy’s connection 
 pipeline is based on network filters which are linked into filter chains, enabling rich capabilities. 
-Recent support of WebAssembly (WASM) provides  more flexible and dynamic way
+Recent support of WebAssembly (WASM) provides more flexible and dynamic way
 to extend Envoy and embed Kafka topic encryption.
 
 Envoy is but one viable approach, certainly not the only means, to embed topic encryption
 in a proxy. 
-
 
 ## Affected/not affected projects
 
