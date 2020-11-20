@@ -72,14 +72,14 @@ used in testing, is shown below:
 [
 {
 "topic" : "juicy-topic",
-"kms_url" : "https://abc.kms.cloud.ibm.com",
+"kms_url" : "https://kms.abc.com",
 "kms_instance": "11111111-2222-3333-4444-55555555555",
 "key_ref" : "e2a73a6c4bf9",
 "credential" : "dkT4WSCnrlNE7"
 },
 {
 "topic" : "creditcard-data",
-"kms_url" : "https://abc.kms.cloud.ibm.com",
+"kms_url" : "https://kms.abc.com",
 "kms_instance": "11111111-2222-3333-4444-55555555555",
 "key_ref" : "9957cdf5f32a",
 "credential" : "dkT4WSCnrlNE7"
@@ -94,17 +94,17 @@ Message handling is concerned with facilities for intercepting messages, deseria
 https://github.com/Shopify/sarama.
 
 ### Message Encryption
-As described in [Kafka message format documentation](https://kafka.apache.org/documentation/#messageformat), data is transmitted as [record batches](https://kafka.apache.org/documentation/#recordbatch) within a message. Within a batch, each [record](https://kafka.apache.org/documentation/#record) is comprised of several fields of which two may contain data and therefore are of direct relevance for topic encryption: the _value_ field and the _headers_ field, an array of optional [record header structures](https://kafka.apache.org/documentation/#recordheader). _Key_ fields are never encrypted in this proposal. Therefore any functionality relying on keys such as Fetch requests, partitioning and compaction are unaffected and thus preserved by topic encryption.
+As described in [Kafka message format documentation](https://kafka.apache.org/documentation/#messageformat), data is transmitted in [record batches](https://kafka.apache.org/documentation/#recordbatch). Within a batch, each [record](https://kafka.apache.org/documentation/#record) is comprised of several fields of which two may contain data and therefore are of direct relevance for topic encryption: the _value_ field and the _headers_ field, an array of optional [record header structures](https://kafka.apache.org/documentation/#recordheader). _Key_ fields are never encrypted in this proposal. Therefore any functionality relying on keys such as partitioning and compaction are unaffected and thus preserved by topic encryption.
 
-To illuminate the essential details of message encryption, an example is stepped through.
-The encryption module is embedded in a proxy and the proxy, as an intermediary, terminates all connections to and from the broker, placing it in the position of intercepting all Kafka traffic. The message handling component examines all messages to identify the apikey (i.e., the Kafka message type). All message types besides Produce and Fetch are passed immediately onto the broker without any processing. Produce requests are deserialized and, using the message handling component, further inspected to identify the topic for which records are destined.
-If the topic matches a topic in the encryption policy, the contents of the _value_ field of each record is encrypted and replaced with the corresponding ciphertext. Metadata about the encryption (e.g., key, nonce) is added to the record's headers in order that information necessary for later decrypting the message (also referred to as encryption metadata) is available.
+An example is described to illuminate the essential details of message encryption.
+The encryption module is embedded in a proxy and the proxy, as an intermediary, terminates  connections between clients and the broker, placing the proxy in the position of intercepting all Kafka traffic. The message handling component examines all messages to identify the apikey (i.e., the Kafka message type). All message types besides Produce and Fetch are  immediately forwarded without any processing. With the help of the message handling library, Produce requests are deserialized and inspected more deeply to identify the topic for which records are destined.
+If a topic matches a topic in the encryption policy, the contents of the _value_ field of each record is encrypted and replaced with the corresponding ciphertext. Metadata about the encryption (e.g., key, nonce) is added to the record's headers in order that this information is available later for decryption.
 
 As mentioned, encryption metadata is currently stored in record headers. Kafka record headers are optional name value/pairs stored in an array associated with the record. Record header names are not required to be unique, thus name "collisions" are possible. Ordering and versioning are used to avoid problems arising from using header names which coincidentally equal names chosen by a Kafka client. Ordering means that the record header is rewritten such that the encryption-related headers
 occur first in the array. The first header always contains a version from which the exact
 metadata field names can be derived. The decryption algorithm therefore can discern between
-those headers of the encryption module and those of the client. Further, the version field
-is designed to handle future migration and backwards compatibility should changes, such as format or encryption options, in the semantics occur.
+those headers of the encryption module and those of the client. The version field
+is also intended to enable future migration and backwards compatibility should changes in semantics occur such as modified message formats or encryption options.
 
 Although not part of our reference implementation, the encryption of header values is a conceivable extension. In this case, policy would be extended to indicate that specific or all client header
 values be encrypted. Since record headers are already processed during encryption, and the algorithm can discriminate between encryption and client headers, it should be just an incremental change to logic to support encryption of header data as well. The same applies to the encryption of record header names although we recommend further investigating the implications of encrypting header names.
@@ -119,8 +119,7 @@ of the proxy and do not require any modification or configuration to support enc
 
 Whether the proxy runs under the control of the client or the broker is considered a configuration
 issue, i.e. exactly the same proxy would be used in both cases, but when under the control of the
-client it would be their responsibility to ensure that producers/consumers are passing through a proxy
-with the same configuration.
+client it would be their responsibility to ensure that producers/consumers are passing through a proxy with the same configuration.
 
 Envoy is one possible framework for creating proxies. Envoy’s connection 
 pipeline is based on network filters which are linked into filter chains, enabling rich capabilities. 
