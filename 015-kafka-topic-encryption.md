@@ -70,20 +70,20 @@ used in testing, is shown below:
 
 ```
 [
-{
-"topic" : "juicy-topic",
-"kms_url" : "https://kms.abc.com",
-"kms_instance": "11111111-2222-3333-4444-55555555555",
-"key_ref" : "e2a73a6c4bf9",
-"credential" : "dkT4WSCnrlNE7"
-},
-{
-"topic" : "creditcard-data",
-"kms_url" : "https://kms.abc.com",
-"kms_instance": "11111111-2222-3333-4444-55555555555",
-"key_ref" : "9957cdf5f32a",
-"credential" : "dkT4WSCnrlNE7"
-}
+ {
+   "topic" : "juicy-topic",
+   "kms_url" : "https://kms.abc.com",
+   "kms_instance": "11111111-2222-3333-4444-55555555555",
+   "key_ref" : "e2a73a6c4bf9",
+   "credential" : "dkT4WSCnrlNE7"
+ },
+ {
+   "topic" : "creditcard-data",
+   "kms_url" : "https://kms.abc.com",
+   "kms_instance": "11111111-2222-3333-4444-55555555555",
+   "key_ref" : "9957cdf5f32a",
+   "credential" : "dkT4WSCnrlNE7"
+ }
 ]
 ```
 
