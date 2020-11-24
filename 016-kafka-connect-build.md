@@ -6,7 +6,7 @@ This proposal improves our Kafka Connect deployment with support for _build_ for
 
 Currently, Strimzi has two Kafka Connect deployments: `KafkaConnect` and `KafkaConnectS2I`. 
 
-`KafkaConnect` currently requires the the user to manually prepare their own container image with any additional connector plugins they want to use.
+`KafkaConnect` currently requires that the user to manually prepare their own container image with any additional connector plugins they want to use.
 They have to write their own `Dockerfile` which uses the Strimzi image as a base image and adds the additional connectors.
 Then they have to build it and push into some container registry and configure the Kafka Connect deployment to use it.
 
