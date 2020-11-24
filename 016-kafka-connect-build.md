@@ -39,9 +39,12 @@ The connector plugins section will be a list where one or more connectors can be
 Each connector consists of a name and list of artifacts which should be downloaded.
 The artifacts can be of different types.
 For example:
-* `jar` for a directly download of Java JARs
-* `tgz` or `zip` to _download and unpack_ the artifacts
-* `maven` to download JARs from Maven based on Maven coordinates
+* `jar` for a directly download of Java JARs. 
+* `tgz` or `zip` to _download and unpack_ the artifacts. 
+The archives will be just unpacked without any additional filtering for specific file types.
+* `maven` to download JARs from Maven based on Maven coordinates. 
+User will provide `groupId`, `artifactId` and `version` and we will try to download the JAR as well as all its runtime dependencies.
+This might be also enhanced to support different Maven repositories etc.
 * and possibly others if required
 
 The second part - `output` - will configure how the newly built image will be handled.
@@ -102,6 +105,10 @@ The build will use two different technologies:
 * OpenShift Builds will be used on OKD / OpenShift 
 
 Kaniko is a daemon-less container builder which does not require any special privileges and runs in user-space.
+Kaniko is just a container to which we pass the generated `Dockerfile` and let it build the container and push it to the registry.
+It does not require any special installation - neither from the user nor from Strimzi it self. 
+We just use the container.
+
 OpenShift Builds are part of the OKD / OpenShift Kubernetes platform and also do not require any special privileges.
 So it should work for most users across wide variate of environments.
 
@@ -125,3 +132,6 @@ They will be also still able to use the old manually built container images with
 There are several ways how to build container images.
 In addition to Kaniko and OpenShift Builds, I also looked at Buildah.
 But Kaniko and OpenShift Builds worked better (read as: _I didn't got Buildah to work_).
+
+The current interface between Strimzi and the builder is based on a `Dockerfile`.
+If needed, any other alternative technology which supports building containers from `Dockerfile` should be relatively easy to plugin as a replacement for the current ones.
