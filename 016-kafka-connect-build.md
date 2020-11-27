@@ -26,7 +26,7 @@ A big part of that is being able to configure things in a declarative way.
 That is currently missing for adding connector plugins to the Connect deployments.
 
 Being able to configure the connector plugins in the `KafkaConnect` CR will make it easier to use for our users since they will not need to build the container images manually.
-It will also make it easier to to have connector catalog on the website since we will be able to just share the KafkaConnect CR including the build section to add the connector.
+It will also make it easier to have a connector catalog on the website since we will be able to just share the KafkaConnect CR including the build section to add the connector.
 
 ## Proposal
 
@@ -110,7 +110,7 @@ It does not require any special installation - neither from the user nor from St
 We just use the container.
 
 OpenShift Builds are part of the OKD / OpenShift Kubernetes platform and also do not require any special privileges.
-So it should work for most users across wide variate of environments.
+So it should work for most users across wide variety of environments.
 
 ## Affected/not affected projects
 
