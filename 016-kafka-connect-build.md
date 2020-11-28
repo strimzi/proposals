@@ -41,7 +41,7 @@ The artifacts can be of different types.
 For example:
 * `jar` for a directly download of Java JARs. 
 * `tgz` or `zip` to _download and unpack_ the artifacts. 
-The archives will be just unpacked without any additional filtering for specific file types.
+The archives will be unpacked and checked for any possibly malicious content (e.g. symlinks).
 * `maven` to download JARs from Maven based on Maven coordinates. 
 User will provide `groupId`, `artifactId` and `version` and we will try to download the JAR as well as all its runtime dependencies.
 This might be also enhanced to support different Maven repositories etc.
@@ -114,8 +114,9 @@ So it should work for most users across wide variety of environments.
 
 ## Affected/not affected projects
 
-The existing `KafkaConnectS2I` resource is not affected by it.
-But it should be deprecated and later removed.
+The existing `KafkaConnectS2I` resource is not directly affected by this improvement and remains unchanged.
+However, the declarative approach is superior.
+So after it is implemented, the `KafkaConnectS2I` will be deprecated and removed.
 
 `KafkaMirrorMaker2` is also based on Kafka Connect.
 But the build will not be available for `KafkaMirrorMaker2`.
