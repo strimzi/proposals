@@ -53,10 +53,10 @@ It will support two types:
 * `imagestream` to push the image to OpenShift ImageStream (supported only on OpenShift)
 
 Strimzi will not run its own container repository.
-So users of the `docker` type build will need to provide credentials to their own Docker compatible container registry.
+So users of the `docker` type build will need to provide Kubernetes secret with credentials to their own Docker compatible container registry.
 This does not have to run within the same Kubernetes cluster - it can be also SaaS registry such as Docker Hub or Quay.io.
 
-Following is an example of the Kafka Connect CR:
+Following is an example of the KafkaConnect CR:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta1
@@ -74,6 +74,10 @@ spec:
       type: docker
       image: docker.io/user/image:tag
       pushSecret: dockerhub-credentaials
+    # ImageStream output example
+    # output:
+    #   type: imagestream
+    #   imageStream: image-stream-name
     plugins:
       - name: my-connector
         artifacts:
