@@ -3,8 +3,7 @@
 # Proxy-Based Kafka Per-Topic Encryption
 
 The goal of this proposal is to provide topic-level encryption-at-rest for Kafka such that distinct encryption keys can be used for different topics. 
-A core library is proposed which is deployed into a proxy. Proxies can flexibly be deployed in a variety of topologies and require no changes to Kafka clients and brokers. All encryption/decryption takes place at the proxy. An unencrypted topic's messages pass through the proxy without being changed and without
-paying any performance penalty.
+A core library is proposed which is deployed into a proxy. Proxies can flexibly be deployed in a variety of topologies and require no changes to Kafka clients and brokers. All encryption/decryption takes place at the proxy. An unencrypted topic's messages pass through the proxy with only the minimal overhead associated with proxying and message inspection.
 
 This proposal is based on a complete, working implementation.
 
@@ -96,30 +95,56 @@ https://github.com/Shopify/sarama.
 ### Message Encryption
 As described in [Kafka message format documentation](https://kafka.apache.org/documentation/#messageformat), data is transmitted in [record batches](https://kafka.apache.org/documentation/#recordbatch). Within a batch, each [record](https://kafka.apache.org/documentation/#record) is comprised of several fields of which two may contain data and therefore are of direct relevance for topic encryption: the _value_ field and the _headers_ field, an array of optional [record header structures](https://kafka.apache.org/documentation/#recordheader). _Key_ fields are never encrypted in this proposal. Any functionality relying on keys such as partitioning and compaction are unaffected and thus preserved by topic encryption.
 
+As high volumes of data will be encrypted, symmetric key encryption is the natural choice for efficiently ensuring the _confidentiality_ of stored topic messages.
+The Advanced Encryption Standard (AES) is an efficient symmetric encryption algorithm. AES instructions are supported by many modern processors (e.g., Intel AES-NI) providing fast, constant time encryption and resilience to certain side-channel attacks. Galois/Counter Mode (GCM) is an authenticated encryption mode for block ciphers pro- viding _integrity_. AES-GCM lends itself to parallelization and is widely used for its combination of high-throughput, integrity and authentication properties. AES-GCM has been used in the reference implementation and is the recommended algorithm in this proposal. As encryption is modularized, the design can be extended to support other encryption schemes in the future.
+
 An example is now described to illuminate the essential details of the message encryption process.
 The encryption module is embedded in a proxy and the proxy, as an intermediary, terminates  connections between clients and the broker, placing the proxy in the position of intercepting all Kafka traffic. The message handling component examines all messages to identify the apikey (i.e., the Kafka message type). All message types besides Produce and Fetch are  immediately forwarded without any processing. With the help of the message handling library, Produce requests are deserialized and inspected more deeply to identify the topic for which records are destined.
 If a topic matches a topic in the encryption policy, the contents of the _value_ field of each record is encrypted and replaced with the corresponding ciphertext. Metadata about the encryption (e.g., encrypted key or key reference, nonce) is added to the record's headers in order that this information is available later for decryption.
 
 The encryption metadata is currently stored in Kafka record headers. Record headers are optional name value/pairs stored in an array associated with the record. Record header names are not required to be unique, thus name "collisions" are possible. Ordering and versioning are used to avoid problems arising from names used for metadata which coincidentally equal names chosen by a Kafka client. Ordering means that the record header is rewritten such that the encryption-related headers
 occur first in the array. The first header always contains a version from which the exact
-metadata field names can be derived. The decryption algorithm therefore can discern between
-headers added by the encryption module and those added by the client. The version field
-is enables future migration and backwards compatibility should changes in semantics occur such as modified message formats or encryption options.
+metadata field names can be derived. The decryption algorithm therefore can discern between headers added by the encryption module and those added by the client. During decryption, the headers previously added to hold encryption metadata are removed before forwarding the decrypted response to the client. The version field enables future migration and backwards compatibility should changes in semantics occur such as modified message formats or encryption options.
 
-Although not part of our reference implementation, the encryption of header values is potentially an additional requirement to consider. In this case, policy would be extended to indicate that specific or all client header values be encrypted. Since record headers are already processed during encryption, and since the algorithm can discriminate between encryption and client headers, it should be just an incremental extension encrypt header data as well. Encrypting header values will not impinge on storing encryption metadata in headers as only client headers will be encrypted. 
-Encrypting header names as well would likewise be a relatively simple extension however we recommend further investigating the full implications of encrypting header names.
+Although not part of our reference implementation, the encryption of header values is potentially an additional requirement to consider. In this case, policy would be extended to indicate that specific or all client header values be encrypted. Since record headers are already processed during encryption, and since the algorithm can discriminate between encryption and client headers, it should be an incremental extension to encrypt header data as well. Encrypting header values will not impinge on storing encryption metadata in headers as only client headers will be encrypted. 
+Encrypting header names as well would likewise be a relatively simple extension however we recommend further investigation of the full implications of encrypting header names.
 
-### Embedding Topic Encryption in a Proxy
+### Key Rotation
+Periodic rotation of symmetric encryption keys is a security best practice and compliance requirement.
+As Kafka data is immutable, there are no update semantics for replacing data stored at the broker with a new version encrypted with a new key. 
+
+A simple, "brute force" approach to topic re-encryption is to copy the existing topic to a new topic associated with the new key. This would take place ideally as a maintenance action, conceivably with broker downtime for the duration of  copying. Thereafter clients must configure the new topic name.
+
+Alternatives or enhancements to this base approach include modifications to the broker, optimized rewriting of
+topic segment files, or the use of envelope encyption.  Such enhanced methods are certainly related and highly relevant but viewed as outside the scope of this core encryption proposal.  
+
+
+### Integrating Topic Encryption in a Proxy
 A proxy can be deployed as a free-standing process or as a sidecar in a Kubernetes pod. 
-In both cases, the proxy needs to intercept and de-serialize Kafka messages, encrypt/decrypt the relevant records, 
-and reserialize them into a new message. The overhead of a proxy potentially has an effect on performance.
+In both cases, the proxy intercepts and de-serializes Kafka messages, encrypts/decrypts  relevant records, 
+and reserializes new messages. The overhead of a proxy potentially has an effect on performance.
 It also means that the proxy version must always be in phase with that of the broker.
 A proxy-based solution however has the advantage that both Kafka client and broker are unaware
-of the proxy and do not require any modification or configuration to support encryption at rest.
+of the proxy and do not require modification to support encryption at rest.
 
-Whether the proxy runs under the control of the client or the broker is considered a configuration
-issue, i.e. exactly the same proxy would be used in both cases, but when under the control of the
-client it would be their responsibility to ensure that producers/consumers are passing through a proxy with the same configuration.
+Whether the proxy runs under the control of the client or the broker is, in many ways, considered a configuration issue, however there are important differences, most notably regarding the relationship between broker and proxy. Broker-side proxies typically will be deployed together with brokers, assuring same Kafka protocol version support by proxy and broker. Additionally, configuration settings harmonizing proxy and broker are more easily made when both are deployed in close proximity. Client-side proxies, deployed independently of brokers, will need to
+to have dynamic protocol version awareness of its own and the broker's version. In both deployment models,
+the proxy will use [`ApiVersionsRequest`](https://kafka.apache.org/protocol#api_versions) to ascertain the
+broker version in order to  handle potential version discrepancies.
+
+Broker-side proxies must appear to Kafka clients as brokers. This requires that proxy addresses and ports appear both in Kafka client configurations and in Zookeeper responses. 
+This can be achieved with the broker 
+[`advertised.listeners`](https://kafka.apache.org/documentation/#advertised.listeners) property which allows hostnames and ports other than the brokers', namely those of the proxies, to be communicated to
+clients through Zookeeper. Thus with configuration of the broker and knowledge of proxy hostnames and ports,
+clients will communicate strictly with the proxies, not circumvent them.
+This model poses no complications relating to the use of TLS. The proxy will possess
+ certificates to serve incoming client connections as well as to connect to backend brokers, for example over mTLS.
+
+SASL support is another area touched by the deployment of proxies.  In our reference work thus far, SASL was used to integrate with a native authentication environment. Further analysis is required to address the full
+range of SASL options supported by Kafka and their respective implications for a proxy.
+
+Client-side proxies presumably are deployed more numerously and configured somewhat differently than broker-side proxies.  Using the broker's advertised list, as described above, to route client requests to a list
+of known proxies will not be practical on a client where only one proxy is viable, namely the local proxy.  In this case, the advertiser list may be configured diffently, possibly to `localhost` or a hostname assumed to be in a local hosts file. A central policy repository avoids maintaining multiple versions of encryption policy.
 
 Envoy is one possible framework for creating proxies. Envoy’s connection 
 pipeline is based on network filters which are linked into filter chains, enabling rich capabilities. 
