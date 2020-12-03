@@ -140,7 +140,8 @@ clients will communicate strictly with the proxies, not circumvent them.
 This model poses no complications relating to the use of TLS. The proxy will possess
  certificates to serve incoming client connections as well as to connect to backend brokers, for example over mTLS.
 
-SASL support is another area touched by the deployment of proxies.  In our reference work thus far, SASL was used to integrate with a native authentication environment. Further analysis is required to address the full
+SASL support is another area touched by the deployment of proxies.  In our reference work thus far, SASL was used to integrate with a native authentication environment. When using Envoy, it is possible that some SASL functionality
+is handled by other filters. Further analysis is required to address the full
 range of SASL options supported by Kafka and their respective implications for a proxy.
 
 Client-side proxies presumably are deployed more numerously and configured somewhat differently than broker-side proxies.  Using the broker's advertised list, as described above, to route client requests to a list
