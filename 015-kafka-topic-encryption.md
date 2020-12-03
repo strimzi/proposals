@@ -127,7 +127,7 @@ It also means that the proxy version must always be in phase with that of the br
 A proxy-based solution however has the advantage that both Kafka client and broker are unaware
 of the proxy and do not require modification to support encryption at rest.
 
-Whether the proxy runs under the control of the client or the broker is, in many ways, considered a configuration issue, however there are important differences, most notably regarding the relationship between broker and proxy. Broker-side proxies typically will be deployed together with brokers, assuring same Kafka protocol version support by proxy and broker. Additionally, configuration settings harmonizing proxy and broker are more easily made when both are deployed in close proximity. Client-side proxies, deployed independently of brokers, will need to
+Whether the proxy runs under the control of the client or the broker is, in many ways, considered a configuration issue, however there are important differences, most notably regarding the relationship between broker and proxy. Broker-side proxies typically will be deployed together with brokers, assuring same Kafka protocol version support by proxy and broker. Additionally, configuration settings harmonizing proxy and broker are more easily made when both are deployed in close proximity. Client-side proxies, deployed independently of brokers, will need
 to have dynamic protocol version awareness of its own and the broker's version. In both deployment models,
 the proxy will use [`ApiVersionsRequest`](https://kafka.apache.org/protocol#api_versions) to ascertain the
 broker version in order to  handle potential version discrepancies.
