@@ -53,7 +53,7 @@ you need to type `y`, otherwise `n`. After `y` decision you can see that now use
  * [3] - 'KafkaTopic' :0 deployed
 ```
 
-Moreover application is remember all choices, which means that if user see problem and for instance `Kafka` is not working 
+Moreover, application remembers all your choices, which means that if user see problem and for instance `Kafka` is not working 
 properly then on question `Is [Kafka] running? [y/n]` user will type `n`, which will be stored to wrong test paths. The
 path of the test you can image as some list. Example of paths:
 
@@ -65,8 +65,8 @@ Wrong paths: [
 
 Success paths:
             [
-                [0]
-                [0] -> [1], 
+                [0],
+                [0] -> [1]
              ]
 ```
 
