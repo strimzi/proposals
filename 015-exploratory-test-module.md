@@ -1,4 +1,4 @@
-# Exploratory test module
+# Exploratory test repository
 
 The exploratory test contains dialogue application, which gives you the possibility to create your test scenarios. 
 
