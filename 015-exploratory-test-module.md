@@ -1,12 +1,13 @@
 # Exploratory test repository
 
-The exploratory test contains dialogue application, which gives you the possibility to create your test scenarios. 
+The exploratory test will contain two dialogue applications, which gives you the possibility to create your test scenarios. 
 
 ## Motivation
 
 Every release, we do exploratory testing and test Strimzi. 
-This tool also provides `transcript` for all scenarios that the user tried. In other words, the application stores success and wrong scenarios. These scenarios end the end of exploration are provided to a user. User then can 
-share with developers or testers reproducible procedure with all YAMLs executed by the user. 
+This tool also provides `transcript` for all scenarios that the user tried. In other words, the application stores success and wrong scenarios. 
+These scenarios end the end of exploration are provided to a user. 
+User then can share with developers or testers reproducible procedure with all YAMLs executed by the user. 
 
 For brevity, here is one of the scenarios:
 
@@ -28,8 +29,9 @@ The module provides two dialogue applications, which has a lot in common:
 1. BaselineExploratory - dialogue application, which executes the predefined scenario 
 2. CreativeExploratory - dialogue application, which executes input YAMLs provided by the user
 
-Moreover, applications remember all your choices, which means that if the user sees the problem and for instance `Kafka` is not working properly then on the question `Is [Kafka] running? [y/n]` user will type `n`, which will store this path to `bug` paths. 
- On the other, it has also the list of `success` paths.
+Moreover, applications remember all your choices, which means that if the user sees the problem and for instance `Kafka` 
+is not working properly then on the question `Is [Kafka] running? [y/n]` user will type `n`, which will store this path to `bug` paths. 
+On the other, it has also the list of `success` paths.
 
 #### BaselineExploratory 
 
@@ -99,8 +101,8 @@ In the last phase of testing user will have a transcript of all his decisions wi
     ...
 ```
 
-As you can see it is the list of commands, which is needed to do to reproduce the same behaviour that the user had. In the plain text
-it will look like this:
+As you can see it is the list of commands, which is needed to do to reproduce the same behaviour that the user had. 
+In the plain text it will look like this:
 
 ```
 ======
