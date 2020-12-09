@@ -5,84 +5,153 @@ Exploratory test module contains dialog application, which gives you possibility
 ## Motivation
 
 Every release, we do exploratory testing. We test Strimzi but with this tool it would be very easy to do such a thing. 
+This tool also provides `transcript` for scenarios, which invoked bug. In other words, user can easily
+share with developers or testers reproducible procedure with all YAMLs executed by user. 
 Furthermore, it will spare most of our time. 
 
 For brevity, here is one of the scenarios:
 
-1. Deploy ClusterOperator
-2. Deploy Kafka
-3. Deploy KafkaUser
-4. Upgrade ClusterOperator
-5. Wait until RU is finished
-6. Deploy Kafka cluster with oauth support
+1. TODO: pre-defined installation of CO???
+2. Provide Kafka CR YAML
+3. Provide KafkaUser CR YAML
+6. Provide Kafka CR with oauth support
 7. Deploy oauth clients
-8. Deploy Prometheus
-9. Deploy Grafana
-10. ...
+8. Provide YAMLs for installation of Prometheus
+9. Provide YAMLs for installation of Grafana
 
-And many more. This is just one scenario, which anyone can create with only choosing allowed choices. 
+And many more. This is just one scenario, which anyone can create. 
 Note, that in every step you have to manually check if specific component is running. 
-For instance, if you choose to 'Deploy Kafka cluster' then you need to list deployment and verify that everything works.
+For instance, if you choose to 'Provide Kafka CR YAML' then you need to list Kafka CR, Pods and verify that everything works.
 
-## Abstract Logic
+### Idea
 
-Dialog application log looks like this and in code sample you can see that user already deploy one Cluster operator 
-and he has two `only` choices:
+Module provides two dialog applications, which has a lot in common:
+1. BaselineExploratory - dialog application, which executes predefined scenario 
+2. CreativeExploratory - dialog application, which executes input YAMLs provided by the user
 
-1. deploy another `ClusterOperator`
-2. deploy `Kafka`. 
+Moreover, applications remembers all your choices, which means that if user see problem and for instance `Kafka` is not working 
+properly then on question `Is [Kafka] running? [y/n]` user will type `n`, which will store this path to `bug` paths. 
+ On the other, it has also list of `success` paths.
+
+#### BaselineExploratory 
+
+Baseline exploration consists of several steps:
+1. input pre-defined YAMLs = user has to prepare these YAMLs
+2. start baseline application
+3. application applies first pre-defined YAML
+4. (interaction with app) yes/no (is component running?)
+5. application applies next pre-defined YAML
+6. (interaction with app) yes/no (is component running?)
+7. if there is another component to apply go to `5th step` else go to next step 
+8. transcript with wrong and success paths (reporting) = user end the end of testing will have report about his work
+
+#### CreativeExploratory
+
+Creative exploration consists of several steps:
+1. start exploration application
+2. (interaction with app) user has to provide YAML, which he wants to apply
+3. (interaction with app) yes/no (is component running?)
+4. if there is another component that user wants to apply go to `3th step` else go to next step 
+5. transcript with wrong and success paths (reporting) = user end the end of testing will have report about his work
+
+### Reporting
+
+In the last phase of testing user will have transcript of all his decisions with YAMLs. For clarity, here is one of transcript:
 
 ```
- [INFO ] 2020-11-27 15:19:03.603 [main] io.strimzi.CreativeExploration - You have following choices with your thoughts:
- [0] - 'ClusterOperator' :1 deployed
- [1] - 'Kafka' :0 deployed
-  1
+[
+    [
+        echo "apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: strimzi-cluster-operator
+                labels:
+                  app: strimzi
+              spec:
+                replicas: 1
+               ..." 
+        | 
+        oc apply -f -        
+    ],
+    [
+        echo "apiVersion: kafka.strimzi.io/v1beta1
+             kind: Kafka
+             metadata:
+               name: my-cluster
+             spec:
+               kafka:
+                 version: 2.6.0
+                 replicas: 3
+             ..."
+        | 
+        oc apply -f -
+    ],
+    [
+        echo "apiVersion: kafka.strimzi.io/v1beta1
+                kind: KafkaUser
+                metadata:
+                  name: my-user
+                  labels:
+                    strimzi.io/cluster: my-cluster
+                spec:
+                ..."
+        | 
+        oc apply -f -
+    ]
+    ...
 ```
 
-He decided to 1, which is `Kafka`. Next step is confirm that `Kafka` is running on specific Kubernetes cluster. If yes, then
-you need to type `y`, otherwise `n`. After `y` decision you can see that now user has 4 choices because `Kafka` is deployed.
- 
- ```
- * [INFO ] 2020-11-27 15:19:04.105 [main] io.strimzi.CreativeExploration - Is [Kafka] running? [y/n] or you wanna stop testing write STOP
- * y
- * after:
- * [INFO ] 2020-11-27 15:19:04.646 [main] io.strimzi.CreativeExploration - You have following choices with your thoughts:
- * [0] - 'ClusterOperator' :1 deployed
- * [1] - 'Kafka' :1 deployed
- * [2] - 'KafkaUser' :0 deployed
- * [3] - 'KafkaTopic' :0 deployed
-```
-
-Moreover, application remembers all your choices, which means that if user see problem and for instance `Kafka` is not working 
-properly then on question `Is [Kafka] running? [y/n]` user will type `n`, which will be stored to wrong test paths. The
-path of the test you can image as some list. Example of paths:
+As you can see it is list of commands, which is needed to do to reproduce same behavior that user had. In the plain text
+it will look like this:
 
 ```
-Wrong paths: [
-                [0] -> [1] -> [3],
-                [0] -> [1] -> [2]
-             ]
-
-Success paths:
-            [
-                [0],
-                [0] -> [1]
-             ]
+======
+1.step
+======
+echo "apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: strimzi-cluster-operator
+        labels:
+          app: strimzi
+      spec:
+        replicas: 1
+       ..." 
+| 
+oc apply -f -  
+======
+2.step
+======
+echo "apiVersion: kafka.strimzi.io/v1beta1
+     kind: Kafka
+     metadata:
+       name: my-cluster
+     spec:
+       kafka:
+         version: 2.6.0
+         replicas: 3
+     ..."
+| 
+oc apply -f -
+======
+3.step
+======
+echo "apiVersion: kafka.strimzi.io/v1beta1
+        kind: KafkaUser
+        metadata:
+          name: my-user
+          labels:
+            strimzi.io/cluster: my-cluster
+        spec:
+        ..."
+| 
+oc apply -f -
 ```
-
-In this case first wrong path, which invoked bug can be interpreted as:
- 1. Deploy ClusterOperator
- 2. Deploy Kafka
- 3. Deploy KafkaTopic
- 
- On the other, same applied to success paths. Note, that this is just a very simple example for demonstration reasons.
 
 ## Proposal
 
 This proposal suggest to:
 * Create module `exploratory-test` in `strimzi-kafka-operator` repository 
-* Dependency on our `systemtest` module because of our components such as `Kafka`, `KafkaUser`. Furthermore oauth deployment,
-tracing deployment and many more.
 
 ##### Advantages:
 * reduce time when manually testing some components
@@ -90,4 +159,5 @@ tracing deployment and many more.
 * gives us report (which combination were buggy)
 * everybody can play with it and find bugs
 ##### Dis-advantages:
-* exploratory testing will be limited because of abstraction of the automatic deployment
+* TODO: :D
+* user has to input syntactically valid YAMLs (sometimes hard? :D )
