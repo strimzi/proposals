@@ -5,7 +5,9 @@ The exploratory test will contain two dialogue applications, which gives you the
 ## Motivation
 
 Every release, we do exploratory testing and test Strimzi. 
-This tool also provides `transcript` for all scenarios that the user tried. In other words, the application stores success and wrong scenarios. 
+Basic functionality is to find potential bugs by trying various scenarios, which user has to input.
+This tool also provides `transcript` for all scenarios that the user tried. 
+In other words, the application stores success and wrong scenarios. 
 These scenarios end the end of exploration are provided to a user. 
 User then can share with developers or testers reproducible procedure with all YAMLs executed by the user. 
 
