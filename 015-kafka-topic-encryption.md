@@ -71,22 +71,44 @@ used in testing, is shown below:
 [
  {
    "topic" : "juicy-topic",
-   "kms_url" : "https://kms.abc.com",
-   "kms_instance": "11111111-2222-3333-4444-55555555555",
-   "key_ref" : "e2a73a6c4bf9",
-   "credential" : "dkT4WSCnrlNE7"
+   "kms" : {
+     "type"        : "ibmkeyprotect",
+     "url"         : "https://kms.abc.com",
+     "credentials" : "dkT4WSCnrlNE7",
+     "instance-id" : "11111111-2222-3333-4444-55555555555",
+     "key-ref"     : "e2a73a6c4bf9"
+  }   
  },
  {
    "topic" : "creditcard-data",
-   "kms_url" : "https://kms.abc.com",
-   "kms_instance": "11111111-2222-3333-4444-55555555555",
-   "key_ref" : "9957cdf5f32a",
-   "credential" : "dkT4WSCnrlNE7"
- }
+   "kms" : {
+     "type"        : "ibmkeyprotect",
+     "url"         : "https://kms.abc.com",
+     "credentials" : "dkT4WSCnrlNE7",
+     "instance-id" : "11111111-2222-3333-4444-55555555555",
+     "key-ref"     : "9957cdf5f32a"
+  }   
 ]
 ```
 
 In this example, two topics will be encrypted with two different keys residing in the same KMS.
+
+The following table describes the configuration elements.
+
+| Element |  Description | Required | Comments |
+|---------|--------------|----------|----------|
+| `topic`   | The name of the Kafka topic to encrypt. | Yes | |
+| `kms.type`| Identifies the type of KMS used. This is a string constant corresponding to an implementation of the internal KMS interface. |Yes| Currently `ibmkeyprotect` is supported in the reference implementation. An example of another type could be `vault`. |
+|`kms.url` | The URL of the KMS system | Yes | |
+|`kms.credentials` | An opaque credential used to access the KMS service. | No | The credential can be a token, apikey or user:password string but must be understood by the respective KMS system. |
+| `kms.instance-id` | An instance-ID is any parameter in addition to the `kms.url` required to connect to the KMS. | No | Not all KMS systems require this parameter. IBM Key Protect does while Vault does not. If not required, this field can be left out of the policy definition.|
+| `kms.key-ref` | A unique identifier of the key material used in encrypting the topic data.| Yes | The format of this field depends on the underlying KMS. |
+
+_Because a policy contains credentials, the entire policy must be treated as a secret._ In a Kubernetes environment, policy could be passed to the encrypting proxy with the secrets mechanism. Policy could also be retrieved policy from a secrets store such as Vault.
+
+Updates to policy are naturally possible but not under all circumstances. As topics can be created and deleted at any time, policy must be updated dynamically without restarting the proxy.  The proxy will have a management interface over which  notifications of policy updates are issued. 
+
+Certain policy updates can produce a constellations not supported initially. Specifically, those changes resulting in a mix of encrypted and unencrypted data within a topic will not be supported (i.e., an unencrypted topic with data becomes encrypt or vice versa). Further, changing KMS parameters is possible only if the encryption semantics are fully preserved by the change. For example, if the encryption scheme stores AES keys in a KMS, moving the AES keys to a different KMS and reconfiguring policy for the new KMS is possible. However some policy changes result in a topic depending on more than one KMS. Such changes will not be supported.  As an example, if the encryption scheme depends on unique key material in the KMS, such as a default root key used for envelope encryption, a policy change will not be supported since the topic would consist of wrapped keys from two KMS systems. For such cases, a new topic must be created with the new KMS and the original topic data copied to the new topic, whereafter the first topic can be deleted.
 
 ### Message Handling
 Message handling is concerned with facilities for intercepting messages, deserializing and inspecting them, invoking encryption as accorded by policy, modifying messages, and finally serializing and forwarding messages onward to Kafka brokers and clients. To accomplish encryption and decryption of data payloads, only Kafka *Produce requests* and *Fetch responses* need to be examined and potentially modified. High quality open source libraries exist already for implementing message introspection and serialization/deseriaization, e.g.,
