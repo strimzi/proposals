@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 16  | [Modularizing Strimzi UI](./016-modularizing-strimzi-ui.md) |
 | 15  | [Kafka Connect build](./015-kafka-connect-build.md) |
 | 14  | [Move Container Images to Quay.io](./014-move-docker-images-to-quay.io.md) |
 | 13  | [Strimzi canary](./013-kafka-canary.md) |
