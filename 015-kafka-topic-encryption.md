@@ -1,5 +1,3 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Proxy-Based Kafka Per-Topic Encryption
 
 The goal of this proposal is to provide topic-level encryption-at-rest for Kafka such that distinct encryption keys can be used for different topics. 
@@ -29,12 +27,12 @@ This document proposes a technical solution for providing upper-layer encryption
 An implementation of topic encryption is proposed whereby the message stream between client and broker is intercepted. Incoming data messages (Produce requests) are inspected to determine whether their payload
 should be encrypted according to a policy. If so, the data portions are encrypted and the modified
 message is forwarded to the broker. As a result, the topic data is stored by the broker in encrypted form.
-On the reverse direction, encrypted responses (responses to Fetch requests) are decrypted prior to being sent to clients.
+In the reverse direction, encrypted responses (i.e., responses to Fetch requests) are decrypted prior to being sent to clients.
 
 As defined in the encryption policy, each topic can be encrypted by a different key,
 allowing brokers to store a mix of encrypted and unencrypted data, where
 data owners can manage the keys to their topics.
-Keys ideally are stored in a key management system with access policies and logging. 
+Keys will be stored in an external key management system with access policies and logging. 
 
 A core topic-encryption component, termed the _Encryption Module_, is proposed which is then deployed in a proxy. 
 
@@ -51,10 +49,10 @@ A central design goal is adaptability through modularity. Encrypter/decrypter(s)
 The Encrypter-Decrypter sub-component performs the actual encryption and decryption of messages, implementing a particular encryption algorithm and making use of the KMS service to obtain topic keys.
 
 #### Key Service
-The Key Service is used in the Encryption Module to handle interactions with a key management system and to perform optional primitives such as those related to envelope encryption. The interface is generic in order to accommodate various key management implementations.
+The Key Service is used by the Encryption Module to handle interactions with a key management system and to perform optional primitives such as those relating to envelope encryption. The interface is generic in order to accommodate various key management implementations.
 
 #### Policy Service
-Encrypter-decrypters require a means to lookup encryption requirements and parameters for a topic. As a corresponding standard does not exist, the core component will interact with a generic internal interface for retrieving policy on how a topic is, or not is, to be encrypted. Implementers can develop and configure their own implementation of the policy service, be it a remote microservice, a local pre-configured cache, a cluster registry, etc.
+Encrypter-decrypters require a means to lookup encryption requirements and parameters for a topic. As a corresponding standard does not exist, the core component will interact with a generic internal interface for retrieving policy on how a topic is, or is not, to be encrypted. Implementers can develop and configure their own implementation of the policy service, be it a remote microservice, a local pre-configured cache, a cluster registry, etc.
 
 For each topic to be encrypted, a policy exists detailing:
 
