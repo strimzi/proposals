@@ -38,7 +38,7 @@ A core topic-encryption component, termed the _Encryption Module_, is proposed w
 
 The diagram below depicts the main components of the proposal, illustrating clients sending and receiving plaintext messages while the proxy exchanges ciphertext messages with the broker:
 
-![overview](images/015-kafkaenc-overview.png)
+![overview](images/017-kafkaenc-overview.png)
 
 ### Components
 #### Encryption Module
