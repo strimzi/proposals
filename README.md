@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 18  | [Use the admin-server REST API in strimzi-ui](./018-rest-admin-api.md) |
 | 17  | [Proxy-Based Kafka Per-Topic Encryption](./017-kafka-topic-encryption.md) |
 | 16  | [Modularizing Strimzi UI](./016-modularizing-strimzi-ui.md) |
 | 15  | [Kafka Connect build](./015-kafka-connect-build.md) |
