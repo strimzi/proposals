@@ -60,7 +60,7 @@ The strimzi-ui project is affected (as outline in the Proposal). Other projects 
 
 ## Compatibility
 
-There are no compatability issues, as the API is still under development.
+There are no compatibility issues, as the API is still under development.
 
 ## Rejected alternatives
 
