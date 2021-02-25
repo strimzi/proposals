@@ -4,7 +4,7 @@ This proposal suggests restructuring to the folders of the [`strimzi-kafka-opera
 
 ## Current situation
 
-Currently, the Strimzi installation files in our master branch correspond to the master branch.
+Currently, the Strimzi installation files in our master branch correspond to the images built from the master branch.
 That means they are under constant development and often work only with the freshly pulled images.
 That suites well for development work, but not necessarily for the users.
 They often checkout the GitHub repository, see the install or example folders and try them, not realising that they're using `master` rather than a stable release.
