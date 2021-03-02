@@ -7,7 +7,7 @@ This proposal suggests restructuring to the folders of the [`strimzi-kafka-opera
 Currently, the Strimzi installation files in our master branch correspond to the master branch.
 That means they are under constant development and often work only with the freshly pulled images.
 That suites well for development work, but not necessarily for the users.
-They often checkout the GitHub repository, see the install or example folders and try them, not realising that they're using `master` rather than a stable release.
+They often checkout the GitHub repository, see the install or example folders and try them, not realizing that they're using `master` rather than a stable release.
 If they just use them for a short time it should not matter.
 But if they keep using them, they will run into issues later.
 
@@ -23,9 +23,11 @@ This proposal suggests following:
     * This subdirectory will contain the _in-development_ versions of `install`, `examples` and `helm-chart` directories.
     * Any changes in regular PRs, generated CRD files etc. will be done in this directory
     * New releases will use these files for packaging
+    * The release artifacts will remain unchanged, they will just be built from this directory and not from the original ones
 * The original `install`, `examples` and `helm-chart` directories will be kept, but will contain the files for the latest stable release
     * Updates to them will be done only during / after release
     * They will not be changed with regular PRs
+    * A README.md file will be aded to them to clarify they contain the latest stable release and should not be changed as part of development but only when new versions are released
 
 ### Risks
 
