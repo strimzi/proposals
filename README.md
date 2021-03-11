@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 20  | [Rename the default branch of Strimzi GitHub repositories](./020-rename-default-branch-of-strimzi-github-repositories.md) |
 | 19  | [Restructure the installation files](./019-restruture-the-installation-files.md) |
 | 18  | [Use the admin-server REST API in strimzi-ui](./018-rest-admin-api.md) |
 | 17  | [Proxy-Based Kafka Per-Topic Encryption](./017-kafka-topic-encryption.md) |
