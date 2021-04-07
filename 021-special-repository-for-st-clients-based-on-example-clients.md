@@ -24,12 +24,34 @@ clients.
 
  * Create a new repository for `systemtest client`
     * complex implementation of clients for testing
-    * will be based on [Strimzi client-examples](https://github.com/strimzi/client-examples)
+    * we'll use both Kafka and Bridge clients from `client-examples`
+    * will be based on [Strimzi client-examples](https://github.com/strimzi/client-examples) - we'll copy the
+      `client-examples` code and then modify it - each repo will then _go their own way_
     * we'll be able to modify it with our special configuration
-    * the main idea of example clients will be kept
+    * the main idea of example clients remain intact
     
  * The original `client-examples` repository will be kept
-    
+
+## Advantages
+
+There are many things we can implement. 
+Good example is returning exceptions and return codes into the `job` status 
+(as we are using `k8s` jobs for deploying the example clients) and asserting it in tests - we have to grep exceptions
+from the job log at the moment - which can be a problem. 
+
+## Images and releases
+
+The images will be built as in `client-examples` after each merged PR and pushed to `strimzi` repository on `quay.io`.
+I would keep the `latest` tag, no need for extra releases and versioning.
+
+## Kafka version
+
+ST client will support and use the latest Kafka version supported by `Strimzi`.
+
+## Implementation
+
+Client will be implemented in Java, same as `client-examples`.
+
 ## Affected/not affected projects
 
 Only `systemtest` part of the `Strimzi` will be affected.
