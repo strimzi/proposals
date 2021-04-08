@@ -9,7 +9,12 @@ Currently, we are using two clients in our STs:
  - `InternalKafkaClients` (based on `test-client` image) 
  - `example clients` (from [Strimzi client-examples](https://github.com/strimzi/client-examples)).
 
-The plan is to remove the `InternalKafkaClients` and keep only `example clients`.
+The plan is to remove the `InternalKafkaClients` and keep only `example clients`. The `test-client` is not sufficient
+anymore, it can create single producer/consumer, send/receive messages and then we can assert result - we are 
+stuck here, and we need to wait until a producer/consumer is finished. With `example clients` we are able to do 
+a lot more - create a continuous job for sending messages with delay, _stack_ the producers to 
+create a _traffic_,  add extra configuration, use different types of producer/consumer 
+(for Bridge, Kafka, ...) and many more.  
 
 ## Motivation
 
@@ -23,6 +28,11 @@ clients.
 ## Proposal
 
  * Create a new repository for `systemtest client`
+    * name could be `strimzi-systemtest-client`
+    * component owners can be same as for STs
+    * PR checks:
+       * DCO
+       * build - `mvn` build, checkstyle (maybe with some simple UTs or ITs)
     * complex implementation of clients for testing
     * we'll use both Kafka and Bridge clients from `client-examples`
     * will be based on [Strimzi client-examples](https://github.com/strimzi/client-examples) - we'll copy the
@@ -41,8 +51,11 @@ from the job log at the moment - which can be a problem.
 
 ## Images and releases
 
-The images will be built as in `client-examples` after each merged PR and pushed to `strimzi` repository on `quay.io`.
-I would keep the `latest` tag, no need for extra releases and versioning.
+The images will be built as in `client-examples` after each merged PR and pushed to `strimzi` repository on `quay.io`
+with `latest` tag.
+Because we can use (or will use) different versions of Kafka for each Strimzi release, we should release the new version
+of `systemtest-client` together with Strimzi - to prevent issues with features added for higher version of Kafka, to
+make it easier to handle it in STs and make it less confusing.
 
 ## Kafka version
 
