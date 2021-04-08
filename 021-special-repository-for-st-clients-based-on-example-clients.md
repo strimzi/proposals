@@ -53,13 +53,11 @@ The `systemtest client` will have its own release cadence and versioning, which 
 
 ## Kafka version
 
-By default, the `systemtest client` will use latest released version of Kafka.
-For using older version, the user will have to specify the `KAFKA_VERSION` environmental variable.
-The image will contain `.jars` of all supported Kafka versions, the ones for specified version will be used.
-If the user specifies unsupported Kafka version, error message will appear in _status_ and _log_ together with list of supported versions.
-List of all supported versions will be present in `supported-kafka-version.yaml`.
+The `systemtest client` will support latest released version of Kafka with several older.
 We'll start with version `2.5.0`, as it's the oldest supported version by latest released version of Strimzi (0.22.1),
 and we'll support it until `test-clients` features will allow us to use that specific version or until we will decide to completely deprecate it.
+List of all supported versions will be present in `supported-kafka-version.yaml`.
+For each supported Kafka version will be separate image - pattern will be `test-clients/TEST_CLIENTS_VERSION-kafka-KAFKA_VERSION`.
 
 ## Implementation
 
