@@ -18,7 +18,7 @@ _stack_ the producers to create a _traffic_,  add extra configuration, use diffe
 ## Motivation
 
 While testing `Strimzi` we need, in some cases, special configuration of clients, which is not implemented in the `client-examples`.
-As we discussed offline, the `client-examples` repository should be really _exemplary_, 
+The `client-examples` repository should be really _exemplary_, 
 and we should not add any extra _configuration_ or _extensions_ to it. 
 For this kind of enhancements we should have repository, which will have `client-examples` as base, 
 and we will be able to add special setting without disrupting the basic idea of example clients.
