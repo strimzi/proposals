@@ -9,10 +9,10 @@ The CentOS 7 container images are stored on Docker Hub and used to build all Str
 
 ## Motivation
 
-Using the CentOS 7 image has two main advantages:
-* It is hosted on Docker Hub whihc has limited number of anonymous pulls (see [proposal 14](https://github.com/strimzi/proposals/blob/main/014-move-docker-images-to-quay.io.md) for more details).
+Using the CentOS 7 image has three main disadvantages:
+* It is hosted on Docker Hub which has limited number of anonymous pulls (see [proposal 14](https://github.com/strimzi/proposals/blob/main/014-move-docker-images-to-quay.io.md) for more details).
 * CentOS 7 images are not released too often (at the time of writing, the image is 2 months old), so we need to install lot of updates while building the images
-* CentOS 7 received CVE fixes in batches often onyl after they are available in other images
+* CentOS 7 received CVE fixes in batches often onůy after they are available in other images
 
 _Note: There has been recently many discussion about changes in the CentOS project.
 But to my knowledge, they affect only the CentOS 8 version.
@@ -36,15 +36,15 @@ The `minimal` is the smallest and should be used by Strimzi.
 ### Affected repositories
 
 This proposal covers the container images from the following repositories:
-* strimzi-kafka-operator
-* strimzi-kafka-bridge
-* client-examples
-* test-clients
-* strimzi-canary
+* `strimzi-kafka-operator`
+* `strimzi-kafka-bridge`
+* `client-examples`
+* `test-clients`
+* `strimzi-canary`
 
 ### Implementation
 
-If approved, the Dockerfiles in the affected Strimzi projects will be updated to use the `ubi-minimal` image.
+If approved, the Dockerfile files in the affected Strimzi projects will be updated to use the `ubi-minimal` image.
 
 ## Compatibility
 
@@ -52,6 +52,6 @@ There are no compatibility issues.
 
 ## Rejected alternatives
 
-For this proposal, I considered mainly the Re dHat and CentOS images.
+For this proposal, I considered mainly the Red Hat and CentOS images.
 Unlike images for other Linux distributions, they are very close to the current image.
 So moving to the new base image should mean minimal disruption and not too many changes.
