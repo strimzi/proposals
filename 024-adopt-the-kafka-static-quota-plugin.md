@@ -52,10 +52,7 @@ For example:
 
 ## Risks
 
-Despite GitHub trying to make it as easy as possible, renaming the default branch will still cause some disruptions:
-
-* Users / Developers will need to get used to the new default branch name (for example when using commonly used commands such as `git rebase master` etc.)
-* Users / Developers will need to update their local repositories to use the new branch
+The quota plugin will not be enabled by default, so there is minimal risk of it causing any problems.
 
 ## Affected / not affected projects
 
