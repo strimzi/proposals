@@ -13,9 +13,12 @@ Having some solution which would protect from the disks getting full would be a 
 ## Proposal
 
 Strimzi should adopt the [Kafka Static Quota plugin](https://github.com/lulf/kafka-static-quota-plugin).
+
+### Quota types
+
 It provides two types of quotas:
 
-### Per-broker produce and fetch quotas
+#### Per-broker produce and fetch quotas
 
 Apache Kafka itself offers only quotas per client / user.
 The Kafka Static Quota plugin allows configuring of an overall produce and/or fetch quota per-broker.
@@ -24,7 +27,7 @@ The produce / fetch quotas currently don't support per-listener quotas.
 There is always only one quota for all listeners.
 The replication traffic is not counted into the quota.
 
-### Storage quotas
+#### Storage quotas
 
 The Kafka Static Quota plugin allows users to configure two storage limits: soft and hard.
 After the soft limit is breached, it will start throttling the producers.
