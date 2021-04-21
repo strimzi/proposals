@@ -5,10 +5,11 @@ Feature Gates should give us additional options how to control and mature differ
 
 ## Current situation
 
-Currently, any features or behaviors of the operator are controlled by one of these two mechanisms:
+Currently, any features or behaviors of the operator are controlled by one of these three mechanisms:
 
 * The Strimzi custom resources (as a form of an API)
 * The state of the Kubernetes resources
+* Environment variables in the operator deployment
 
 The following examples show how are these mechanisms used to give a better idea:
 
@@ -16,13 +17,14 @@ The following examples show how are these mechanisms used to give a better idea:
 * The `useServiceDnsDomain` in the listener configuration of the `Kafka` custom resource defines what kind of address should be used for given listener.
   Whether fully qualified DNS name or not.
 * When the operator during Kafka upgrade sees that the old pods are still using the TLS sidecars, it will automatically loosen the TLS configuration to make sure the upgrade can be completed.
+* When the environment variable `STRIMZI_CUSTOM_RESOURCE_SELECTOR` is configured, it controls what custom resources will the operator see and process.
 
 ## Motivation
 
 In many cases, the mechanisms described above work fine and are well suited.
 But there are also limitations:
 
-* Changes to the custom resources APIs have permanent character.
+* Changes to the custom resources APIs have upgrade and forwards compatibility concerns.
   We can remove fields from the CRDs only when changing the API versions.
   So adding fields to the Kafka CR is not a good option to gradually roll out changes or change a default behavior over multiple releases.
 * Sometimes, you also want to just change the behavior of the operator in general.
@@ -53,6 +55,7 @@ The alpha and beta features might be removed in case they are deemed as not usef
 
 Typically, the gated features should be introduced using a Strimzi Proposal
 The proposal should also suggest the plan for how the feature will move through the different maturity stages.
+The feature gates, their default state (disabled / enabled) and their current maturity level will be also listed in the documentation.
 
 ### Use cases 
 
