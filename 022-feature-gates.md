@@ -29,6 +29,8 @@ But there are also limitations:
   So adding fields to the Kafka CR is not a good option to gradually roll out changes or change a default behavior over multiple releases.
 * Sometimes, you also want to just change the behavior of the operator in general.
   But you want to avoid having endless list of `enableFeatureX`, `disableFeatureY`, or `useZ` fields in the custom resources.
+  For such fields, it would be also hard to change their defaults later in backwards-compatible way.
+  So in case such feature would be disabled by default at first, users would need to explicitly enable it even later when the feature is mature.
 * The use of the state of the existing Kubernetes resources works well for one-of operations.
   That fits well for upgrades or for triggering actions such as restarting a pod.
   But not for features which change the operator behavior during the whole run of the operator.
