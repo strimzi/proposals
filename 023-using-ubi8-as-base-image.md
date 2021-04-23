@@ -25,6 +25,7 @@ So there is no time pressure to move to other base image caused by these changes
 Strimzi should move to use Red Hat Universal Base Image 8 (UBI 8) as a base image.
 UBI8 is based on Red Hat Enterprise Linux 8 and is available to everyone for free (it does not include any Red Hat support).
 It can be pulled without any registration from `registry.access.redhat.com/ubi8/ubi-minimal:latest` and be redistributed (i.e. we can push images build on this base image into our repositories).
+The details can be found in the [Red Hat UBI EULA](https://www.redhat.com/licenses/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf) and in the related [FAQ](https://developers.redhat.com/articles/ubi-faq#).
 
 UBI8 receives normally updates earlier than CentOS 7.
 New versions of the image are also released more often.
