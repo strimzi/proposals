@@ -14,6 +14,7 @@ And in addition to that, it is also used by the different Strimzi components:
 ## Motivation
 
 Kafka already for some time supports using separate listeners for data replication and coordination.
+It was implemented as part of [KIP-291](https://cwiki.apache.org/confluence/display/KAFKA/KIP-291%3A+Separating+controller+connections+and+requests+from+the+data+plane).
 The main reason for using separate listeners is that the replication traffic which is very data-intensive does not increase the latency the coordination traffic when separate listeners are used.
 Strimzi should make use of it and have separate listeners for the different tasks.
 
@@ -33,6 +34,8 @@ But it will not be configured as the control plane listener.
 
 A new feature gate `ControlPlaneListener` will be added and disabled by default.
 When enabled, this feature gate will configure the Kafka brokers to use the new listener for the control plane communication.
+Replication, Strimzi operators, and other components such as Cruise Control or Kafka Exporter will keep using the existing replication listener.
+
 Since it will be disabled by default at first, it will have no impact on backwards compatibility:
 * Upgrades from earlier versions will add the new listener.
   But it will not be used for anything yet and will not break the Kafka cluster.
