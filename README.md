@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 25  | [Control Plane Listener](./025-control-plain-listener.md) |
 | 24  | [Adopt the Kafka Static Quota plugin](./024-adopt-the-kafka-static-quota-plugin.md) |
 | 22  | [Feature Gates](./022-feature-gates.md) |
 | 21  | [Special repository for ST clients](./021-special-repository-for-st-clients-based-on-example-clients.md) |
