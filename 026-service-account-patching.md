@@ -31,7 +31,7 @@ The connectors can use the AWS IAM role assumed by the annotation to authenticat
 
 This proposal suggests several changes to how the Strimzi Cluster Operator handles the service accounts.
 
-1) A new `serviceAccount` fields will be added to the `template` sections of the Strimzi CRDs.
+1) A new `serviceAccount` fields will be added to the `template` sections of the Strimzi CRDs which result in any service accounts being created (`Kafka`, `KafkaConnect`, `KafkaConnectS2I`, `KafkaMirrorMaker2`, `KafkaMirrorMaker` and `KafkaBridge`).
   It will allow customizing the labels and annotations of the service accounts in a declarative way.
 2) The ServiceAccountOperator class in the `operator-common` module will be updated to patch the service accounts during reconciliation.
   To avoid issues with the tokens being recreated on every reconciliation, it will always copy the name of the token secret before patching (similarly as done for node ports in services etc.).
