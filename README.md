@@ -12,7 +12,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 | 26  | [Service Account patching](./026-service-account-patching.md) |
 | 25  | [Control Plane Listener](./025-control-plain-listener.md) |
 | 24  | [Adopt the Kafka Static Quota plugin](./024-adopt-the-kafka-static-quota-plugin.md) |
-| 23  | [Using Red Hat Universal Base Image 8 as the new Strimzi base image](./023-using-ubi8-as-base-image) |
+| 23  | [Using Red Hat Universal Base Image 8 as the new Strimzi base image](./023-using-ubi8-as-base-image.md) |
 | 22  | [Feature Gates](./022-feature-gates.md) |
 | 21  | [Special repository for ST clients](./021-special-repository-for-st-clients-based-on-example-clients.md) |
 | 20  | [Rename the default branch of Strimzi GitHub repositories](./020-rename-default-branch-of-strimzi-github-repositories.md) |
