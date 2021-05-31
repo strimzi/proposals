@@ -20,7 +20,7 @@ For example cluster or user certificates or user passwords.
 Kafka clients (or other components) running in the same namespace can mount the secrets as volumes or environment variables and use them.
 But this does not work for applications running in other namespaces or outside the Kubernetes cluster.
 They have to either copy the secrets into their namespace or extract the files to use them.
-Users also need to make sure that they data are kept in sync and update them when the original secrets change.
+Users also need to make sure that their data are kept in sync and update them when the original secrets change.
 
 Having a configuration provider which can extract these data directly from the Kubernetes API would eliminate these issues.
 It would allow to load the configuration data from Kubernetes API even from other namespaces or outside of the Kubernetes cluster.
@@ -65,7 +65,7 @@ ssl.truststore.certificates=${secrets:myproject/my-cluster-cluster-ca-cert:ca.cr
 ```
 
 The configuration provider should use a separate GitHub repository under the Strimzi GitHub organization.
-The repository should be named `kafka-kubernetes.config-provider`.
+The repository should be named `kafka-kubernetes-config-provider`.
 It should be published to Maven Central as `io.strimzi:kafka-kubernetes-config-provider`.
 
 ## Compatibility
