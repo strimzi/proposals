@@ -51,7 +51,7 @@ For example:
 
 Thanks to that users should be able to give the configuration provider only very restricted access to just the selected resources.
 
-To use the configuration provider, the user will need to configure his client like this:
+To use the configuration provider, the user will need to configure their client like this:
 
 ```properties
 config.providers=secrets
