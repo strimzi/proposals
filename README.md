@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 27  | [Kubernetes Configuration Provider for Apache Kafka](./027-kubernetes-config-provider.md) |
 | 26  | [Service Account patching](./026-service-account-patching.md) |
 | 25  | [Control Plane Listener](./025-control-plain-listener.md) |
 | 24  | [Adopt the Kafka Static Quota plugin](./024-adopt-the-kafka-static-quota-plugin.md) |
