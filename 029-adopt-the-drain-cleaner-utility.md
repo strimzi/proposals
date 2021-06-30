@@ -4,10 +4,10 @@
 
 Kubernetes readiness probes indicate whether a pod is ready to start serving clients.
 The readiness probe is not used to just indicate the state of the pod to the user.
-Kubernetes use it for several different things.
+Kubernetes uses it for several different things.
 For example:
 
-* Indicator whether a traffic should be routed to the pod
+* To indicate whether traffic should be routed to the pod
 * During voluntary disruptions / evictions
 
 The Kubernetes readiness probe concept does not naturally fit into how Apache Kafka works.
@@ -17,14 +17,14 @@ For example:
 * Does the broker accept client connections? (this one corresponds roughly to Kubernetes readiness concept)
 * Are all partition replicas in sync?
 * Do all partitions have enough in-sync replicas to be able to receive messages from producers (i.e. do the have more in-sync replicas than what is the minimal in-sync replicas setting)?
-* Are the replicas leaders and ready to actually receive messages from producers
+* Are the replicas leaders ready to actually receive messages from producers
 
 Strimzi currently maps the Kubernetes readiness probe to whether the Kafka broker is able to accept the client connections.
 It monitors the broker state and when the listeners are started, it marks it as ready.
 It does not reflect whether the replicas are in-sync, whether the partitions are under replicated etc.
-This was intentional decisions and users can use other tools Strimzi provides to monitor the other aspects of Kafka readiness.
+This was an intentional decision and users can use other tools Strimzi provides to monitor the other aspects of Kafka readiness.
 
-But there are some situations, where such readiness probe is not enough.
+But there are some situations, where using such readiness probes is not enough.
 For example during voluntary disruptions and evictions.
 
 ### Disruptions
@@ -37,13 +37,13 @@ This includes for example draining worker nodes because of cluster scale-down or
 
 During the voluntary disruptions, Kubernetes will evict the pods from the node being drained.
 That means that it will shut them down and start them on some other node (if available / possible).
-During the evictions, Kubernetes will follow Pod Disruption Budget rules.
+During the evictions, Kubernetes will follow [Pod Disruption Budget rules](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets).
 Pod Disruption Budget is a Kubernetes resource which defines how many pods matching some specific label selector can be evicted at once.
 Pod evictions rely on the readiness probes.
 Kubernetes will shutdown the allowed number of pods and wait until they are started somewhere else and become ready before shutting down the next pod(s).
 
 This works well for some applications.
-But not for the Strimzi Apache Kafka pods and their readiness probe.
+But not for the Strimzi Apache Kafka pods due to the limitation of readiness probes.
 Since the readiness probe doesn't guarantee that all replicas are in-sync again after the pod restart, it can happen that the next pod is restarted while the other pod is still syncing messages.
 And this can cause partitions to become temporarily under replicated and unavailable to clients.
 The only way how to make sure the Kafka cluster is not disrupted by voluntary disruptions which is available right now in Strimzi is to set the `maxUnavailable` option in the Pod Disruption Budget configuration for the Kafka brokers to `0`.
