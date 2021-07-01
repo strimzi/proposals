@@ -33,7 +33,7 @@ This setup is valid in 2 situations:
 The proposal would be to introduce a Feature Gate which would provide the ability to turn off the generation of Network Policies by Strimzi.
 
 As the functionality already exists to generate Network Policies, a sensible naming of this gate would be `NetworkPolicies` which by default is `true`.
-If users require custom Network Policies, they can dirsable this using the regular Feature Gate syntax.
+If users require custom Network Policies, they can disable this using the regular Feature Gate syntax.
 This Feature Gate will be a long-lived Feature Gate, and is not meant to phase in a featue. Instead, it should remain so users can turn off this functionality when needed.
 
 This Feature Gate will also transition through the Alpha, Beta, GA stages. However, as this is a long-lived feature gate which the behaviour does not become default eventually the value will remain set to `true`.
