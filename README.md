@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 29  | [Adopt the Drain Cleaner utility](./029-adopt-the-drain-cleaner-utility.md) |
 | 28  | [Network Policy Generation Environment Variable](./028-network-policy-generation-environment-variable.md) |
 | 27  | [Kubernetes Configuration Provider for Apache Kafka](./027-kubernetes-config-provider.md) |
 | 26  | [Service Account patching](./026-service-account-patching.md) |
