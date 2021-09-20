@@ -25,9 +25,9 @@ listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
 listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
 listener.name.<listener-name>.sasl.enabled.mechanisms=
 listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
-listener.name.<listener-name>.`AWS_MSK_IAM`.sasl.jaas.config=
-listener.name.<listener-name>.`AWS_MSK_IAM.sasl.client.callback.handler.class`=
-`security``.``protocol``=`
+listener.name.<listener-name>.AWS_MSK_IAM.sasl.jaas.config=
+listener.name.<listener-name>.AWS_MSK_IAM.sasl.client.callback.handler.class=
+security.protocol=
 principal.builder.class=
 ```
 
@@ -61,7 +61,7 @@ Taking this further, the desired yaml should look like:
             oauthbearer.connections.max.reauth.ms: 999999999
 ```
 
-    Then, when constructing the broker config:
+Then, when constructing the broker config:
 
 * `principal.builder.class` is set cluster-wide for all authentication methods (this is the status quo for OAuth authentication). This can only be set once, and we will fail hard (i.e. reject the config) if there are multiple principals defined. 
     
