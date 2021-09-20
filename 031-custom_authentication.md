@@ -27,7 +27,7 @@ listener.name.<listener-name>.sasl.enabled.mechanisms=
 listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
 listener.name.<listener-name>.AWS_MSK_IAM.sasl.jaas.config=
 listener.name.<listener-name>.AWS_MSK_IAM.sasl.client.callback.handler.class=
-security.protocol=
+listener.security.protocol.map=
 principal.builder.class=
 ```
 
@@ -83,7 +83,7 @@ listener.security.protocol.map=CONTROLPLANE-9090:SSL,REPLICATION-9091:SSL,TLS-90
 
 ## Affected/not affected projects
 
-[strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator)
+Affected: [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator)
 
 ## Compatibility
 
