@@ -59,6 +59,7 @@ Taking this further, the desired yaml should look like:
             oauthbearer.sasl.server.callback.handler.class: server.class
             oauthbearer.sasl.login.callback.handler.class: login.class
             oauthbearer.connections.max.reauth.ms: 999999999
+          tlsTrustedCertificates: ...
 ```
 
 Then, when constructing the broker config:
