@@ -68,7 +68,7 @@ Then, when constructing the broker config:
     
     It is expected that the provided principal builder *must* support Strimzi authentication (i.e. ssl-based auth). This is expected to be identical, or very similar to [Strimzi's OAuth library](https://github.com/strimzi/strimzi-kafka-oauth/blob/main/oauth-server/src/main/java/io/strimzi/kafka/oauth/server/OAuthKafkaPrincipalBuilder.java). In particular, it leverages [Kafka's default principal builder class](https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/security/authenticator/DefaultKafkaPrincipalBuilder.java#L73-L79), which allows the building of a principal based upon the name of the of peer certificate. Thus, it is expected that the custom principal builder provides a principal of type "user" with the name being that of the ssl peer certificate. 
 
-In addition, it also expected that the custom authorizer supports principals of type "user", and loads the `super.users` property to know which user's (i.e. Strimzi services) are authorized. 
+    In addition, it also expected that the custom authorizer supports principals of type "user", and loads the `super.users` property to know which user's (i.e. Strimzi services) are authorized. 
 
 
 * We parse out `security.protocol` and pass that value into the `listener.security.protocol.map` ** as we currently do for OAuth authentication types. 
