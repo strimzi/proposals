@@ -66,7 +66,11 @@ Then, when constructing the broker config:
 
 * `principal.builder.class` is set cluster-wide for all authentication methods (this is the status quo for OAuth authentication). This can only be set once, and we will fail hard (i.e. reject the config) if there are multiple principals defined. 
     
-    It is expected / will be documented that the provided principal builder *must* support Strimzi authentication (i.e. ssl-based auth). 
+    It is expected that the provided principal builder *must* support Strimzi authentication (i.e. ssl-based auth). This is expected to be identical, or very similar to [Strimzi's OAuth library](https://github.com/strimzi/strimzi-kafka-oauth/blob/main/oauth-server/src/main/java/io/strimzi/kafka/oauth/server/OAuthKafkaPrincipalBuilder.java). In particular, it leverages [Kafka's default principal builder class](https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/security/authenticator/DefaultKafkaPrincipalBuilder.java#L73-L79), which allows the building of a principal based upon the name of the of peer certificate. Thus, it is expected that the custom principal builder provides a principal of type "user" with the name being that of the ssl peer certificate. 
+
+In addition, it also expected that the custom authorizer supports principals of type "user", and loads the `super.users` property to know which user's (i.e. Strimzi services) are authorized. 
+
+
 * We parse out `security.protocol` and pass that value into the `listener.security.protocol.map` ** as we currently do for OAuth authentication types. 
 * `name` determines the prefix for all entries in `listener-config`
     * I.e., `listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=`
@@ -88,9 +92,12 @@ Affected: [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-oper
 
 ## Compatibility
 
-Backwards compatibility shouldn’t be an issue, as current configuration should not affect custom authentication. 
+Backwards compatibility shouldn’t be an issue, as current configuration should not affect custom authentication. However, users who try to have multiple auth types (i.e. OAuth and Custom) could run into issues if the custom auth requires `principal.builder.class` (as OAuth setting requires that this be set).
 
-Forwards compatibility will need to be mindful of the custom authentication setting, and how to handle the case of multiple listeners/multiple auth types.  
+Forwards compatibility will need to be mindful of the custom authentication setting, and how to handle the case of multiple listeners/multiple auth types. Explicitly, understand that: 
+- `listener.security.protocol.map` is partially built by the custom authentication setting
+- `principal.builder.class` can be set in custom auth, and therefore can only be set once
+- listener-specific overrides occur here, and therefore `listener.name.<listener-name>.*` should not be overriden anywhere by other config settings
 
 ## Rejected alternatives
 
