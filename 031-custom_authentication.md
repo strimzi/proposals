@@ -4,19 +4,23 @@ This proposal focuses on supporting custom authentication in the Strimzi operato
 
 ## Current situation
 
-Currently, numerous authentication methods are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/0.25.0/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/0.25.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549). 
+Currently, numerous authentication methods are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/0.25.0/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/0.25.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549).
 
 However, there is no ability to specify custom authentication, which is what this proposal will focus on.
 
 ## Motivation
 
-Supporting custom authentication allows greater flexibility for users of Strimzi who may have bespoke/proprietary authentication requirements. This would greatly broaden user adoption of the operator, as it would also support more common authentication schemes, such as [Amazon MSK](https://docs.aws.amazon.com/msk/latest/developerguide/security_iam_service-with-iam.html), and attract users who have much more stringent requirements (i.e. proprietary auth). 
+Supporting custom authentication allows greater flexibility for users of Strimzi who may have bespoke/proprietary authentication requirements. In addition, this would also ideally hopefully increase adoption of the operator, as it would allow for other popular third-party authentication schemes.
 
-The “cost” of supporting such feature should be minimal as well, as the expectation for custom authentication passes the complexity onto the user. Strimzi should strictly support the passing of configuration values, and nothing else. It’s up to the user to ensure their authn/z schemes can be integrated with Strimzi. Considering this also requires custom built Strimzi Kafka images in order to load custom classes on to the classpath, it’s also expected that will only really apply to highly technical/pro users.
+In addition, the cost of supporting custom authentication should be minimal as well, seeing as custom authn/z usually requires the end-user to build their own images. As a result, the level of expertise for such a user will be higher than the average adopter. It should also be noted that, it’s on the end-user to ensure that their custom authentication workflow works with Strimzi; the operator itself is strictly responsible for pushing down the necessary config to the broker pods. 
+
+One down-side to note is that this may not incentive users of custom auth/n to contribute back to Strimzi with the images they have built, along with providing documentation for authentication scheme they’re using. 
 
 ## Proposal
 
-Add a CustomAuthenticationKafkaListener class, which supports an example of the following properties
+### Workflow
+
+Add a CustomAuthenticationKafkaListener class, which would support the following properties.
 
 ```
 listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=
@@ -25,19 +29,8 @@ listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
 listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
 listener.name.<listener-name>.sasl.enabled.mechanisms=
 listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
-listener.name.<listener-name>.AWS_MSK_IAM.sasl.jaas.config=
-listener.name.<listener-name>.AWS_MSK_IAM.sasl.client.callback.handler.class=
 listener.security.protocol.map=
 principal.builder.class=
-```
-
-Really, this can be boiled down to: 
-
-```
-listener.name.<lister-name>.<auth-type>.*
-listener.name.<listener-name>.sasl.enabled.mechanisms
-security.protocol
-principal.builder.class
 ```
 
 Taking this further, the desired yaml should look like: 
@@ -62,18 +55,12 @@ Taking this further, the desired yaml should look like:
           tlsTrustedCertificates: ...
 ```
 
-Then, when constructing the broker config:
+Then, when constructing the broker config, we’ll perform the following tasks:
 
-* `principal.builder.class` is set cluster-wide for all authentication methods (this is the status quo for OAuth authentication). This can only be set once, and we will fail hard (i.e. reject the config) if there are multiple principals defined. 
-    
-    It is expected that the provided principal builder *must* support Strimzi authentication (i.e. ssl-based auth). This is expected to be identical, or very similar to [Strimzi's OAuth library](https://github.com/strimzi/strimzi-kafka-oauth/blob/main/oauth-server/src/main/java/io/strimzi/kafka/oauth/server/OAuthKafkaPrincipalBuilder.java). In particular, it leverages [Kafka's default principal builder class](https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/security/authenticator/DefaultKafkaPrincipalBuilder.java#L73-L79), which allows the building of a principal based upon the name of the of peer certificate. Thus, it is expected that the custom principal builder provides a principal of type "user" with the name being that of the ssl peer certificate. 
-
-    In addition, it also expected that the custom authorizer supports principals of type "user", and loads the `super.users` property to know which user's (i.e. Strimzi services) are authorized. 
-
-
-* We parse out `security.protocol` and pass that value into the `listener.security.protocol.map` ** as we currently do for OAuth authentication types. 
-* `name` determines the prefix for all entries in `listener-config`
-    * I.e., `listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=`
+* `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
+* The protocol for this listener would be derived from the `tls` and `sasl` fields, which then would be appended to    `listener.security.protocol.map`. For example, tls and sasl both set to true would append `SSL_SASL://...`.
+* Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
+* `TlsTrustedCertificates` functions identically to OAuth’s setting. Only a single certificate is needed in our case, but the ability to specify multiple is also allowed. This is needed as this listener, being configured with custom authentication, will allow external clients to talk with it, thus cannot use the internally generated certificates. 
 
 The render config, given the above example, then should look like:
 
@@ -86,6 +73,56 @@ principal.builder.class=SimplePrincipal.class
 listener.security.protocol.map=CONTROLPLANE-9090:SSL,REPLICATION-9091:SSL,TLS-9093:SASL_SSL
 ```
 
+### Additional considerations 
+
+**Principal** being set is a dangerous setting which cannot be verified or guaranteed by integration tests that it will work until deployment time, as this class is set and provided by the user. 
+
+It is expected that the provided principal builder *must* support Strimzi authentication (i.e. ssl-based auth). This is expected to be identical, or very similar to [Strimzi's OAuth library](https://github.com/strimzi/strimzi-kafka-oauth/blob/main/oauth-server/src/main/java/io/strimzi/kafka/oauth/server/OAuthKafkaPrincipalBuilder.java). In particular, it leverages [Kafka's default principal builder class](https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/security/authenticator/DefaultKafkaPrincipalBuilder.java#L73-L79), which allows the building of a principal based upon the name of the of peer certificate. Thus, it is expected that the custom principal builder provides a principal of type "user" with the name being that of the ssl peer certificate.
+
+An example of such a principal builder which satisfies Strimzi’s auth requirements:
+
+```
+public final class CustomKafkaPrincipalBuilder implements KafkaPrincipalBuilder {
+
+    public KafkaPrincipalBuilder() {}
+
+    @Override
+    public KafkaPrincipal build(AuthenticationContext context) {
+        if (context instanceof SslAuthenticationContext) {
+            SSLSession sslSession = ((SslAuthenticationContext) context).session();
+            try {
+                return new KafkaPrincipal(
+                        KafkaPrincipal.USER_TYPE, sslSession.getPeerPrincipal().getName());
+            } catch (SSLPeerUnverifiedException e) {
+                throw new IllegalArgumentException("Cannot use an unverified peer for authentication", e);
+            }
+        }
+        
+        // Create your own KafkaPrincipal here
+        ...
+    }
+}
+```
+
+Another thing to be mindful of, is to ensure your **CustomAuthorizer** supports `super.users`, and the default KafkaPrincipal to ensure seamless integration with Strimzi. This is relevant as in the case of using a custom principal builder, you’re most likely using a CustomAuthorizer as well. 
+
+
+### Testing strategy
+
+Custom authentication has a delicate testing path due to the nature of the properties being used. Therefore, it’s best to incorporate an integration test alongside unit tests.
+
+Unit tests: (*not an exhaustive list by any means*) 
+
+* Ensure that multiple principals are not specified, and if so, throw user friendly exception.
+* Validate that the protocol map being generated contains the proper custom auth prefix (i.e., SASL_SSL)
+* All properties specified in `listener-config` are propagated through 
+
+Integration test:
+
+* Custom authentication is specified with Strimzi’s OAuth settings. This is ideal as all of the necessary files are already on the classpath, and this setup is known to work. 
+    
+    As mentioned prior, the operator should strictly be responsible for propagating the necessary config values (this test asserts that), while the end users are actually responsible that their custom authentication integrates seamlessly with Strimzi. 
+
 ## Affected/not affected projects
 
 Affected: [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator)
@@ -94,11 +131,12 @@ Affected: [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-oper
 
 Backwards compatibility shouldn’t be an issue, as current configuration should not affect custom authentication. However, users who try to have multiple auth types (i.e. OAuth and Custom) could run into issues if the custom auth requires `principal.builder.class` (as OAuth setting requires that this be set).
 
-Forwards compatibility will need to be mindful of the custom authentication setting, and how to handle the case of multiple listeners/multiple auth types. Explicitly, understand that: 
-- `listener.security.protocol.map` is partially built by the custom authentication setting
-- `principal.builder.class` can be set in custom auth, and therefore can only be set once
-- listener-specific overrides occur here, and therefore `listener.name.<listener-name>.*` should not be overriden anywhere by other config settings
+Forwards compatibility will need to be mindful of the custom authentication setting, and how to handle the case of multiple listeners/multiple auth types. Explicitly, understand that:  
+
+* `listener.security.protocol.map` is partially built by the custom authentication setting -
+* `principal.builder.class` can be set in custom auth, and therefore can only be set once
+* listener-specific overrides occur here, and therefore `listener.name.<listener-name>.*` should not be overriden anywhere by other config settings
 
 ## Rejected alternatives
 
-
+Regular OAuth type authentication (via StrimziOAuth) is currently not an option due to the requirement of needing custom callback handlers. This is due to requirements of our internal security system, which need to perform extra steps when handling calls. It’s also ideal to provide a custom principal builder as well, as to allow us to distinguish between sources of authentication (aka, internal system or ssl peer certificates). 
