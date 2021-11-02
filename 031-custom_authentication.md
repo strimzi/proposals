@@ -85,7 +85,7 @@ This would require the following
 Then, when constructing the broker config, we’ll perform the following tasks:
 
 * `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
-* The protocol for this listener would be derived from the `tls` and `sasl` fields, which then would be appended to    `listener.security.protocol.map`. For example, tls and sasl both set to true would append `SSL_SASL://...`.
+* The protocol for this listener would be derived from the `tls`, which then would be appended to `listener.security.protocol.map`. The majority of authentication schemes supported by Kafka use SASL, and as a result we assume every custom authentication scheme is sasl based. So if `tls` is set to true, it would generate `SASL_SSL`, or if set to false, `SASL_PLAINTEXT`.
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
 * `TlsTrustedCertificates` functions identically to OAuth’s setting. Only a single certificate is needed in our case, but the ability to specify multiple is also allowed. This is needed as this listener, being configured with custom authentication, will allow external clients to talk with it, thus cannot use the internally generated certificates. 
 * `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI. 
