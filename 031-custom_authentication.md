@@ -27,13 +27,37 @@ listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=
 listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.class=
 listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
 listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
+listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
+listener.name.<listener-name>.gssapi.sasl.jaas.config=
+listener.name.<listener-name>.gssapi.sasl.client.callback.handler.class=
+listener.name.<listener-name>.gssapi.sasl.server.callback.handler.class=
+listener.name.<listener-name>.gssapi.sasl.login.callback.handler.class=
+listener.name.<listener-name>.plain.sasl.jaas.config=
+listener.name.<listener-name>.plain.sasl.client.callback.handler.class=
+listener.name.<listener-name>.plain.sasl.server.callback.handler.class=
+listener.name.<listener-name>.plain.sasl.login.callback.handler.class=
+listener.name.<listener-name>.scram-sha-[256, 512].sasl.jaas.config=
+listener.name.<listener-name>.scram-sha-[256, 512].sasl.client.callback.handler.class=
+listener.name.<listener-name>.scram-sha-[256, 512].sasl.server.callback.handler.class=
+listener.name.<listener-name>.scram-sha-[256, 512].sasl.login.callback.handler.class=
+listener.name.<listener-name>.sasl.enabled.mechanisms=
+listener.security.protocol.map=
+principal.builder.class=
+```
+
+To understand what this would look like for implementation, lets focus on `oauthbearer` where we would like to set the following properties.
+```
+listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=
+listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.class=
+listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
+listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
 listener.name.<listener-name>.sasl.enabled.mechanisms=
 listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
 listener.security.protocol.map=
 principal.builder.class=
 ```
 
-Taking this further, the desired yaml should look like: 
+This would require the following 
 
 ```
     listeners:
@@ -44,15 +68,18 @@ Taking this further, the desired yaml should look like:
         authentication:
           type: custom
           principal.builder.class: SimplePrincipal.class
-          security.protocol: SASL_SSL
-          sasl.enabled.mechanisms:
-            - OAUTHBEARER
           listener-config:
             oauthbearer.sasl.client.callback.handler.class: client.class
             oauthbearer.sasl.server.callback.handler.class: server.class
             oauthbearer.sasl.login.callback.handler.class: login.class
             oauthbearer.connections.max.reauth.ms: 999999999
+            sasl.enabled.mechanisms: oauthbearer
+            oauthbearer.sasl.jaas.config: |
+              org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required ;
           tlsTrustedCertificates: ...
+          secrets:
+            - name: example
+              mountPath: "/etc/example"
 ```
 
 Then, when constructing the broker config, we’ll perform the following tasks:
@@ -61,6 +88,7 @@ Then, when constructing the broker config, we’ll perform the following tasks:
 * The protocol for this listener would be derived from the `tls` and `sasl` fields, which then would be appended to    `listener.security.protocol.map`. For example, tls and sasl both set to true would append `SSL_SASL://...`.
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
 * `TlsTrustedCertificates` functions identically to OAuth’s setting. Only a single certificate is needed in our case, but the ability to specify multiple is also allowed. This is needed as this listener, being configured with custom authentication, will allow external clients to talk with it, thus cannot use the internally generated certificates. 
+* `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI. 
 
 The render config, given the above example, then should look like:
 
