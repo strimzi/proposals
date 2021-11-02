@@ -66,6 +66,8 @@ This would require the following:
         port: 9093
         type: internal
         tls: true
+        configuration:
+          brokerCertChainAndKey: ...
         authentication:
           type: custom
           sasl: true
@@ -78,7 +80,7 @@ This would require the following:
             sasl.enabled.mechanisms: oauthbearer
             oauthbearer.sasl.jaas.config: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required ;
-          brokerCertChainAndKey: ...
+          tlsTrustedCertificates: ...
           secrets:
             - name: example
               mountPath: "/etc/example"
@@ -89,7 +91,8 @@ Then, when constructing the broker config, we’ll perform the following tasks:
 * `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
 * The protocol for this listener would be derived from the `tls` and `sasl`, which then would be appended to `listener.security.protocol.map`. For example, if `tls: true` and `sasl: true`, then the protocol will be `SASL_SSL`. 
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
-* `TlsTrustedCertificates` functions identically to OAuth’s setting. Only a single certificate is needed in our case, but the ability to specify multiple is also allowed. This is needed as this listener, being configured with custom authentication, will allow external clients to talk with it, thus cannot use the internally generated certificates. 
+* `brokerCertChainAndKey` can be specified if a custom certificate wishes to be served from this listener.
+* `tlsTrustedCertificates` functions identically to OAuth’s setting. This is needed for workflows which will use custom mTLS, or mTLS + SASL workflows, as they may require to add additional certificate authorities.
 * `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI (Kerberos). 
 
 The rendered config, given the above example, should look like:
