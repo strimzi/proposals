@@ -1,6 +1,6 @@
 # Custom Authentication
 
-This proposal focuses on supporting custom authentication in the Strimzi operator.
+This proposal focuses on supporting custom authentication for SASL/mTLS in the Strimzi operator. 
 
 ## Current situation
 
@@ -10,7 +10,7 @@ However, there is no ability to specify custom authentication, which is what thi
 
 ## Motivation
 
-Supporting custom authentication allows greater flexibility for users of Strimzi who may have bespoke/proprietary authentication requirements. In addition, this would also ideally hopefully increase adoption of the operator, as it would allow for other popular third-party authentication schemes.
+Supporting custom authentication allows greater flexibility for users of Strimzi who may have bespoke/proprietary authentication requirements. Ideally, this would  increase adoption of the operator, as it would allow for other popular third-party authentication schemes.
 
 In addition, the cost of supporting custom authentication should be minimal as well, seeing as custom authn/z usually requires the end-user to build their own images. As a result, the level of expertise for such a user will be higher than the average adopter. It should also be noted that, it’s on the end-user to ensure that their custom authentication workflow works with Strimzi; the operator itself is strictly responsible for pushing down the necessary config to the broker pods. 
 
@@ -41,6 +41,7 @@ listener.name.<listener-name>.scram-sha-[256, 512].sasl.client.callback.handler.
 listener.name.<listener-name>.scram-sha-[256, 512].sasl.server.callback.handler.class=
 listener.name.<listener-name>.scram-sha-[256, 512].sasl.login.callback.handler.class=
 listener.name.<listener-name>.sasl.enabled.mechanisms=
+listener.name.<listener-name>.ssl.client.auth=
 listener.security.protocol.map=
 principal.builder.class=
 ```
@@ -57,16 +58,17 @@ listener.security.protocol.map=
 principal.builder.class=
 ```
 
-This would require the following 
+This would require the following:
 
 ```
     listeners:
-      - name: tls
+      - name: custom-auth-listener
         port: 9093
         type: internal
         tls: true
         authentication:
           type: custom
+          sasl: true
           principal.builder.class: SimplePrincipal.class
           listener-config:
             oauthbearer.sasl.client.callback.handler.class: client.class
@@ -76,7 +78,7 @@ This would require the following
             sasl.enabled.mechanisms: oauthbearer
             oauthbearer.sasl.jaas.config: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required ;
-          tlsTrustedCertificates: ...
+          brokerCertChainAndKey: ...
           secrets:
             - name: example
               mountPath: "/etc/example"
@@ -85,12 +87,12 @@ This would require the following
 Then, when constructing the broker config, we’ll perform the following tasks:
 
 * `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
-* The protocol for this listener would be derived from the `tls`, which then would be appended to `listener.security.protocol.map`. The majority of authentication schemes supported by Kafka use SASL, and as a result we assume every custom authentication scheme is sasl based. So if `tls` is set to true, it would generate `SASL_SSL`, or if set to false, `SASL_PLAINTEXT`.
+* The protocol for this listener would be derived from the `tls` and `sasl`, which then would be appended to `listener.security.protocol.map`. For example, if `tls: true` and `sasl: true`, then the protocol will be `SASL_SSL`. 
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
 * `TlsTrustedCertificates` functions identically to OAuth’s setting. Only a single certificate is needed in our case, but the ability to specify multiple is also allowed. This is needed as this listener, being configured with custom authentication, will allow external clients to talk with it, thus cannot use the internally generated certificates. 
-* `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI. 
+* `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI (Kerberos). 
 
-The render config, given the above example, then should look like:
+The rendered config, given the above example, should look like:
 
 ```
 listener.name.tls-9093.oauthbearer.sasl.client.callback.handler.class=client.class
