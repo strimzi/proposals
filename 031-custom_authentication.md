@@ -34,8 +34,8 @@ listener.security.protocol.map=
 principal.builder.class=
 ```
 
-- *<listener-name>* would be the name for a given listener. 
-- *<sasl-mechanism>* would be the sasl mechanism which you wish to configure. Seeing as users can configure/build their own sasl mechanisms, all values will be allowed for this field, rather than having an allowlist of the standard sasl mechanisms. 
+- `<listener-name>` would be the name for a given listener. 
+- `<sasl-mechanism>` would be the sasl mechanism which you wish to configure. Seeing as users can configure/build their own sasl mechanisms, all values will be allowed for this field, rather than having an allowlist of the standard sasl mechanisms. 
 
 To walkthrough an actual example, let's try configuring custom authentication for an oauthbearer workflow, where we would like to set the following properties:
 
@@ -95,7 +95,7 @@ Then, when constructing the broker config, we’ll perform the following tasks:
     
 In addition, this would allow for even more complex setups, where it would be desired to have multiple SASL mechanisms enabled. 
     
-For example, take the scenario where a user would like to support both scram-sha-512 and their own SASL mechanism:
+For example, take the scenario where a user would like to support both scram-sha-512 and their own custom SASL mechanism:
 
 ```
 listener.name.<listener-name>.ssl.keystore.location=/tmp/kafka/cluster.keystore.p12
@@ -103,6 +103,7 @@ listener.name.<listener-name>.ssl.keystore.type=PKCS12
 listener.name.<listener-name>.custom-sasl-protocol.sasl.jaas.config=my.custom.loginmodule.CustomLoginModule required;
 listener.name.<listener-name>.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required;
 listener.name.<listener-name>.sasl.enabled.mechanisms=CUSTOM_SASL_PROTOCOL,SCRAM-SHA-512
+principal.builder.class=SimplePrincipal.class
 ```
 
 All then we need to do simply configure a listener in our Kafka custom resource, with the following properties:
