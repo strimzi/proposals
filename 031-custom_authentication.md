@@ -23,42 +23,37 @@ One down-side to note is that this may not incentive users of custom auth/n to c
 Add a CustomAuthenticationKafkaListener class, which would support the following properties.
 
 ```
-listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
-listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
-listener.name.<listener-name>.gssapi.sasl.jaas.config=
-listener.name.<listener-name>.gssapi.sasl.client.callback.handler.class=
-listener.name.<listener-name>.gssapi.sasl.server.callback.handler.class=
-listener.name.<listener-name>.gssapi.sasl.login.callback.handler.class=
-listener.name.<listener-name>.plain.sasl.jaas.config=
-listener.name.<listener-name>.plain.sasl.client.callback.handler.class=
-listener.name.<listener-name>.plain.sasl.server.callback.handler.class=
-listener.name.<listener-name>.plain.sasl.login.callback.handler.class=
-listener.name.<listener-name>.scram-sha-[256, 512].sasl.jaas.config=
-listener.name.<listener-name>.scram-sha-[256, 512].sasl.client.callback.handler.class=
-listener.name.<listener-name>.scram-sha-[256, 512].sasl.server.callback.handler.class=
-listener.name.<listener-name>.scram-sha-[256, 512].sasl.login.callback.handler.class=
+listener.name.<listener-name>.<sasl-mechanism>.sasl.client.callback.handler.class=
+listener.name.<listener-name>.<sasl-mechanism>.sasl.server.callback.handler.class=
+listener.name.<listener-name>.<sasl-mechanism>.sasl.login.callback.handler.class=
+listener.name.<listener-name>.<sasl-mechanism>.connections.max.reauth.ms=
+listener.name.<listener-name>.<sasl-mechanism>.sasl.jaas.config=
 listener.name.<listener-name>.sasl.enabled.mechanisms=
 listener.name.<listener-name>.ssl.client.auth=
 listener.security.protocol.map=
 principal.builder.class=
 ```
 
-To understand what this would look like for implementation, lets focus on `oauthbearer` where we would like to set the following properties.
+- *<listener-name>* would be the name for a given listener. 
+- *<sasl-mechanism>* would be the sasl mechanism which you wish to configure. Seeing as users can configure/build their own sasl mechanisms, all values will be allowed for this field, rather than having an allowlist of the standard sasl mechanisms. 
+
+To walkthrough an actual example, let's try configuring custom authentication for an oauthbearer workflow, where we would like to set the following properties:
+
 ```
-listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=
-listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=
-listener.name.<listener-name>.sasl.enabled.mechanisms=
-listener.name.<listener-name>.oauthbearer.sasl.jaas.config=
-listener.security.protocol.map=
-principal.builder.class=
+listener.name.<listener-name>.ssl.keystore.location=/tmp/kafka/cluster.keystore.p12
+listener.name.<listener-name>.ssl.keystore.password=<password>
+listener.name.<listener-name>.ssl.keystore.type=PKCS12
+listener.name.<listener-name>.oauthbearer.sasl.client.callback.handler.class=client.class
+listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.class=server.class
+listener.name.<listener-name>.oauthbearer.sasl.login.callback.handler.class=login.class
+listener.name.<listener-name>.oauthbearer.connections.max.reauth.ms=999999999
+listener.name.<listener-name>.sasl.enabled.mechanisms=oauthbearer
+listener.name.<listener-name>.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required ;
+principal.builder.class=SimplePrincipal.class
+listener.security.protocol.map=CONTROLPLANE-9090:SSL,REPLICATION-9091:SSL,TLS-9093:SASL_SSL
 ```
 
-This would require the following:
+To achieve this, we'd simply add the following listener config to our Kafka custom resource.
 
 ```
     listeners:
@@ -67,7 +62,10 @@ This would require the following:
         type: internal
         tls: true
         configuration:
-          brokerCertChainAndKey: ...
+          brokerCertChainAndKey:
+            secretName: my-secret
+            certificate: my-certifciate.crt
+            key: my-key.key
         authentication:
           type: custom
           sasl: true
@@ -91,19 +89,43 @@ Then, when constructing the broker config, we’ll perform the following tasks:
 * `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
 * The protocol for this listener would be derived from the `tls` and `sasl`, which then would be appended to `listener.security.protocol.map`. For example, if `tls: true` and `sasl: true`, then the protocol will be `SASL_SSL`. 
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
-* `brokerCertChainAndKey` can be specified if a custom certificate wishes to be served from this listener.
-* `tlsTrustedCertificates` functions identically to OAuth’s setting. This is needed for workflows which will use custom mTLS, or mTLS + SASL workflows, as they may require to add additional certificate authorities.
+* `brokerCertChainAndKey` can be specified if a custom certificate wishes to be served from this listener. This automatically creates/shoves the specified certifciate into a keystore automatically for the user, as it's done for other authentication mechanisms today.
+* `tlsTrustedCertificates` functions identically to OAuth’s setting. This is needed for workflows which will use custom mTLS, or mTLS + SASL workflows, as they may require to add additional certificate authorities. Similar to `brokerCertChainAndKey`, a truststore is generated automatically for the user, with their provided certifciate authorities. 
 * `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI (Kerberos). 
-
-The rendered config, given the above example, should look like:
+    
+In addition, this would allow for even more complex setups, where it would be desired to have multiple SASL mechanisms enabled. 
+    
+For example, take the scenario where a user would like to support both scram-sha-512 and their own SASL mechanism:
 
 ```
-listener.name.tls-9093.oauthbearer.sasl.client.callback.handler.class=client.class
-listener.name.tls-9093.oauthbearer.sasl.server.callback.handler.class=server.class
-listener.name.tls-9093.oauthbearer.sasl.login.callback.handler.class=login.class
-listener.name.tls-9093.oauthbearer.connections.max.reauth.ms=999999999
-principal.builder.class=SimplePrincipal.class
-listener.security.protocol.map=CONTROLPLANE-9090:SSL,REPLICATION-9091:SSL,TLS-9093:SASL_SSL
+listener.name.<listener-name>.ssl.keystore.location=/tmp/kafka/cluster.keystore.p12
+listener.name.<listener-name>.ssl.keystore.type=PKCS12
+listener.name.<listener-name>.custom-sasl-protocol.sasl.jaas.config=my.custom.loginmodule.CustomLoginModule required;
+listener.name.<listener-name>.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required;
+listener.name.<listener-name>.sasl.enabled.mechanisms=CUSTOM_SASL_PROTOCOL,SCRAM-SHA-512
+```
+
+All then we need to do simply configure a listener in our Kafka custom resource, with the following properties:
+
+```
+    listeners:
+      - name: custom-auth-listener
+        port: 9093
+        type: internal
+        tls: true
+        configuration:
+          brokerCertChainAndKey:
+            secretName: my-secret
+            certificate: my-certifciate.crt
+            key: my-key.key
+        authentication:
+          type: custom
+          sasl: true
+          principal.builder.class: SimplePrincipal.class
+          listener-config:
+            custom-sasl-protocol.sasl.jaas.config: my.custom.loginmodule.CustomLoginModule required;
+            scram-sha-512.sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required;
+            sasl.enabled.mechanisms: CUSTOM_SASL_PROTOCOL,SCRAM-SHA-512
 ```
 
 ### Additional considerations 
