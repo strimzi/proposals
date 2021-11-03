@@ -14,7 +14,7 @@ This solution will have a huge business impact for the Azure cloud community bec
 
 ## Proposal
 
-We already have implemented the AuthenticateCallbackHandler interface with MSI, our only request is to support configuration for 'sasl.login.callback.handler.class' which appears in two places in the code that are relevant to MMM2;
+We already have implemented the AuthenticateCallbackHandler interface with MSI, our only request is to support configuration for 'sasl.login.callback.handler.class' which appears in two places in the code that are relevant to MM2;
 
 (1) KafkaMirrorMaker2AssemblyOperator class
 in the addClusterToMirrorMaker2ConnectorConfig method - make the 'SASL_LOGIN_CALLBACK_HANDLER_CLASS' configurable
@@ -40,7 +40,7 @@ N/A
 ## Rejected alternatives
 
 I did go through the https://github.com/strimzi/proposals/pull/41 proposals,
-I think that our case is more simple as we just need to add one that implementation and configuration.
+I think that our case is more simple as we just need to add that one implementation and configuration.
 Moreover, this can be another feature Strimzi has built-in, and it will be reusable for the Azure community.
 Strimzi will now have not only the ability to mirror between EH, a solution that does not exists today, but also doing it with the commonly used authentication of azure identity.
 
