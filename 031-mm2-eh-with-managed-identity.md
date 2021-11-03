@@ -43,7 +43,3 @@ I did go through the https://github.com/strimzi/proposals/pull/41 proposals,
 I think that our case is more simple as we just need to add that one implementation and configuration.
 Moreover, this can be another feature Strimzi has built-in, and it will be reusable for the Azure community.
 Strimzi will now have not only the ability to mirror between EH, a solution that does not exists today, but also doing it with the commonly used authentication of azure identity.
-
-
-
-Corrected with https://www.corrector.co/
