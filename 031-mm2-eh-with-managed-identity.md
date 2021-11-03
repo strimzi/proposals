@@ -22,7 +22,7 @@ in the addClusterToMirrorMaker2ConnectorConfig method - make the 'SASL_LOGIN_CAL
 (2) kafka_connect_config_generator.sh script
 make the 'OAUTH_CALLBACK_CLASS' configurable
 
-One that is done, we can contribute our additional implementation under io.strimzi.kafka.oauth.client package.
+Once that is done, we can contribute our additional implementation under io.strimzi.kafka.oauth.client package.
 
 As far as I saw, the other props are already configurable, please correct me if I'm wrong:
 "sasl.mechanism": "OAUTHBEARER"
