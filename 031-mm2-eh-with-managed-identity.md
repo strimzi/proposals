@@ -1,7 +1,7 @@
 # EventHub MirrorMaker2 with Managed Identity Custom Authentication
 
 Hello, as part of my team’s work at Microsoft, we would like to use Strimzi MirrorMaker2 to mirror between eventhubs both as source and target.
-We managed to deploy Strimzi MirrorMaker2 using our event hubs and now, we would like to contribute an additional implementation of the AuthenticateCallbackHandler class.
+We managed to deploy Strimzi MirrorMaker2 using our event hubs and now, and mirror the events that were loaded. we would like to contribute an additional implementation of the AuthenticateCallbackHandler class.
 This implementation will include authenticating with Azure Managed Identity (MSI), which is widely used in the Azure cloud community.
 
 ## Current situation
