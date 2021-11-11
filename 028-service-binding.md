@@ -279,7 +279,8 @@ metadata:
 type: Opaque
 data:
   password: Z2VuZXJhdGVkcGFzc3dvcmQ=
-  sasl.jaas.config: # value when base64 decoded looks like -> org.apache.kafka.common.security.scram.ScramLoginModule required username="my-user" password="password";
+  # value when base64 decoded looks like -> org.apache.kafka.common.security.scram.ScramLoginModule required username="my-user" password="generatedpassword";
+  sasl.jaas.config: b3JnLmFwYWNoZS5rYWZrYS5jb21tb24uc2VjdXJpdHkuc2NyYW0uU2NyYW1Mb2dpbk1vZHVsZSByZXF1aXJlZCB1c2VybmFtZT0ibXktdXNlciIgcGFzc3dvcmQ9ImdlbmVyYXRlZHBhc3N3b3JkIjs=
 ```
 
 However, currently the status of the `KafkaUser` does not contain the `status.binding` information and the username is missing from the secret.
