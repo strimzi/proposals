@@ -42,7 +42,8 @@ Required changes:
 
 Considerations:
 
- - In this approach a lot of work is still left up to the user to discover the cluster certificate and the bootstrap server address to use.
+ - In this approach a lot of work is still left up to the application developer to make sure their application has the correct cluster certificate and bootstrap server address.
+   - Either they would have to look up the cluster certificate and bootstrap server address and hard code it into their application or a secret in their cluster, or they would have to write custom logic into their app so that it can query the Kafka CR.
 
 ### 2 - Application uses multiple ServiceBinding resources
 
@@ -54,11 +55,23 @@ Required changes:
 - Update the secret created for the `KafkaUser` to include the username when the `KafkaUser` is using type SASL SCRAM
 - Update the `Kafka` CR to include a `status.binding` field, where the `name` refers to a new secret containing both the cluster certificate and bootstrapServers
 - Add a new secret that contains the bootstrap servers for each listener and the cluster certificate information
+  - e.g. for listeners the secret data could be formatted like:
+    ```yaml
+    data:
+      listeners:
+        - name: internal
+          bootstrapServers: kafka.svc:9092
+        - name: external
+          bootstrapServers: myhost.com:443
+      ca.crt: # Strimzi cluster CA certificate
+      ca.p12: # PKCS #12 archive file for Strimzi cluster CA certificate
+      ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
+    ```
 
 Considerations:
 
  - This approach results in a new secret being required that contains copies of existing secrets
- - It does not help the user to decide which listener to use
+ - It does not help the user to decide which listener to use. The application would need to parse the secret to pick out the correct listener from the list
 
 ### 3 - Application binds to KafkaUser resource that contains all details
 
@@ -74,11 +87,12 @@ Required changes:
 Considerations:
 
 - This approach results in a lot more information being added to each `KafkaUser` secret
-- It does not help the user to decide which listener to use
+- It does not help the user to decide which listener to use. The application would need to parse the secret to pick out the correct listener from the list
 
-Possible extensions:
+Possible extensions to allow only one bootstrap server to be listed:
 
  - Could only add bootstrap server addresses for listeners that support the authentication type that the `KafkaUser` supports
+ - Could update the `KafkaUser` CR to include `spec.binding.listener` field which would then determine the listener bootstrap server address that is added to the secret
 
 ### 4 - Application can bind to a single custom resource
 
@@ -88,7 +102,7 @@ Required changes:
 
  - Add a new Custom Resource called `KafkaConnection`
  - The `KafkaConnection` spec has several fields, cluster, listener and user, that refer to the `Kafka`, the specific listener and the `KafkaUser` that should be used
- - The Strimzi operator adds a `spec.binding` to the `KafkaConnection` status
+ - The Strimzi operator adds a `status.binding` to the `KafkaConnection` status
  - The Strimzi operator add a new secret containing all the required information
  
 Considerations:
@@ -265,6 +279,7 @@ metadata:
 type: Opaque
 data:
   password: Z2VuZXJhdGVkcGFzc3dvcmQ=
+  sasl.jaas.config: b3JnLmFwYWNoZS5rYWZrYS5jb21tb24uc2VjdXJpdHkuc2NyYW0u
 ```
 
 However, currently the status of the `KafkaUser` does not contain the `status.binding` information and the username is missing from the secret.
