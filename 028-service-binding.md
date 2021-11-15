@@ -67,6 +67,8 @@ Required changes:
       ca.p12: # PKCS #12 archive file for Strimzi cluster CA certificate
       ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
     ```
+    
+**Note:** The Service Binding spec does contain some suggested secret fields for certificates, but they will not suffice to encapsulate all the certificate related information that an application needs. Hence, the suggestion of the separate fields above.
 
 Considerations:
 
@@ -104,6 +106,63 @@ Required changes:
  - The `KafkaConnection` spec has several fields, cluster, listener and user, that refer to the `Kafka`, the specific listener and the `KafkaUser` that should be used
  - The Strimzi operator adds a `status.binding` to the `KafkaConnection` status
  - The Strimzi operator add a new secret containing all the required information
+
+Example `KafkaConnection` CR:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnection
+metadata:
+  name: barista-kafka
+spec:
+  kafka:
+    apiVersion: kafka.strimzi.io/v1beta2
+    kind: Kafka
+    name: my-cluster
+    namespace: my-namespace # optional
+    listener: # optional
+      name: tls # optional
+  user: # optional
+    apiVersion: kafka.strimzi.io/v1beta2
+    kind: KafkaUser
+    name: my-barista
+    namespace: my-namespace # optional
+status:
+  binding:
+    name: barista-kafka
+```
+
+Example `Secret` created by Strimzi:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: barista-kafka
+  namespace: my-namespace
+type: Opaque
+  data:
+    bootstrapServer: # comma separated list of host:port
+  # Provided if TLS enabled:
+    ca.crt: #  Strimzi cluster CA certificate
+    ca.p12: #  PKCS #12 archive file for Strimzi cluster CA certificate
+    ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
+  # Provided if selected user is SCRAM auth:
+    username: # SCRAM username
+    password: # SCRAM password
+    sasl.jaas.config: # sasl jaas config string for use by Java applications
+  # Provided if selected user is mTLS:
+    user.p12: # client certificate for the consuming client PKCS #12 archive file for storing certificates and keys
+    user.password: # password for protecting the client certificate PKCS #12 archive file
+    user.crt: # certificate for the consuming client signed by the clients' CA
+    user.key: # private key for the consuming client
+```
+
+Naming of secret keys:
+
+The names for the keys given above match what is currently provided in other secrets created by Strimzi. The service binding specification does included some suggested fields for certificates, but they do not satisfy the requirements of an application connecting to Strimzi. These fields could be proposed back to the Service Binding specification.
+
+An alternative approach for naming is to name the fields to match the use, for example `ca` -> `truststore` (`truststore.crt`, `truststore.p12`, `truststore.password`), `user` -> `keystore` (`keystore.p12`, `keystore.password`, `keystore.crt`, `keystore.key`)
  
 Considerations:
 
