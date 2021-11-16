@@ -56,6 +56,10 @@ listener.security.protocol.map=CONTROLPLANE-9090:SSL,REPLICATION-9091:SSL,TLS-90
 To achieve this, we'd simply add the following listener config to our Kafka custom resource.
 
 ```
+spec:
+  kafka:
+    config:
+      principal.builder.class: SimplePrincipal.class
     listeners:
       - name: custom-auth-listener
         port: 9093
@@ -69,7 +73,6 @@ To achieve this, we'd simply add the following listener config to our Kafka cust
         authentication:
           type: custom
           sasl: true
-          principal.builder.class: SimplePrincipal.class
           listener-config:
             oauthbearer.sasl.client.callback.handler.class: client.class
             oauthbearer.sasl.server.callback.handler.class: server.class
@@ -81,17 +84,16 @@ To achieve this, we'd simply add the following listener config to our Kafka cust
           tlsTrustedCertificates: ...
           secrets:
             - name: example
-              mountPath: "/etc/example"
 ```
 
 Then, when constructing the broker config, we’ll perform the following tasks:
 
-* `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, we need to ensure that no other listeners override this property, and if they do and are different, then fail-hard.
+* `Principal`, if set, is set cluster-wide for all authentication methods. This is a limitation of Kafka, which only allows one principal to be specified for the entire cluster. If set, this override will always be used, even if another authentication type, such as OAuth, purposefully overrides this. 
 * The protocol for this listener would be derived from the `tls` and `sasl`, which then would be appended to `listener.security.protocol.map`. For example, if `tls: true` and `sasl: true`, then the protocol will be `SASL_SSL`. 
 * Each configuration entry under `listener-config` would be pre-appended with `listener.name.<listener-name>`. 
 * `brokerCertChainAndKey` can be specified if a custom certificate wishes to be served from this listener. This automatically creates/shoves the specified certifciate into a keystore automatically for the user, as it's done for other authentication mechanisms today.
 * `tlsTrustedCertificates` functions identically to OAuth’s setting. This is needed for workflows which will use custom mTLS, or mTLS + SASL workflows, as they may require to add additional certificate authorities. Similar to `brokerCertChainAndKey`, a truststore is generated automatically for the user, with their provided certifciate authorities. 
-* `secrets` allows to specify a list of secrets to mount to the pod. This is needed for workflows which need additional credentials locally, such as GSSAPI (Kerberos). 
+* `secrets` allows to specify a list of secrets to mount to the pod to the directory `/mnt/strimzi/custom-auth-secrets/<listener-name>`. This is needed for workflows which need additional credentials locally, such as GSSAPI (Kerberos). 
     
 In addition, this would allow for even more complex setups, where it would be desired to have multiple SASL mechanisms enabled. 
     
