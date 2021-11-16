@@ -55,17 +55,22 @@ Required changes:
 - Update the secret created for the `KafkaUser` to include the username when the `KafkaUser` is using type SASL SCRAM
 - Update the `Kafka` CR to include a `status.binding` field, where the `name` refers to a new secret containing both the cluster certificate and bootstrapServers
 - Add a new secret that contains the bootstrap servers for each listener and the cluster certificate information
-  - e.g. for listeners the secret data could be formatted like:
+  - e.g. for listeners, the secret data could be formatted to have one string with all listeners:
     ```yaml
     data:
-      listeners:
-        - name: internal
-          bootstrapServers: kafka.svc:9092
-        - name: external
-          bootstrapServers: myhost.com:443
+      listeners: aW50ZXJuYWxfa2Fma2Euc3ZjOjkwOTIsZXh0ZXJuYWxfbXlob3N0LmNvbTo0NDM= # when base64 decoded something like internal_kafka.svc:9092,external_myhost.com:443
       ca.crt: # Strimzi cluster CA certificate
       ca.p12: # PKCS #12 archive file for Strimzi cluster CA certificate
       ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
+    ```
+  - e.g. the secret could contain a separate entry for each listener:
+    ```yaml
+    data:
+    listener.internal: aW50ZXJuYWxfbG9jYWxob3N0OjkwODA= # when base64 decoded something like internal_kafka.svc:9092
+    listener.external: ZXh0ZXJuYWxfbXlob3N0LmNvbTo0NDM= # when base64 decoded something like external_myhost.com:443
+    ca.crt: # Strimzi cluster CA certificate
+    ca.p12: # PKCS #12 archive file for Strimzi cluster CA certificate
+    ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
     ```
     
 **Note:** The Service Binding spec does contain some suggested secret fields for certificates, but they will not suffice to encapsulate all the certificate related information that an application needs. Hence, the suggestion of the separate fields above.
@@ -167,7 +172,7 @@ An alternative approach for naming is to name the fields to match the use, for e
 Considerations:
 
 - This approach results in a new Custom Resource type that is just for convenience
-- The application developer still has to decide which cluster, user and listener to choose
+- Someone, whether it is the application developer or owner of the Kafka cluster, has to decide which KafkaConnection resources to create and which cluster, user and listener to choose
 - A lot more changes required than other approaches, but perhaps fits best with the Service Binding Operator view of the world
 
 ## Overview of Service Binding specification
