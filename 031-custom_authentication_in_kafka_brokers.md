@@ -1,12 +1,12 @@
-# Custom Authentication
+# Custom Authentication in Kafka Brokers 
 
-This proposal focuses on supporting custom authentication for SASL/mTLS in the Strimzi operator. 
+This proposal focuses on supporting custom authentication in Kafka Brokers for SASL/mTLS mechanisms via the Strimzi operator.
 
 ## Current situation
 
-Currently, numerous authentication methods are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/0.25.0/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/0.25.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549).
+Currently, numerous authentication methods for brokers are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/0.25.0/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/0.25.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549).
 
-However, there is no ability to specify custom authentication, which is what this proposal will focus on.
+However, there is no current ability to specify custom authentication for Kafka Brokers, which is what this proposal will focus on.
 
 ## Motivation
 
@@ -163,7 +163,6 @@ public final class CustomKafkaPrincipalBuilder implements KafkaPrincipalBuilder 
 ```
 
 Another thing to be mindful of, is to ensure your **CustomAuthorizer** supports `super.users`, and the default KafkaPrincipal to ensure seamless integration with Strimzi. This is relevant as in the case of using a custom principal builder, you’re most likely using a CustomAuthorizer as well. 
-
 
 ### Testing strategy
 
