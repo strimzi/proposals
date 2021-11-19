@@ -67,6 +67,8 @@ metadata:
   namespace: my-namespace
 type: Opaque
   data:
+    type: kafka
+    provider: strimzi
     bootstrapServer: # comma separated list of host:port
   # Provided if TLS enabled:
     ca.crt: #  Strimzi cluster CA certificate
