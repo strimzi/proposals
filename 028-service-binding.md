@@ -12,7 +12,7 @@ Contents:
  - [Proposal](#proposal)
  - [Rejected Alternatives](#rejected-alternatives)
  - [Overview of Service Binding specification](#overview-of-service-binding-specification)
- - [Connecting to Strimzi](#connecting-to-strimzi)
+ - [Connecting to Strimzi today](#connecting-to-strimzi-today)
 
 ## Current problems with integrating Strimzi and a Service Binding Operator
 
@@ -247,7 +247,9 @@ spec:
     name: my-user
 ```
 
-## Connecting to Strimzi
+## Connecting to Strimzi today
+
+This section shows what and where the current set of credentials are exposed by Strimzi as an easy reference for discussions. 
 
 To connect to Strimzi, a service binding needs the following:
 
@@ -255,13 +257,13 @@ To connect to Strimzi, a service binding needs the following:
 * **port** - port number
 * **userName** - username, optional
 * **password** - password or token, optional
-* **certificate** - certificate, optional
+* **certificates** - one or more certificates, optional
 
-Some of this comes from the `Kafka` CR and some from `KafkaUser`. Below is detailed the requirements for different configurations of Strimzi and why the current behaviour does not conform to the Service Binding spec.
+Currently some of this comes from the `Kafka` CR, some from a certificate secret and some from `KafkaUser`.
 
-## Binding to a Kafka cluster with no TLS or authentication
+## Host and port
 
-The bootstrapServers address for clients to use is currently in the `status` of the `Kafka CR`:
+The host and port for clients to use is currently contained in the bootstrapServers address in the `status` of the `Kafka CR`:
 
 ``` yaml
 status:
@@ -278,28 +280,29 @@ status:
     bootstrapServers: my-cluster-kafka-bootstrap.my-namespace.svc:9093
 ```
 
-The problem with the location of this data is that it is not contained in a `Secret` and is therefore not accessible to a Service Binding Operator. Since there are also multiple listeners to choose from it is not obvious which should be placed in a `Secret` or how the application chooses the correct listener to call.
+## Kafka cluster certificate
 
-## Binding to a Kafka cluster with TLS but no authentication
+If TLS is enabled for an endpoint, Kafka clients need access to the CA certificate that signed the broker's server certificate.
 
-The addition with this scenario is that Kafka clients need access to the CA certificate that signed the broker's server certificate.
+The CA certificate is most easily obtained from the `<cluster>-cluster-ca-cert` secret:
 
-The CA certificate is most easily obtained from the `<cluster>-cluster-ca-cert` secret. While this name is predictable, it is not known to the Service Binding Operator. In addition the application also needs the bootstrapServer information, but that is not contained in the currently provided `Secret`.
+``` yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cluster-cluster-ca-cert
+type: Opaque
+data:
+  ca.p12: # CA certificate PKCS #12 archive file for storing certificates and keys
+  ca.password: # password for protecting the CA certificate PKCS #12 archive file
+  ca.crt: # CA certificate for the cluster
+```
 
-The consuming client needs to know the following binding information:
+## User specific credentials
 
-* **bootstrapServer** - bootstrap server information for the listener it is contacting
-* **ca.p12** - CA certificate PKCS #12 archive file for storing certificates and keys
-* **ca.password** - password for protecting the CA certificate PKCS #12 archive file
-* **ca.crt** - CA certificate for the cluster
+Strimzi provides the `KafkaUser` custom resource as a way of managing users and credentials. There are two authentication options, using mutual TLS or SASL SCRAM.
 
-This information is spread across the `Kafka` CR and the `Secret`.
-
-## Binding to a Kafka cluster with username/password authentication
-
-Strimzi provides the `KafkaUser` custom resource as a way of managing users and credentials. Using the SASL SCRAM mechanism, the consuming client's credentials are made available in a combination of the CR's status and a secret.
-
-The `KafkaUser` CR contains information about the user and the secret with the password. For example:
+The `KafkaUser` CR status includes the username and name of the secret containing credentials:
 
 ``` yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -310,7 +313,7 @@ metadata:
     strimzi.io/cluster: my-cluster
 spec:
   authentication:
-    type: scram-sha-512
+    type: # scram-sha-512 or tls
   authorization:
     type: simple
     acls:
@@ -324,7 +327,7 @@ status:
   secret: my-user
 ```
 
-The secret looks like this:
+The referenced secret contains the password and sasl.jaas.config in the SASL case, and certificate files in the mTLS case:
 
 ``` yaml
 apiVersion: v1
@@ -336,79 +339,13 @@ metadata:
     strimzi.io/cluster: my-cluster
 type: Opaque
 data:
+# Provided if selected user is SCRAM auth:
   password: Z2VuZXJhdGVkcGFzc3dvcmQ=
   # value when base64 decoded looks like -> org.apache.kafka.common.security.scram.ScramLoginModule required username="my-user" password="generatedpassword";
   sasl.jaas.config: b3JnLmFwYWNoZS5rYWZrYS5jb21tb24uc2VjdXJpdHkuc2NyYW0uU2NyYW1Mb2dpbk1vZHVsZSByZXF1aXJlZCB1c2VybmFtZT0ibXktdXNlciIgcGFzc3dvcmQ9ImdlbmVyYXRlZHBhc3N3b3JkIjs=
-```
-
-However, currently the status of the `KafkaUser` does not contain the `status.binding` information and the username is missing from the secret.
-
-When you combine this with the use of TLS that means the following information is required:
-
-* **bootstrapServer** - bootstrap server information for the listener the application is calling
-* **ca.p12** - CA certificate PKCS #12 archive file for storing certificates and keys
-* **ca.password** - password for protecting the CA certificate PKCS #12 archive file
-* **ca.crt** - CA certificate for the cluster
-* **username** - username for the consuming client
-* **password** - password for the consuming client
-
-This information is spread across the `Kafka` CR, the `KafkaUser` CR and two `Secret` resources.
-
-
-## Binding to a Kafka cluster with mutual TLS authentication
-
-The `KafkaUser` CR contains the name of the secret that has the certificate information. For example:
-
-``` yaml
-apiVersion: kafka.strimzi.io/v1beta1
-kind: KafkaUser
-metadata:
-  name: my-user
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  authentication:
-    type: tls
-  authorization:
-    type: simple
-    acls:
-    - resource:
-        type: topic
-        name: my-topic
-        patternType: literal
-      operation: Read
-status:
-  username: my-user-name
-  secret: my-user
-```
-
-The secret looks like this:
-
-``` yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: my-user
-  labels:
-    strimzi.io/kind: KafkaUser
-    strimzi.io/cluster: my-cluster
-type: Opaque
-data:
+# Provided if selected user is mTLS:
   user.p12:      # User PKCS #12 archive file for storing certificates and keys
   user.password: # Password for protecting the user certificate PKCS #12 archive file
   user.crt:      # Public key of the user
   user.key:      # Private key of the user
 ```
-
-The binding application needs the following information:
-
-* **bootstrapServer** - bootstrap server information for the listener the application is calling
-* **ca.p12** - CA certificate PKCS #12 archive file for storing certificates and keys
-* **ca.password** - password for protecting the CA certificate PKCS #12 archive file
-* **ca.crt** - CA certificate for the cluster
-* **user.p12** - client certificate for the consuming client PKCS #12 archive file for storing certificates and keys
-* **user.password** - password for protecting the client certificate PKCS #12 archive file
-* **user.crt** - certificate for the consuming client signed by the clients' CA
-* **user.key** - private key for the consuming client
-
-This information is spread across the `Kafka` CR, the `KafkaUser` CR and two `Secret` resources.
