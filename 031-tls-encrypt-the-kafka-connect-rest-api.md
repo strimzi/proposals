@@ -18,7 +18,7 @@ There is currently no way to TLS encrypt the Kafka Connect REST API, leaving the
 
 This proposal adds REST api configuration options to the `KafkaMirrorMaker2` and `KafkaConnect` CRDs.
 
-A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `restListeners`, which allows users to configure an HTTP listener on port 8443, an encrypted HTTPS listener on port 8443, or both in the Kafka Connect configuration.
+A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `restListeners`, which allows users to configure an HTTP listener on port 8083, an encrypted HTTPS listener on port 8443, or both in the Kafka Connect configuration.
 This enables users to access the REST API with TLS if required.
 The `KafkaConnector`, `KafkaConnect` and `KafkaMirrorMaker2` operators will use the TLS encrypted listener when it is enabled, even if an unencrypted listener is present.
 
@@ -27,8 +27,7 @@ The `restListeners` field is designed for potential future extension, and is a l
 For this proposal, the `protocol` field only supports two values: `http` and `https`. If the `restListeners` list is empty the `KafkaConnect` and `KafkaMirrorMaker2` 
 runtimes will be created with a single unencrypted listener on 8083 to match the existing behaviour.
 
-The `restCertChainAndKey` field will be required if the `https` protocol is selected. This field will contain the certificate and key the Kafka Connect operator will 
-use to create the self-signed certificate. The Kafka Connect and MirrorMaker2 operators will use the certificate to create a truststore for communicating with the REST API.
+The `restCertChainAndKey` field will be required if the `https` protocol is selected.
 
 For example, the following CR will enable the HTTP listener on port 8083 and the HTTPS listener on port 8443:
 ```
@@ -41,7 +40,7 @@ spec:
   ...
 ```
 
-The schema for `restListeners` will also include properties to provide the certificate and key that should be used to create the self-signed certificate and for the operators to use to communicate with Kafka Connect as follows:
+The schema for `restListeners` will be as follows:
 ```
 openAPIV3Schema:
   type: object
@@ -98,6 +97,41 @@ listeners.https.ssl.keystore.password: ***generated password***
 listeners.https.ssl.keystore.type: PKCS12
 ```
 
+### Certificates
+
+If the user decides to enable an encrypted HTTPS listener, they must have the `restCertChainAndKey` 
+property present in the `KafkaConnect` CR. The property must point to an existing secret that contains the 
+CA certificate and CA private key that they want Kafka Connect to use. This secret can be created by the 
+user, or it can be the [Strimzi cluster CA secret](#using-the-strimzi-cluster-ca).
+
+The CA certificate and CA private key configured by the user in the `KafkaConnect` CR will be used by the Kafka Connect 
+operator to generate a self-signed certificate. This self-signed certificate will be used to configure the keystore and 
+truststore for Kafka Connect. The CA certificate will also be used to generate a truststore 
+that the Strimzi operators, e.g. KafkaConnector, MirrorMaker2 can use when communicating with Kafka Connect.
+
+#### Using the Strimzi cluster CA
+
+If the Kafka Connect cluster is connecting to a Kafka instance that is managed by Strimzi, the user can configure the 
+`restCertChainAndKey` property to point to the Strimzi cluster CA.
+
+A `KafkaConnect` instance with a secure endpoint using the cluster CA will look like:
+
+```
+apiVersion: kafka.strimzi.io/v1beta1
+kind: KafkaConnect
+spec:
+  restListeners:
+  - protocol: https
+    restCertChainAndKey:
+      secretName: <cluster-name>-cluster-ca
+      key: ca.key
+      certificate: ca.crt
+  ...
+```
+
+As part of this proposal the `<cluster-name>-cluster-ca` secret will be updated to include the cluster CA certificate 
+as currently it only includes the private key.
+
 ### Certificate renewals
 
 The self-signed TLS certificate will have a 1-year expiration.
@@ -109,28 +143,6 @@ This would need to be a multi-phase process consisting of the following steps:
 2. Distribute the new certificate to all pods and cluster operator truststores
 3. Replace the key and roll all Connect pods
 4. When the old certificate expires, remove it from the truststores and roll all Connect pods
-
-### Using the Strimzi cluster CA
-
-The updated `KafkaConnect` CR requires a single secret containing the CA private key and certificate. When a `KafkaConnect` resource 
-is deployed that uses a Kafka instance managed by Strimzi the user should select the Strimzi cluster CA. Currently the private key and 
-certificate for the Strimzi cluster CA are spread over two secrets: `<cluster-name>-cluster-ca` and `<cluster-name>-cluster-cert`.
-
-As part of this proposal the `<cluster-name>-cluster-ca` will be updated to include the cluster CA certificate. A `KafkaConnect` instance 
-with a secure endpoint using the cluster CA will look like:
-
-```
-apiVersion: kafka.strimzi.io/v1beta1
-kind: KafkaConnect
-spec:
-  restListeners:
-  - protocol: https
-    restCertChainAndKey:
-      secretName: <cluster-name>-cluser-ca
-      key: ca.key
-      certificate: ca.crt
-  ...
-```
 
 ## Affected/not affected projects
 
