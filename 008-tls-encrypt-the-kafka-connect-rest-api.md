@@ -1,5 +1,7 @@
 # TLS encrypting the Kafka Connect REST API
 
+**This proposal is outdated, the updated version of this proposal is [#31](031-tls-encrypt-the-kafka-connect-rest-api.md).**
+
 This proposal reduces access to the Kafka Connect REST API by enabling TLS encryption on the Kafka Connect REST listener when the connectors running on the Kafka Connect cluster are managed by the `KafkaConnector` or `KafkaMirrroMaker2` operators.
 
 ## Current situation
