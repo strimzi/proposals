@@ -8,13 +8,13 @@ Today, Strimzi does not fit very nicely with service binding, it both lacks the 
 
 Contents:
 
- - [Current problems with integrating Strimzi and a Service Binding Operator](#current-problems-with-integrating-strimzi-and-a-service-binding-operator)
+ - [Current situation](#current-situation)
  - [Proposal](#proposal)
  - [Rejected Alternatives](#rejected-alternatives)
  - [Overview of Service Binding specification](#overview-of-service-binding-specification)
  - [Connecting to Strimzi today](#connecting-to-strimzi-today)
 
-## Current problems with integrating Strimzi and a Service Binding Operator
+## Current situation
 
 At a high level these are the current problems that make integrating Strimzi with a Service Binding Operator hard:
 
@@ -91,11 +91,34 @@ The names for the keys given above match what is currently provided in other sec
 
 An alternative approach for naming is to name the fields to match the use, for example `ca` -> `truststore` (`truststore.crt`, `truststore.p12`, `truststore.password`), `user` -> `keystore` (`keystore.p12`, `keystore.password`, `keystore.crt`, `keystore.key`)
  
-Considerations:
 
-- This approach results in a new Custom Resource type that is just for convenience
-- Someone, whether it is the application developer or owner of the Kafka cluster, has to decide which KafkaConnection resources to create and which cluster, user and listener to choose
-- A lot more changes required than other approaches, but perhaps fits best with the Service Binding Operator view of the world
+### Implementation
+
+This proposal will result in a new `KafkaConnectionAssemblyOperator` class being added to the `cluster-operator` directory in the `strimzi-kafka-operator` repo. The class will be 
+deployed as a separate Verticle and have its own reconcile loop.
+
+The actions taken during the reconcile loop will be:
+1. On start-up the operator will watch all resources of Kind `KafkaConnection`.
+2. For any `KafkaConnection` resource present it will perform a GET request on the Kafka cluster that is 
+referenced in the `KafkaConnection` and pick out the configured listeners.
+3. If there are multiple listeners listed in the `Kafka` CR with the type `internal`, the operator 
+will filter the list by comparing the `tls` and `authentication` properties in the `Kafka` and `KafkaUser` CRs.
+4. If there are still multiple listeners it will pick one at random.
+5. The operator will add the name of the listener chosen will be added to the `KafkaConnection` status so that in future reconciles 
+the operator can take this into account in step 4 and avoid cycling through listeners.
+6. If there are no listeners marked as type `internal`, the reconcile loop will fail.
+7. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
+8. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
+9. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
+from the status if it is provided. The operator will also perform a GET request on the user secret to get any credentials. 
+10. The operator will add the cluster certificate and any user related credentials to the secret it created earlier.
+11. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
+12. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
+13. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
+
+## Compatibility
+
+This proposal does not change any of the existing CRDs or the secrets that are being created. Instead it adds a new CRD and secret.
 
 ## Rejected Alternatives
 
