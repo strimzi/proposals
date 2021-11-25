@@ -1,6 +1,6 @@
 # TLS encrypting the Kafka Connect REST API
 
-This proposal adds the option to reduce access to the Kafka Connect REST API by enabling TLS encryption on the Kafka Connect REST listener.
+This proposal adds the option to encrypt communication with the Kafka Connect REST API by enabling TLS encryption on the Kafka Connect REST listener.
 
 ## Current situation
 
@@ -12,22 +12,26 @@ Users can define further network policies to override the default policy and all
 
 ## Motivation
 
-There is currently no way to TLS encrypt the Kafka Connect REST API, leaving the Connect REST listener as perhaps the last key endpoint that cannot currently be restricted using Strimzi.
+There is currently no way to TLS encrypt the Kafka Connect REST API, leaving the Connect REST listener as perhaps the last key endpoint that cannot currently be encrypted using Strimzi.
 
 ## Proposal
 
 This proposal adds REST api configuration options to the `KafkaMirrorMaker2` and `KafkaConnect` CRDs.
 
-A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `restListeners`, which allows users to configure an HTTP listener on port 8083, an encrypted HTTPS listener on port 8443, or both in the Kafka Connect configuration.
+A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `restListeners`, which allows users to configure the Kafka Connect configuration to have:
+  - a single HTTP listener on port 8083
+  - a single encrypted HTTPS listener on port 8443
+  - both an HTTP listener on port 8083 and an encrypted HTTPS listener on port 8443
+  
 This enables users to access the REST API with TLS if required.
 The `KafkaConnector`, `KafkaConnect` and `KafkaMirrorMaker2` operators will use the TLS encrypted listener when it is enabled, even if an unencrypted listener is present.
 
-The `restListeners` field is designed for potential future extension, and is a list of items that contains a `protocol` field and an optional `restCertChainAndKey` field.
+The `restListeners` field is designed for potential future extension, and is a list of items that contains a `protocol` field and an optional `caCertChainAndKey` field.
 
 For this proposal, the `protocol` field only supports two values: `http` and `https`. If the `restListeners` list is empty the `KafkaConnect` and `KafkaMirrorMaker2` 
 runtimes will be created with a single unencrypted listener on 8083 to match the existing behaviour.
 
-The `restCertChainAndKey` field will be required if the `https` protocol is selected.
+The `caCertChainAndKey` field will be required if the `https` protocol is selected.
 
 For example, the following CR will enable the HTTP listener on port 8083 and the HTTPS listener on port 8443:
 ```
@@ -59,7 +63,7 @@ openAPIV3Schema:
                 - http
                 - https
                 description: The protocol of the REST listener.
-              restCertChainAndKey:
+              caCertChainAndKey:
                 type: object
                 properties:
                   certificate:
@@ -89,9 +93,6 @@ listeners: https://:8443,http://:8083
 rest.advertised.listener: https
 rest.advertised.port: 8443
 listeners.https.ssl.client.auth: none
-listeners.https.ssl.truststore.location: /tmp/kafka/kafka-connect-rest.truststore.p12
-listeners.https.ssl.truststore.password: ***generated password***
-listeners.https.ssl.truststore.type: PKCS12
 listeners.https.ssl.keystore.location: /tmp/kafka/kafka-connect-rest.keystore.p12
 listeners.https.ssl.keystore.password: ***generated password***
 listeners.https.ssl.keystore.type: PKCS12
@@ -99,7 +100,7 @@ listeners.https.ssl.keystore.type: PKCS12
 
 ### Certificates
 
-If the user decides to enable an encrypted HTTPS listener, they must have the `restCertChainAndKey` 
+If the user decides to enable an encrypted HTTPS listener, they must have the `caCertChainAndKey` 
 property present in the `KafkaConnect` CR. The property must point to an existing secret that contains the 
 CA certificate and CA private key that they want Kafka Connect to use. This secret can be created by the 
 user, or it can be the [Strimzi cluster CA secret](#using-the-strimzi-cluster-ca).
@@ -112,7 +113,7 @@ that the Strimzi operators, e.g. KafkaConnector, MirrorMaker2 can use when commu
 #### Using the Strimzi cluster CA
 
 If the Kafka Connect cluster is connecting to a Kafka instance that is managed by Strimzi, the user can configure the 
-`restCertChainAndKey` property to point to the Strimzi cluster CA.
+`caCertChainAndKey` property to point to the Strimzi cluster CA.
 
 A `KafkaConnect` instance with a secure endpoint using the cluster CA will look like:
 
@@ -122,7 +123,7 @@ kind: KafkaConnect
 spec:
   restListeners:
   - protocol: https
-    restCertChainAndKey:
+    caCertChainAndKey:
       secretName: <cluster-name>-cluster-ca
       key: ca.key
       certificate: ca.crt
