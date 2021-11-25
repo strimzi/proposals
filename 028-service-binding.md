@@ -44,14 +44,14 @@ spec:
     apiVersion: kafka.strimzi.io/v1beta2
     kind: Kafka
     name: my-cluster
-    namespace: my-namespace # optional
-    listener: # optional
-      name: tls # optional
+    namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
+    listener: # optional, when not specified Strimzi will choose an appropriate listener (see implementation below)
+      name: tls
   user: # optional
     apiVersion: kafka.strimzi.io/v1beta2
     kind: KafkaUser
     name: my-barista
-    namespace: my-namespace # optional
+    namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
 status:
   binding:
     name: barista-kafka
@@ -63,22 +63,22 @@ status:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: barista-kafka
-  namespace: my-namespace
-type: Opaque
-  data:
+    name: barista-kafka
+    namespace: my-namespace
+type: servicebinding.io/kafka
+data:
     type: kafka
     provider: strimzi
-    bootstrapServer: # comma separated list of host:port
-  # Provided if TLS enabled:
+    bootstrap.servers: # comma separated list of host:port (this matches the expected format of Kafka clients)
+    # Provided if TLS enabled:
     ca.crt: #  Strimzi cluster CA certificate
     ca.p12: #  PKCS #12 archive file for Strimzi cluster CA certificate
     ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
-  # Provided if selected user is SCRAM auth:
+    # Provided if selected user is SCRAM auth:
     username: # SCRAM username
     password: # SCRAM password
     sasl.jaas.config: # sasl jaas config string for use by Java applications
-  # Provided if selected user is mTLS:
+    # Provided if selected user is mTLS:
     user.p12: # client certificate for the consuming client PKCS #12 archive file for storing certificates and keys
     user.password: # password for protecting the client certificate PKCS #12 archive file
     user.crt: # certificate for the consuming client signed by the clients' CA
@@ -87,7 +87,7 @@ type: Opaque
 
 Naming of secret keys:
 
-The names for the keys given above match what is currently provided in other secrets created by Strimzi. The service binding specification does included some suggested fields for certificates, but they do not satisfy the requirements of an application connecting to Strimzi. These fields could be proposed back to the Service Binding specification.
+The names for the keys given above match what is currently provided in other secrets created by Strimzi. The service binding specification does include some suggested fields for certificates, but they do not satisfy the requirements of an application connecting to Strimzi. These fields could be proposed back to the Service Binding specification.
 
 An alternative approach for naming is to name the fields to match the use, for example `ca` -> `truststore` (`truststore.crt`, `truststore.p12`, `truststore.password`), `user` -> `keystore` (`keystore.p12`, `keystore.password`, `keystore.crt`, `keystore.key`)
  
@@ -98,23 +98,27 @@ This proposal will result in a new `KafkaConnectionAssemblyOperator` class being
 deployed as a separate Verticle and have its own reconcile loop.
 
 The actions taken during the reconcile loop will be:
-1. On start-up the operator will watch all resources of Kind `KafkaConnection`.
-2. For any `KafkaConnection` resource present it will perform a GET request on the Kafka cluster that is 
+1. The operator can be deployed at cluster-scope where it will watch resources across all namespaces, or in a single namespace, where it will only watch resources in that namespace.
+2. On start-up the operator will watch all resources of Kind `KafkaConnection`.
+3. For any `KafkaConnection` resource present it will add a status of NotReady to that CR.
+4. For each `KafkaConnection` resource it will perform a GET request on the Kafka cluster that is 
 referenced in the `KafkaConnection` and pick out the configured listeners.
-3. If there are multiple listeners listed in the `Kafka` CR with the type `internal`, the operator 
+   1. If this or any subsequent GET requests fail due to a 401 (unauthorised) error, the status reason will be updated to reflect this.
+5. If there are multiple listeners listed in the `Kafka` CR with the type `internal`, the operator 
 will filter the list by comparing the `tls` and `authentication` properties in the `Kafka` and `KafkaUser` CRs.
-4. If there are still multiple listeners it will pick one at random.
-5. The operator will add the name of the listener chosen will be added to the `KafkaConnection` status so that in future reconciles 
+6. If there are still multiple listeners it will pick one at random.
+7. The operator will add the name of the listener chosen will be added to the `KafkaConnection` status so that in future reconciles 
 the operator can take this into account in step 4 and avoid cycling through listeners.
-6. If there are no listeners marked as type `internal`, the reconcile loop will fail.
-7. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
-8. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
-9. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
+8. If there are no listeners marked as type `internal`, the reconcile loop will fail.
+9. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
+10. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
+11. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
 from the status if it is provided. The operator will also perform a GET request on the user secret to get any credentials. 
-10. The operator will add the cluster certificate and any user related credentials to the secret it created earlier.
-11. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
-12. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
-13. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
+12. The operator will add the cluster certificate and any user related credentials to the secret it created earlier.
+13. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
+14. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
+15. The operator will mark the `KafkaConnection` CR as ready.
+16. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
 
 ## Compatibility
 
