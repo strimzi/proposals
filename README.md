@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 31  | [StatefulSet Removal](./031-statefulset-removal.md) |
 | 30  | [EnvVar Configuration Provider for Apache Kafka](./030-env-var-config-provider.md) |
 | 29  | [Adopt the Drain Cleaner utility](./029-adopt-the-drain-cleaner-utility.md) |
 | 28  | [Network Policy Generation Environment Variable](./028-network-policy-generation-environment-variable.md) |
