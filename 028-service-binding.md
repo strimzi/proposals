@@ -70,27 +70,28 @@ data:
     type: kafka
     provider: strimzi
     bootstrap.servers: # comma separated list of host:port (this matches the expected format of Kafka clients)
+    security.protocol: # one of PLAINTEXT, SASL_PLAINTEXT, SASL_SSL or SSL
     # Provided if TLS enabled:
-    ca.crt: #  Strimzi cluster CA certificate
-    ca.p12: #  PKCS #12 archive file for Strimzi cluster CA certificate
-    ca.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file
+    ssl.truststore.crt: #  Strimzi cluster CA certificate (copied from ca.crt in <clustername>-cluster-ca-cert secret)
+    ssl.truststore.p12: #  PKCS #12 archive file for Strimzi cluster CA certificate (copied from ca.p12 in <clustername>-cluster-ca-cert secret)
+    ssl.truststore.password: # Password for protecting the Strimzi cluster CA certificate PKCS #12 archive file (copied from ca.password in <clustername>-cluster-ca-cert secret)
     # Provided if selected user is SCRAM auth:
     username: # SCRAM username
     password: # SCRAM password
     sasl.jaas.config: # sasl jaas config string for use by Java applications
+    sasl.mechanism: SCRAM-SHA-512
     # Provided if selected user is mTLS:
-    user.p12: # client certificate for the consuming client PKCS #12 archive file for storing certificates and keys
-    user.password: # password for protecting the client certificate PKCS #12 archive file
-    user.crt: # certificate for the consuming client signed by the clients' CA
-    user.key: # private key for the consuming client
+    ssl.keystore.p12: # client certificate for the consuming client PKCS #12 archive file for storing certificates and keys (copied from user.p12 in KafkaUser secret)
+    ssl.keystore.password: # password for protecting the client certificate PKCS #12 archive file (copied from user.password in KafkaUser secret)
+    ssl.keystore.crt: # certificate for the consuming client signed by the clients' CA (copied from user.crt in KafkaUser secret)
+    ssl.keystore.key: # private key for the consuming client (copied from user.key in KafkaUser secret)
 ```
 
 Naming of secret keys:
 
-The names for the keys given above match what is currently provided in other secrets created by Strimzi. The service binding specification does include some suggested fields for certificates, but they do not satisfy the requirements of an application connecting to Strimzi. These fields could be proposed back to the Service Binding specification.
-
-An alternative approach for naming is to name the fields to match the use, for example `ca` -> `truststore` (`truststore.crt`, `truststore.p12`, `truststore.password`), `user` -> `keystore` (`keystore.p12`, `keystore.password`, `keystore.crt`, `keystore.key`)
- 
+This proposal previously considered choosing secret keys that could be reused by other (non-Kafka) operators that use mutualTLS or SASL SCRAM authentication. However, given 
+that Kafka applications generally have a well known list of configuration options they provide, the proposal instead uses those well-known keys. This will make it clearer 
+to application developers what the different keys should be used for.
 
 ### Implementation
 
