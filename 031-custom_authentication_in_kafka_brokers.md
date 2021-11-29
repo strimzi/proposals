@@ -4,7 +4,7 @@ This proposal focuses on supporting custom authentication in Kafka Brokers for S
 
 ## Current situation
 
-Currently, numerous authentication methods for brokers are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/0.25.0/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/0.25.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549).
+Currently, numerous authentication methods for brokers are [supported](https://github.com/strimzi/strimzi-kafka-operator/tree/main/api/src/main/java/io/strimzi/api/kafka/model/authentication) in Strimzi, and allows the user to configure which one to use. In addition, in the case a custom *authorizer* needs to be used, this is also currently [supported](https://github.com/strimzi/strimzi-kafka-operator/blob/main/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/KafkaBrokerConfigurationBuilder.java#L541-L549).
 
 However, there is no current ability to specify custom authentication for Kafka Brokers, which is what this proposal will focus on.
 
@@ -111,6 +111,9 @@ principal.builder.class=SimplePrincipal.class
 All then we need to do simply configure a listener in our Kafka custom resource, with the following properties:
 
 ```
+  kafka:
+    config:
+      principal.builder.class: SimplePrincipal.class
     listeners:
       - name: custom-auth-listener
         port: 9093
@@ -124,7 +127,6 @@ All then we need to do simply configure a listener in our Kafka custom resource,
         authentication:
           type: custom
           sasl: true
-          principal.builder.class: SimplePrincipal.class
           listener-config:
             custom-sasl-protocol.sasl.jaas.config: my.custom.loginmodule.CustomLoginModule required;
             scram-sha-512.sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required;
@@ -183,6 +185,8 @@ Integration test:
 ## Affected/not affected projects
 
 Affected: [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator)
+
+Fixes: [strimzi/strimzi-kafka-operator#5639](https://github.com/strimzi/strimzi-kafka-operator/issues/5639), [strimzi/strimzi-kafka-operator#5483](https://github.com/strimzi/strimzi-kafka-operator/issues/5483)
 
 ## Compatibility
 
