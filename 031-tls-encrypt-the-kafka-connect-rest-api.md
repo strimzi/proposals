@@ -26,12 +26,12 @@ A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `
 This enables users to access the REST API with TLS if required.
 The `KafkaConnector`, `KafkaConnect` and `KafkaMirrorMaker2` operators will use the TLS encrypted listener when it is enabled, even if an unencrypted listener is present.
 
-The `restListeners` field is designed for potential future extension, and is a list of items that contains a `protocol` field and fields for providing certificates if required `certChainAndKey`, `strimziTruststoreCert`
+The `restListeners` field is designed for potential future extension, and is a list of items that contains a `protocol` field and fields for providing certificates if required `certChainAndKey`, `trustedCertificates`
 
-For this proposal, the `protocol` field only supports two values: `http` and `https`. If the `restListeners` list is empty the `KafkaConnect` and `KafkaMirrorMaker2` 
+For this proposal, the `protocol` field only supports two values: `http` and `https`. If the `restListeners` list is empty, or not specified at all, the `KafkaConnect` and `KafkaMirrorMaker2` 
 runtimes will be created with a single unencrypted listener on 8083 to match the existing behaviour.
 
-The `certChainAndKey` field will be required if the `https` protocol is selected. The `strimziTruststoreCert` will be required if the `https` protocol is selected and the provided 
+The `certChainAndKey` field will be required if the `https` protocol is selected. The `trustedCertificates` will be required if the `https` protocol is selected and the provided 
 certificate is not signed by a well-known CA.
 
 For example, the following CR will enable the HTTP listener on port 8083 and the HTTPS listener on port 8443:
@@ -81,7 +81,7 @@ openAPIV3Schema:
                     - certificate
                     - secretName
                 description: Certificate for Kafka Connect to use to create a keystore for the rest listener.
-              strimziTruststoreCert:
+              trustedCertificates:
                 type: object
                 properties:
                   certificate:
@@ -121,8 +121,10 @@ Subject Alternative Names (SANs) similarly to when a user provides their own cer
 https://strimzi.io/docs/operators/latest/using.html#ref-alternative-subjects-certs-for-listeners-str
 
 If the user has enabled an encrypted HTTPS listener and the certificate they referenced in the `certChainAndKey` field 
-is not signed by a well known CA, they must also configure the `strimziTruststoreCert`. This property must point to an 
-existing secret that contains a certificate that Strimzi can use to generate a truststore. The resulting truststore will 
+is not signed by a CA root certificate that is trusted by the Java runtime by default (i.e. signed by a well known CA like 
+Verisign or Let's Encrypt), they must also configure the `trustedCertificates`. This property must point to an 
+existing secret that contains the certificate that was used to sign the certificate provided in the `certChainAndKey` fields. 
+This certificate will be used by Strimzi to generate a truststore. The resulting truststore will 
 be used by the Strimzi operators, e.g. KafkaConnector, MirrorMaker2 when communicating with Kafka Connect.
 
 ## Affected/not affected projects
