@@ -41,14 +41,13 @@ metadata:
   name: barista-kafka
 spec:
   kafka:
-    apiVersion: kafka.strimzi.io/v1beta2
-    kind: Kafka
+    apiVersion: kafka.strimzi.io/v1beta2 # optional
     name: my-cluster
     namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
     listener: # optional, when not specified Strimzi will choose an appropriate listener (see implementation below)
       name: tls
   user: # optional
-    apiVersion: kafka.strimzi.io/v1beta2
+    apiVersion: kafka.strimzi.io/v1beta2 # optional
     kind: KafkaUser
     name: my-barista
     namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
@@ -105,21 +104,23 @@ The actions taken during the reconcile loop will be:
 4. For each `KafkaConnection` resource it will perform a GET request on the Kafka cluster that is 
 referenced in the `KafkaConnection` and pick out the configured listeners.
    1. If this or any subsequent GET requests fail due to a 401 (unauthorised) error, the status reason will be updated to reflect this.
-5. If there are multiple listeners listed in the `Kafka` CR with the type `internal`, the operator 
-will filter the list by comparing the `tls` and `authentication` properties in the `Kafka` and `KafkaUser` CRs.
-6. If there are still multiple listeners it will pick one at random.
-7. The operator will add the name of the listener chosen will be added to the `KafkaConnection` status so that in future reconciles 
-the operator can take this into account in step 4 and avoid cycling through listeners.
-8. If there are no listeners marked as type `internal`, the reconcile loop will fail.
-9. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
-10. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
-11. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
+5. The operator will determine which listener to choose:
+   1. If there are no listeners in the `Kafka` CR the reconcile loop will fail
+   2. If the `KafkaConnection` specifies a listener, the operator will choose this listener.
+   3. If there are no listeners specified in the `KafkaConnection`, but only one listener in the `Kafka` CR, the operator will choose that listener.
+   4. If there are no listeners specified in the `KafkaConnection`, but multiple listeners listed in the `Kafka` CR, the operator 
+   will filter the list by comparing the `tls` and `authentication` properties in the `Kafka` and `KafkaUser` CRs.
+   5. If there are still multiple listeners after filtering for `tls` and `authentication` the operator will choose the one that is of type `internal`.
+   6. If there are still multiple listeners after filtering for `internal` the operator will sort the listeners alphabetically by name and choose the first one.
+8. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
+9. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
+10. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
 from the status if it is provided. The operator will also perform a GET request on the user secret to get any credentials. 
-12. The operator will add the cluster certificate and any user related credentials to the secret it created earlier.
-13. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
-14. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
-15. The operator will mark the `KafkaConnection` CR as ready.
-16. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
+11. The operator will add any user related certificates and credentials to the secret it created earlier.
+12. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
+13. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
+14. The operator will mark the `KafkaConnection` CR as ready.
+15. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
 
 ## Compatibility
 
