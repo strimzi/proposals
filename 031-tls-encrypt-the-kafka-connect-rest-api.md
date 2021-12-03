@@ -26,13 +26,14 @@ A new field is added to the `KafkaConnect` and `KafkaMirrorMaker2` specs named `
 This enables users to access the REST API with TLS if required.
 The `KafkaConnector`, `KafkaConnect` and `KafkaMirrorMaker2` operators will use the TLS encrypted listener when it is enabled, even if an unencrypted listener is present.
 
-The `restListeners` field is designed for potential future extension, and is a list of items that contains a `protocol` field and fields for providing certificates if required `certChainAndKey`, `trustedCertificates`
+The `restListeners` field is designed for potential future extension, and is a list of items that contains a `tls` field and fields for providing certificates if required `certChainAndKey`, `trustedCertificates`
 
-For this proposal, the `protocol` field only supports two values: `http` and `https`. If the `restListeners` list is empty, or not specified at all, the `KafkaConnect` and `KafkaMirrorMaker2` 
+The `tls` field is a boolean, if it is `true` the listener is HTTPS with port 8443, if it is `false` the listener is HTTP with port 8083. If the `restListeners` list is empty, or not specified at all, the `KafkaConnect` and `KafkaMirrorMaker2` 
 runtimes will be created with a single unencrypted listener on 8083 to match the existing behaviour.
 
-The `certChainAndKey` field will be required if the `https` protocol is selected. The `trustedCertificates` will be required if the `https` protocol is selected and the provided 
-certificate is not signed by a well-known CA.
+The `certChainAndKey` field will be required if `tls` is `true`. The `trustedCertificates` will be required if `tls` is `true` and the provided 
+certificate is not signed by a CA root certificate that is trusted by the Java runtime by default (i.e. signed by a well known CA like
+Verisign or Let's Encrypt).
 
 For example, the following CR will enable the HTTP listener on port 8083 and the HTTPS listener on port 8443:
 ```
@@ -40,8 +41,15 @@ apiVersion: kafka.strimzi.io/v1beta1
 kind: KafkaConnect
 spec:
   restListeners:
-  - protocol: http
-  - protocol: https
+  - tls: true
+    certChainAndKey:
+      secretName: my-secret
+      certificateChain: my-certificate.crt
+      key: my-key.key
+    trustedCertificates:
+      secretName: my-secret
+      certificate: ca.crt
+  - tls: false
   ...
 ```
 
@@ -58,16 +66,13 @@ openAPIV3Schema:
           items:
             type: object
             properties:
-              protocol:
-                type: string
-                enum:
-                - http
-                - https
-                description: The protocol of the REST listener.
+              tls:
+                type: boolean
+                description: Enables TLS encryption on the listener.
               certChainAndKey:
                 type: object
                 properties:
-                  certificate:
+                  certificateChain:
                     type: string
                     description: The name of the certificate file in the Secret.
                   key:
@@ -78,9 +83,9 @@ openAPIV3Schema:
                     description: The name of the Secret containing the certificate.
                   required:
                     - key
-                    - certificate
+                    - certificateChain
                     - secretName
-                description: Certificate for Kafka Connect to use to create a keystore for the rest listener.
+                description: Certificate chain and key for Kafka Connect to use to create a keystore for the rest listener.
               trustedCertificates:
                 type: object
                 properties:
@@ -95,7 +100,7 @@ openAPIV3Schema:
                     - secretName
                 description: Certificate for Strimzi to trust when making calls to the Connect rest listener.
             required:
-            - protocol
+            - tls
           description: List of additional REST listeners.
         ...
 ```
@@ -116,16 +121,20 @@ listeners.https.ssl.keystore.type: PKCS12
 
 If the user decides to enable an encrypted HTTPS listener, they must have the `certChainAndKey` 
 property present in the `KafkaConnect` CR. The property must point to an existing secret that contains the 
-certificate and private key that they want Kafka Connect to use. The certificate must contain the correct 
-Subject Alternative Names (SANs) similarly to when a user provides their own certificates for listeners:
-https://strimzi.io/docs/operators/latest/using.html#ref-alternative-subjects-certs-for-listeners-str
+certificate and private key in PEM format that they want Kafka Connect to use. The certificate must:
+
+ - contain the correct 
+Subject Alternative Names (SANs) similarly to when a user provides their own [certificates for listeners](
+https://strimzi.io/docs/operators/latest/using.html#ref-alternative-subjects-certs-for-listeners-str)
+ - be an X.509 certificate or certificate chain in PEM format
+ - include all intermediate certificates (the root certificate is optional)
 
 If the user has enabled an encrypted HTTPS listener and the certificate they referenced in the `certChainAndKey` field 
 is not signed by a CA root certificate that is trusted by the Java runtime by default (i.e. signed by a well known CA like 
 Verisign or Let's Encrypt), they must also configure the `trustedCertificates`. This property must point to an 
-existing secret that contains the certificate that was used to sign the certificate provided in the `certChainAndKey` fields. 
-This certificate will be used by Strimzi to generate a truststore. The resulting truststore will 
-be used by the Strimzi operators, e.g. KafkaConnector, MirrorMaker2 when communicating with Kafka Connect.
+existing secret that contains the root certificate that was used to sign the certificate provided in the `certChainAndKey` fields. 
+The certificate must be an X.509 certificate in the PEM format. This certificate will be used by Strimzi to generate a truststore. 
+The resulting truststore will be used by the Strimzi operators, e.g. KafkaConnector, MirrorMaker2 when communicating with Kafka Connect.
 
 ## Affected/not affected projects
 
