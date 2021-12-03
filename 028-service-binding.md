@@ -12,7 +12,6 @@ Contents:
  - [Proposal](#proposal)
  - [Rejected Alternatives](#rejected-alternatives)
  - [Overview of Service Binding specification](#overview-of-service-binding-specification)
- - [Connecting to Strimzi today](#connecting-to-strimzi-today)
 
 ## Current situation
 
@@ -24,33 +23,33 @@ At a high level these are the current problems that make integrating Strimzi wit
 
 ## Proposal
 
-This proposal introduces a new custom resource type called `KafkaConnection` and the application creates a `ServiceBinding` that binds to this service.
+This proposal introduces a new custom resource type called `KafkaAccess` and the application creates a `ServiceBinding` that binds to this service.
 
 Required changes:
 
- - Add a new Custom Resource called `KafkaConnection` that refers to the `Kafka`, the specific listener and the `KafkaUser` that should be used
- - The Strimzi operator adds a `status.binding` to the `KafkaConnection` status that points to a Kubernetes `Secret`
- - The Strimzi operator creates a `Secret` in the same namespace as the `KafkaConnection` containing all the required information
+ - Add a new Custom Resource called `KafkaAccess` that refers to the `Kafka`, the specific listener and the `KafkaUser` that should be used
+ - The Strimzi operator adds a `status.binding` to the `KafkaAccess` status that points to a Kubernetes `Secret`
+ - The Strimzi operator creates a `Secret` in the same namespace as the `KafkaAccess` containing all the required information
 
-`KafkaConnection` CR spec:
+`KafkaAccess` CR spec:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaConnection
+kind: KafkaAccess
 metadata:
   name: barista-kafka
 spec:
   kafka:
     apiVersion: kafka.strimzi.io/v1beta2 # optional
     name: my-cluster
-    namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
+    namespace: my-namespace # optional, defaults to same namespace as the KafkaAccess
     listener: # optional, when not specified Strimzi will choose an appropriate listener (see implementation below)
       name: tls
   user: # optional
     apiVersion: kafka.strimzi.io/v1beta2 # optional
-    kind: KafkaUser
+    kind: KafkaUser # this is required to allow possible extensions where the user specifies a secret instead of a KafkaUser
     name: my-barista
-    namespace: my-namespace # optional, defaults to same namespace as the KafkaConnection
+    namespace: my-namespace # optional, defaults to same namespace as the KafkaAccess
 status:
   binding:
     name: barista-kafka
@@ -94,37 +93,37 @@ to application developers what the different keys should be used for.
 
 ### Implementation
 
-This proposal will result in a new `KafkaConnectionAssemblyOperator` class being added to the `cluster-operator` directory in the `strimzi-kafka-operator` repo. The class will be 
-deployed as a separate Verticle and have its own reconcile loop.
+This proposal will introduce a new `KafkaAccess` operator. The operator will be separate from the existing `strimzi-kafka-operator` and live in its own GitHub repo in the `strimzi` organization.
 
-The actions taken during the reconcile loop will be:
+The actions taken during the reconcile loop of the new operator will be:
 1. The operator can be deployed at cluster-scope where it will watch resources across all namespaces, or in a single namespace, where it will only watch resources in that namespace.
-2. On start-up the operator will watch all resources of Kind `KafkaConnection`.
-3. For any `KafkaConnection` resource present it will add a status of NotReady to that CR.
-4. For each `KafkaConnection` resource it will perform a GET request on the Kafka cluster that is 
-referenced in the `KafkaConnection` and pick out the configured listeners.
+2. On start-up the operator will watch all resources of Kind `KafkaAccess`.
+3. For any `KafkaAccess` resource present it will add a status of NotReady to that CR.
+4. For each `KafkaAccess` resource it will perform a GET request on the Kafka cluster that is 
+referenced in the `KafkaAccess` and pick out the configured listeners.
    1. If this or any subsequent GET requests fail due to a 401 (unauthorised) error, the status reason will be updated to reflect this.
 5. The operator will determine which listener to choose:
-   1. If there are no listeners in the `Kafka` CR the reconcile loop will fail
-   2. If the `KafkaConnection` specifies a listener, the operator will choose this listener.
-   3. If there are no listeners specified in the `KafkaConnection`, but only one listener in the `Kafka` CR, the operator will choose that listener.
-   4. If there are no listeners specified in the `KafkaConnection`, but multiple listeners listed in the `Kafka` CR, the operator 
+   1. If there are no listeners in the `Kafka` CR the reconcile loop will fail.
+   2. If the `KafkaAccess` specifies a listener, the operator will choose this listener.
+   3. If there are no listeners specified in the `KafkaAccess`, but only one listener in the `Kafka` CR, the operator will choose that listener.
+   4. If there are no listeners specified in the `KafkaAccess`, but multiple listeners listed in the `Kafka` CR, the operator 
    will filter the list by comparing the `tls` and `authentication` properties in the `Kafka` and `KafkaUser` CRs.
    5. If there are still multiple listeners after filtering for `tls` and `authentication` the operator will choose the one that is of type `internal`.
    6. If there are still multiple listeners after filtering for `internal` the operator will sort the listeners alphabetically by name and choose the first one.
+   7. If the operator fails to find a suitable listener after filtering the reconcile loop will fail.
 8. The operator will then create a secret and add the bootstrapServers for the chosen listener to that secret.
 9. If the chosen listener uses TLS, the operator will then perform a GET request on the `cluster-ca-cert` secret and put the certificate and truststore files in the new secret.
-10. If the `KafkaConnection` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
+10. If the `KafkaAccess` references a `KafkaUser`, the operator will perform a GET request on that user to find the name of the secret containing the credentials and the username 
 from the status if it is provided. The operator will also perform a GET request on the user secret to get any credentials. 
 11. The operator will add any user related certificates and credentials to the secret it created earlier.
-12. The operator will add a `status.binding` to the `KafkaConnection` resource with the name of the secret. 
-13. The operator will then create `Watch` requests for the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator. 
-14. The operator will mark the `KafkaConnection` CR as ready.
-15. If the `KafkaConnection` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
+12. The operator will add a `status.binding` to the `KafkaAccess` resource with the name of the secret. 
+13. The operator will then use a `Watch` or `Informer` to keep track of changes to the `Kafka` CR and, if used earlier, the `cluster-ca-cert` secret, the `KafkaUser` resource and the secret created by the `KafkaUser` operator,
+14. The operator will mark the `KafkaAccess` CR as ready.
+15. If the `KafkaAccess` CR or any of the other watched resources change the operator will make the matching updates to the secret it created.
 
 ## Compatibility
 
-This proposal does not change any of the existing CRDs or the secrets that are being created. Instead it adds a new CRD and secret.
+This proposal does not change any of the existing CRDs or the secrets that are being created. Instead, it adds a new CRD and secret.
 
 ## Rejected Alternatives
 
@@ -274,107 +273,4 @@ spec:
     apiVersion: v1
     kind: Secret
     name: my-user
-```
-
-## Connecting to Strimzi today
-
-This section shows what and where the current set of credentials are exposed by Strimzi as an easy reference for discussions. 
-
-To connect to Strimzi, a service binding needs the following:
-
-* **host** - hostname or IP address
-* **port** - port number
-* **userName** - username, optional
-* **password** - password or token, optional
-* **certificates** - one or more certificates, optional
-
-Currently some of this comes from the `Kafka` CR, some from a certificate secret and some from `KafkaUser`.
-
-## Host and port
-
-The host and port for clients to use is currently contained in the bootstrapServers address in the `status` of the `Kafka CR`:
-
-``` yaml
-status:
-  listeners:
-  - type: plain
-    addresses:
-    - host: my-cluster-kafka-bootstrap.my-namespace.svc
-      port: 9092
-    bootstrapServers: my-cluster-kafka-bootstrap.my-namespace.svc:9092
-  - type: tls
-    addresses:
-    - host: my-cluster-kafka-bootstrap.my-namespace.svc
-      port: 9093
-    bootstrapServers: my-cluster-kafka-bootstrap.my-namespace.svc:9093
-```
-
-## Kafka cluster certificate
-
-If TLS is enabled for an endpoint, Kafka clients need access to the CA certificate that signed the broker's server certificate.
-
-The CA certificate is most easily obtained from the `<cluster>-cluster-ca-cert` secret:
-
-``` yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: my-cluster-cluster-ca-cert
-type: Opaque
-data:
-  ca.p12: # CA certificate PKCS #12 archive file for storing certificates and keys
-  ca.password: # password for protecting the CA certificate PKCS #12 archive file
-  ca.crt: # CA certificate for the cluster
-```
-
-## User specific credentials
-
-Strimzi provides the `KafkaUser` custom resource as a way of managing users and credentials. There are two authentication options, using mutual TLS or SASL SCRAM.
-
-The `KafkaUser` CR status includes the username and name of the secret containing credentials:
-
-``` yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaUser
-metadata:
-  name: my-user
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  authentication:
-    type: # scram-sha-512 or tls
-  authorization:
-    type: simple
-    acls:
-    - resource:
-        type: topic
-        name: my-topic
-        patternType: literal
-      operation: Read
-status:
-  username: my-user-name
-  secret: my-user
-```
-
-The referenced secret contains the password and sasl.jaas.config in the SASL case, and certificate files in the mTLS case:
-
-``` yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: my-user
-  labels:
-    strimzi.io/kind: KafkaUser
-    strimzi.io/cluster: my-cluster
-type: Opaque
-data:
-# Provided if selected user is SCRAM auth:
-  password: Z2VuZXJhdGVkcGFzc3dvcmQ=
-  # value when base64 decoded looks like -> org.apache.kafka.common.security.scram.ScramLoginModule required username="my-user" password="generatedpassword";
-  sasl.jaas.config: b3JnLmFwYWNoZS5rYWZrYS5jb21tb24uc2VjdXJpdHkuc2NyYW0uU2NyYW1Mb2dpbk1vZHVsZSByZXF1aXJlZCB1c2VybmFtZT0ibXktdXNlciIgcGFzc3dvcmQ9ImdlbmVyYXRlZHBhc3N3b3JkIjs=
-# Provided if selected user is mTLS:
-  user.p12:      # User PKCS #12 archive file for storing certificates and keys
-  user.password: # Password for protecting the user certificate PKCS #12 archive file
-  user.crt:      # Public key of the user
-  user.key:      # Private key of the user
 ```
