@@ -9,7 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-| 33  | [Service Binding](./031-service-binding.md) |
+| 33  | [Service Binding](./033-service-binding.md) |
 | 32  | [Custom Authentication in Kafka Brokers ](./032-custom_authentication_in_kafka_brokers.md) |
 | 31  | [StatefulSet Removal](./031-statefulset-removal.md) |
 | 30  | [EnvVar Configuration Provider for Apache Kafka](./030-env-var-config-provider.md) |
