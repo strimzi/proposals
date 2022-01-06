@@ -35,7 +35,7 @@ That is the only automatic configuration Strimzi does.
 Users can use the `.template` fields in the Strimzi custom resources to configure their own security context.
 That allows them to customize it to match their own requirements and policies.
 On OpenShift, the security context is automatically injected into the Pods when they are created based on the OpenShift SCC policies.
-This typically involves dropping some capabilities, using some random unprivileged user etc.
+This typically involves dropping some capabilities, using some random unprivileged user ID etc.
 In some cases, our users might also use similar systems to inject the security context using admission controllers and similar tools.
 
 The _baseline_ profile basically means that you just use the default settings without requesting any additional privileges or capabilities.
@@ -45,6 +45,20 @@ But if you would try to run Strimzi in a cluster where the _restricted_ profile 
 Apart from the Kaniko builder used for the Kafka Connect build, all our components are able to run under the _restricted_ profile.
 But the operator doesn't configure the appropriate security context and the admission plugin will reject them.
 Users have to _manually_ add the matching security context configuration into the `.template` sections of the custom resources and into the operator deployments to allow the pods to be created under the _restricted_ profile.
+To match the _restricted_ profile, users would need to add the following security context:
+
+```yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The restricted allows the use of the NET_BIND_SERVICE capability.
+              # But Strimzi does not require it for anything, so we do not include it here.
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+```
 
 While users can configure the security context, it is not user-friendly.
 The Pod security context does not cover all the different options required by the _restricted_ profile.
