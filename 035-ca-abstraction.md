@@ -3,7 +3,7 @@
 This proposal is to provide a more abstracted mechanism for Strimzi to make use of X509 certificates,
 and remove the assumption that Strimzi directly issues end entity certificates ("EE certificates") itself.
 
-Non-goals: 
+## Non-goals
 * Support storing keys (or certificates) in stores other than Kubernetes `Secret`.
 * Add support for certificate revocation.
 * Add support in Strimzi for Kafka's dynamic reconfiguring of security stores.
@@ -43,7 +43,7 @@ This provides the secure-by-default experience, but in addition to a buggy imple
 
 Removing the assumption that Strimzi always issues EE certificates, using a CA certificate it has access to, would enable much more flexibility in CA handling.
 This will be compatible with commonly deployed certificate management solutions such as [Cert Manager][cmio], or [Vault][vault].
-This would be highly valuable for organisations with compliance requirements with regard to certificates.
+This would be highly valuable for organizations with compliance requirements with regard to certificates.
 
 ## Proposal
 
@@ -52,10 +52,10 @@ It is assumed that we want Strimzi to:
 * continue to be secure by default. 
 * not have some mandatory dependency on some other project/product for certificate issuance. 
 
-It follows that Strimzi needs to be able to obtain EE certificates, but should not (necessarily) issue them directly itself.
+It follows that Strimzi needs to be able to _obtain_ EE certificates, but should not (necessarily) _issue_ them directly itself.
 
 We therefore need an abstraction for how certificates can be issued. 
-In the default (backward compatible) mode this abtraction would continue to use `openssl`, but the new abstraction would also be compatible with issuance by external systems (or even, in theory, a human operator using tooling of their choice and interacting with well defined `Secrets`). 
+In the default (backward compatible) mode this abstraction would continue to use `openssl`, but the new abstraction would also be compatible with issuance by external systems (or even, in theory, a human operator using tooling of their choice and interacting with well defined `Secrets`). 
 
 ### Interface for certificate issuance
 
@@ -98,13 +98,13 @@ The term "issuing operator" will be used to refer to the operator that's using t
 Before describing the process let's introduce two state machines. First the "EE certificate state machine"
 
 ```
-  NEW // a certificate is needed for the end entity, but doesn't exist
+  REQUIRED // a certificate is needed for the end entity, but doesn't exist
    |
    v
   REQUESTED // a certificate has been requested; requestCertificate() has been called
    |
    v
-  PENDING // a certificate has been issued; pollForRequestedCertificate() has returned non-empty,
+  TRUST_PENDING // a certificate has been issued; pollForRequestedCertificate() has returned non-empty,
    |      // but the root CA is not trusted yet
    v
   IN_USE // the certificate is in use
@@ -119,7 +119,7 @@ Then the "CA certificate trust state machine":
   UNTRUSTED // not yet trusted everywhere it needs to be 
    |
    v
-  TRUSTED_NEW // trusted everywhere it needs to be, but no EE certificates yet issued
+  TRUSTED_UNUSED // trusted everywhere it needs to be, but no EE certificates yet issued
    |
    v
   TRUSTED_USED // trusted everywhere, EE certificates issued **TODO do we really need this state?**
@@ -133,7 +133,7 @@ Then the "CA certificate trust state machine":
 
 Now let's describe the processes.
 
-1. The issuing operator needs to figure out which EE certificates are missing (or in their renewal period, or otherwise need replacing, e.g. via annotation). This need for a certificate might exist independently of the end entity. For example, if we're going to scale up the Kafka cluster then we need a certificate for the new broker before the new broker exists. **The issuing operator puts the end entity in the `NEW` state.**
+1. The issuing operator needs to figure out which EE certificates are missing (or in their renewal period, or otherwise need replacing, e.g. via annotation). This need for a certificate might exist independently of the end entity. For example, if we're going to scale up the Kafka cluster then we need a certificate for the new broker before the new broker exists. **The issuing operator puts the end entity in the `REQUIRED` state.**
 
 2. The issuing operator requests a new certificate. **The issuing operator puts the end entity in the `REQUESTED` state.**
 
@@ -142,7 +142,7 @@ Now let's describe the processes.
 
 4. Once a certificate is issued, the issuing operator needs check whether the CA certificate is trusted. 
    I.e. it needs to know what trust states all the existing CA certificates are in. 
-   If it is not trusted **the issuing operator puts the end entity in the `PENDING` state.** and **puts the CA certificate in the `UNTRUSTED` state**. (**See step 3 in the diagram.**)
+   If it is not trusted **the issuing operator puts the end entity in the `TRUST_PENDING` state.** and **puts the CA certificate in the `UNTRUSTED` state**. (**See step 3 in the diagram.**)
 
 > From the above it is clear that there is a `Secret` which stores tokens and issued certificates and their current state, and that only the issuing operator needs access to it.
 > It's also clear that there is a `Secret` which stores CA certificates, and their current state, and which needs to be accessed by the issuing operator and the cluster operator.
@@ -155,11 +155,11 @@ The cluster operator and the user operator run in separate processes, so this wi
 
 2. The issuing operator has placed a root CA certificate in the shared `Secret` in the `UNTRUSTED` state.
 3. The cluster operator sees the root CA certificate orchestrates changes to the brokers (reconfig or restart) (and, for the Cluster CA the other components) so that the certificate is trusted by all components that will observe the EE certificates.
-4. The cluster operator updates the shared `Secret` to indicate that the certificate is now in the `TRUSTED_NEW` state.
+4. The cluster operator updates the shared `Secret` to indicate that the certificate is now in the `TRUSTED_UNUSED` state.
 
 #### Process for deploying the issued certificate
 
-1. The issuing operator sees that the root CA certificate is now in the `TRUSTED_NEW` state, so can infer that the CA certificate is trusted.
+1. The issuing operator sees that the root CA certificate is now in the `TRUSTED_UNUSED` state, so can infer that the CA certificate is trusted.
 2. The issuing operator copies the EE certificate and key, and the rest of the certificate chain from its `Secret` _B_  to the deployment secret (e.g. the "user secret" for the Clients CA, or the relevant component secret for the Cluster CA).
 3. The issuing operator updates the state of the root CA certificate in the shared `Secret` to `TRUSTED_USED`. 
 
@@ -347,7 +347,7 @@ data:
   ${fingerprint}.${state}: <PEM encoded Secret>
 ```
 
-The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA-1 has of the ASN.1 DER-encoded form of the X509 certificate. The `state` can be any of the states of the CA certificate trust state machine described above.
+The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA-1 hash of the ASN.1 DER-encoded form of the X509 certificate. The `state` can be any of the states of the CA certificate trust state machine described above.
 Again, including the state in the item name facilitates inspection of the Secret.
 
 The existing Secrets, named using `${cluster}-${ca}-certs` and passed via Secret volume mounts to containers would not change under this proposal.
