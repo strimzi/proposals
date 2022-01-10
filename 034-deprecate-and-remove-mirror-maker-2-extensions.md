@@ -5,7 +5,7 @@
 When Mirror Maker 2 was first introduced, it was missing a policy for replicating topics between two Kafka clusters without changing their names.
 We created the [_Mirror Maker 2 Extensions_ project](https://github.com/strimzi/mirror-maker-2-extensions) which contains the `IdentityReplicationPolicy` policy.
 This policy makes sure that topics are not renamed while being mirrored.
-The `IdentityReplicationPolicy` is the only _extension_ we provide ass part of this project.
+The `IdentityReplicationPolicy` is the only _extension_ we provide as part of this project.
 
 In Kafka 3.0.0, Mirror Maker 2 introduces its own `IdentityReplicationPolicy`.
 This was done in [KAFKA-9726](https://issues.apache.org/jira/browse/KAFKA-9726).
@@ -27,7 +27,7 @@ Following steps should be taken as part of the 0.28.0 release:
   (If we ever need any other MM2 extension in the future, we can always unarchive it)
 
 Even in 0.28 and newer releases, will still include the `mirror-maker-2-extensions` JARs to ensure compatibility.
-The JAR will be removed only in Strimzi 0.32.0 or Strimzi 1.0.0 (whichever comes first).
+The JAR will be removed only in Strimzi 0.32.0 (i.e. after 4 releases) or Strimzi 1.0.0 (whichever comes first).
 From that version on, users will need to use the Apache Kafka policy in their configuration as `org.apache.kafka.connect.mirror.IdentityReplicationPolicy`.
 
 Any users using the Mirror Maker 2 Extensions with older versions of Apache Kafka outside of Strimzi will still be able to get the previously released versions from our Maven repositories.
