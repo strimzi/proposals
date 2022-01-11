@@ -1,6 +1,6 @@
 # Default to _Restricted_ Pod Security Profile
 
-Kubernetes support configuration of Security Context (SC) which can limit what the applications running on top of it are or are not allowed to do.
+Kubernetes supports configuration of a Security Context (SC) which can limit what the applications running on top of it are or are not allowed to do.
 The SC can be configured on the Pod level (Pod Security Context) or on the container level.
 When configured on the Pod level, it applies to all containers in given pod.
 The security context allows to configure different security related aspects of the containers.
@@ -13,7 +13,7 @@ For example:
 Latest versions of Kubernetes introduced Pod Security Standards.
 These standards can be used to enforce the security context configuration.
 It specified three different profiles which define what is the allowed security context:
-* _Privileged_ for applications needed widest possible permissions
+* _Privileged_ for applications needing the widest possible permissions
 * _Baseline_ which prevents some common security issues, but is minimally restrictive
 * _Restricted_ which heavily restricts the application permissions and follows the best hardening practices
 
@@ -80,9 +80,9 @@ In that case, user's configuration will be used.
 That means that users will be able to also disable the new default settings completely just by setting `securityContext: {}`.
 (However, this would again need to be configured for each container separately).
 
-As mentioned above, Kaniko does not support running under the _restricted_ profile.
+As mentioned above, Kaniko does not support running under the _restricted_ profile since it currently needs to run under the `root` user.
 This is because in order to build the new container image it requires to run under the _baseline_ profile.
-Due to this, the operator will not set the restricted security context to the Kaniko pods.
+Due to this, the operator will not set the restricted security context to the Kaniko pods and they will keep running under the _baseline_ profile.
 Kafka Connect Build - which requires Kaniko - is optional part of Strimzi.
 Users who want to enforce the _restricted_ profile can build the Connect container image with additional plugins using a Dockerfile instead.
 
@@ -120,11 +120,11 @@ With it enabled, the _restricted_ security context will be used by default.
 The security context will be added to the installation files only when the feature gate moves to beta and is enabled by default.
 The following table shows the expected graduation of the feature gate:
 
-| Phase | Strimzi versions       | Default state                                                       |
-|:------|:-----------------------|:--------------------------------------------------------------------|
-| Alpha | 0.28, 0.29             | Disabled by default, security context not set in installation files |
-| Beta  | 0.30, 0.31             | Enabled by default  security context not set in installation files  |
-| GA    | 0.32 and newer         | Enabled by default (without possibility to disable it)              |
+| Phase | Strimzi versions       | Default state                                                        |
+|:------|:-----------------------|:---------------------------------------------------------------------|
+| Alpha | 0.28, 0.29             | Disabled by default, security context not set in installation files  |
+| Beta  | 0.30, 0.31             | Enabled by default and security context is set in installation files |
+| GA    | 0.32 and newer         | Enabled by default (without possibility to disable it)               |
 
 Just to note:
 * Even after this feature gate graduates to GA, users will be still able to set the security context using the custom resources.
