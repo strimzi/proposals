@@ -1,4 +1,4 @@
-# Deprecate and remove Mirror Maker 2 extensions
+# Deprecate and remove MirrorMaker 2 extensions
 
 ## Current situation
 
@@ -14,32 +14,32 @@ It does not seem to make sense to maintain our own policy in parallel to Apache 
 
 ## Proposal
 
-After dropping support for Kafka versions older than 3.0.0 (expected to happen in Strimzi 0.28.0), we should deprecate our own policy and migrate users to the Kafka's identity replication policy.
+After dropping support for Kafka versions older than 3.0.0 (expected to happen in Strimzi 0.28.0), we should deprecate our own policy and migrate users to Kafka's identity replication policy.
 
-Following steps should be taken as part of the 0.28.0 release:
+The following steps should be taken as part of the 0.28.0 release:
 * Update our documentation to use Kafka's `IdentityReplicationPolicy`.
 * Update our examples to use Kafka's `IdentityReplicationPolicy`.
 * Update the `CHANGELOG.md` file to indicate the deprecation.
-* Release new version of the MM2 Extensions which would instead of implementing our own logic just extend Kafka's `IdentityReplicationPolicy`.
-  That should ensure exactly the same behavior from both policies.
+* Release a new version of the MM2 Extensions, which would extend Kafka's `IdentityReplicationPolicy` instead of implementing our own logic.
+  The change to the extensions project should ensure exactly the same behavior from both policies.
   It would also make sure that any users still using `io.strimzi.kafka.connect.mirror.IdentityReplicationPolicy` do not have any problems
 * After the release, clearly deprecate and archive the `mirror-maker-2-extensions` repository.
   (If we ever need any other MM2 extension in the future, we can always unarchive it)
 
-Even in 0.28 and newer releases, will still include the `mirror-maker-2-extensions` JARs to ensure compatibility.
+Even in Strimzi 0.28 and newer releases, we will still include the `mirror-maker-2-extensions` JARs to ensure compatibility.
 The JAR will be removed only in Strimzi 0.32.0 (i.e. after 4 releases) or Strimzi 1.0.0 (whichever comes first).
 From that version on, users will need to use the Apache Kafka policy in their configuration as `org.apache.kafka.connect.mirror.IdentityReplicationPolicy`.
 
 Any users using the Mirror Maker 2 Extensions with older versions of Apache Kafka outside of Strimzi will still be able to get the previously released versions from our Maven repositories.
-Also anyone building older version of Strimzi will be able to use the older versions and will not be impacted by the archiving of the GitHub repository.
+Also, anyone building an older version of Strimzi will be able to use the older versions and will not be impacted by the archiving of the GitHub repository.
 
-## Affected/not affected projects
+## Affected projects
 
 This proposal impacts the Mirror Maker 2 Extensions and Strimzi Kafka Operators projects.
 
 ## Backwards compatibility
 
-The impacts on the backwards compatibility are described in the proposal.
+The impact on backwards compatibility is described in the proposal.
 
 ## Rejected alternatives
 
