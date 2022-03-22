@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 35  | [Cluster Wide Volume Usage Quota Management](./035-cluster-wide-volume-usage-quota-managemnet.md) |
 | 34  | [Deprecate and remove MirrorMaker 2 extensions](./034-deprecate-and-remove-mirror-maker-2-extensions.md) |
 | 33  | [Service Binding](./033-service-binding.md) |
 | 32  | [Custom Authentication in Kafka Brokers ](./032-custom_authentication_in_kafka_brokers.md) |
