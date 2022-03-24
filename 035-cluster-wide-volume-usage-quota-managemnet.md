@@ -65,7 +65,7 @@ possible states of the plugin as:
 - Should apply the largest delay caused by each disk which breaches the soft limit.
     - The amount of throttling should be proportional to how much of the difference between the soft and hard limit
       remains for a given Volume. Applying more throttle the closer to the hard limit things are.
-- Should apply a `PAUSE` of publication if *any* Volume in the cluster breaches the hard limit
+- Should apply a `PAUSE` level throttle to client produce requests if *any* Volume in the cluster breaches the hard limit.
 - Connect as an internal service using TLS and client certificates to connect to the Control Plane listener.
 - Use the Kafka Admin client to discover the list of currently active brokers
 - On startup and periodically thereafter read the Volume usage stats from the topic
@@ -78,6 +78,8 @@ possible states of the plugin as:
   should be a configuration parameter
 
 #### Message schema
+
+For simplicity and debug ability the message should be encoded as JSON, but could be converted to a more space efficient format later on if justified. 
 
 ##### Message
 
