@@ -55,7 +55,7 @@ possible states of the plugin as:
 - Collect local volume usage
 - Publish usage to an internal compacted topic keyed by broker ID.
 - Collect and publish usage on start up and periodically after that.
-- Connect as an internal service using TLS and client certificates to connect to the Control Plane listener.
+- Connect as an internal service using TLS and client certificates to connect to the Replication listener.
 - Publish metrics showing its connection status and a counter of the number of publication errors - to allow the
   detection of connectivity issues.
 - Publish Volume Information with the following [schema](#Message-schema)
@@ -67,7 +67,7 @@ possible states of the plugin as:
       remains for a given Volume. Applying more throttle the closer to the hard limit things are.
 - Should apply a `PAUSE` level throttle to client produce requests if *any* Volume in the cluster breaches the hard
   limit.
-- Connect as an internal service using TLS and client certificates to connect to the Control Plane listener.
+- Connect as an internal service using TLS and client certificates to connect to the Replication listener.
 - Use the Kafka Admin client to discover the list of currently active brokers
 - On startup and periodically thereafter read the Volume usage stats from the topic
 - Ensure that the quota plugin Volume updates are not throttled
