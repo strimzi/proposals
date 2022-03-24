@@ -33,9 +33,9 @@ out of space issues.
 
 ### Leverage kafka to distribute volume usage metrics throughout the cluster.
 
-By publishing per volume usage metrics to a compacted topic keyed by the broker ID each instance of the plugin will be able
-to start and quickly determine the state of the cluster and consistently apply throttling regardless of where the client
-is connected.
+By publishing per volume usage metrics to a compacted topic keyed by the broker ID each instance of the plugin will be
+able to start and quickly determine the state of the cluster and consistently apply throttling regardless of where the
+client is connected.
 
 [KIP-257](https://cwiki.apache.org/confluence/display/KAFKA/KIP-257+-+Configurable+Quota+Management) Defines the quota
 API and defines quotas in terms of how much of a delay to apply to a given produce request. This leads to defining the
@@ -65,7 +65,8 @@ possible states of the plugin as:
 - Should apply the largest delay caused by each disk which breaches the soft limit.
     - The amount of throttling should be proportional to how much of the difference between the soft and hard limit
       remains for a given Volume. Applying more throttle the closer to the hard limit things are.
-- Should apply a `PAUSE` level throttle to client produce requests if *any* Volume in the cluster breaches the hard limit.
+- Should apply a `PAUSE` level throttle to client produce requests if *any* Volume in the cluster breaches the hard
+  limit.
 - Connect as an internal service using TLS and client certificates to connect to the Control Plane listener.
 - Use the Kafka Admin client to discover the list of currently active brokers
 - On startup and periodically thereafter read the Volume usage stats from the topic
@@ -74,14 +75,35 @@ possible states of the plugin as:
     - The action should be one of `PAUSE` or `OPEN`.
     - Defaulting to `PAUSE` as the fail-safe option.
 - Publish a metric showing when it is applying throttling due to a lack of data.
-- Apply a freshness check to the volume usage it reads and ignore stale state [3]. The threshold for staleness
-  should be a configuration parameter
+- Apply a freshness check to the volume usage it reads and ignore stale state [3]. The threshold for staleness should be
+  a configuration parameter
 
-#### Message schema
+#### Implementation details
 
-For simplicity and debug ability the message should be encoded as JSON, but could be converted to a more space efficient format later on if justified. 
+##### Internal API within the quota plugin
 
-##### Message
+To make all this work the quota plugin will need to introduce some new interfaces:
+
+1. A Quota Policy - To encapsulate the logic for evaluating if a volume `complies` or `breaches` a policy
+2. A Quota Factor Source - To calculate the factor in the range `0..100`% to apply to the entries in the
+   quota map
+3. A Data Source - To publish the current volume usage for the broker in question.
+
+One can envisage a model where the Quota policy was externalised to a separate service which calculated the quota factor
+and thus the Quota Factor Source would just provider a wrapper round that external service. For the purposes of this
+proposal all three interfaces would be implemented with the current quota plugin.
+
+In this proposal the Factor Source implementation would have the kafka consumer and delegate to the quota policy to
+determine what factor to apply.
+
+While the Data source would periodically calculate and publish the usage metrics for the local broker. 
+
+##### Message schema
+
+For simplicity and debug ability the message should be encoded as JSON, but could be converted to a more space efficient
+format later on if justified.
+
+###### Message
 
 | Field      | Type                                    | Description                                                                   |
 |------------|-----------------------------------------|-------------------------------------------------------------------------------|
@@ -90,14 +112,14 @@ For simplicity and debug ability the message should be encoded as JSON, but coul
 | Soft limit | `Limit Definition`                      | Defines when the source broker believes the producers should be throttled [2] |
 | Volumes    | Set of [VolumeDetails](#volume-details) | Details of the storage volumes attached to the broker                         |
 
-##### Limit Definition
+###### Limit Definition
 
 | Filed | Type   | Description                                                   |
 |-------|--------|---------------------------------------------------------------|
 | type  | Enum   | One of `ConsumedSpace`, `MinFreeBytes` or `MinFreePercentage` |
 | level | Number | Defines the level at which the limit applies                  |
 
-##### Volume Details
+###### Volume Details
 
 | Filed      | Type   | Description                                                      |
 |------------|--------|------------------------------------------------------------------|
