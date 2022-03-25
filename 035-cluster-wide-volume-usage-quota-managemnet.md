@@ -89,13 +89,115 @@ To make all this work the quota plugin will need to introduce some new interface
 3. A Data Source - To publish the current volume usage for the broker in question.
 
 One can envisage a model where the Quota policy was externalised to a separate service which calculated the quota factor
-and thus the Quota Factor Source would just provider a wrapper round that external service. For the purposes of this
+and thus the Quota Factor Source would just provide a wrapper around that external service. For the purposes of this
 proposal all three interfaces would be implemented with the current quota plugin.
 
 In this proposal the Factor Source implementation would have the kafka consumer and delegate to the quota policy to
 determine what factor to apply.
 
 While the Data source would periodically calculate and publish the usage metrics for the local broker.
+
+##### Proposed interface details
+1. QuotaPolicy
+```java
+/*
+ * Copyright Strimzi authors.
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
+package io.strimzi.kafka.quotas.policy;
+
+import io.strimzi.kafka.quotas.VolumeDetails;
+
+/**
+ * Abstracts the decision-making around hard and soft limits and how to calculate the affect the impact breaching the limits has on the client request.
+ */
+public interface QuotaPolicy {
+
+    /**
+     * Does the particular volume breach this policy's defined hard limit.
+     *
+     * @param volumeDetails details of the disk in question.
+     * @return <code>true</code> if this policy considers the volume to breach the limit otherwise <code>false</code>
+     */
+    boolean breachesHardLimit(VolumeDetails volumeDetails);
+
+    /**
+     * Does the particular volume breach this policy's defined soft limit.
+     *
+     * @param volumeDetails details of the disk in question.
+     * @return <code>true</code> if this policy considers the volume to breach the limit otherwise <code>false</code>
+     */
+    boolean breachesSoftLimit(VolumeDetails volumeDetails);
+
+    /**
+     * Returns the fraction of the original quota this policy thinks is appropriate. Represented as percentage value between <code>0</code> and <code>1</code>
+     * <p>
+     * Where a fraction of <code>1.0</code> is un affected <br>
+     * Breaching the hard limit implies a quota factor of <code>0.0</code>
+     * @param volumeDetails details of the disk in question.
+     * @return A value between <code>0</code> and <code>1</code>.
+     */
+    double quotaFactor(VolumeDetails volumeDetails);
+
+    /**
+     * At what level does this policy start applying a non-zero quota factor.
+     * Primarily for metrics purposes.
+     * Note: Returns <code>Number</code> to represent both fixed or relative usage levels. e.g. 5% free
+     *
+     * @return the level at which the quotaFactor becomes non-zero.
+     */
+    Number getSoftLimit();
+
+    /**
+     * At what level does this policy apply its maximum level of throttling.
+     * Primarily for metrics purposes.
+     * Note: Returns <code>Number</code> to represent both fixed or relative usage levels. e.g. 5% free
+     *
+     * @return the level at which the quotaFactor becomes non-zero.
+     */
+    Number getHardLimit();
+}
+```
+2. QuotaFactorSource
+```java
+/*
+ * Copyright Strimzi authors.
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
+
+package io.strimzi.kafka.quotas;
+
+import java.util.function.Supplier;
+
+/**
+ * Determines the current restriction factor to be applied to the client quota.
+ * Values returned are required to be in the range <code>0.0..1.0</code> inclusive.
+ * Where a value of `1.0` implies no additional restriction over and above the defined quota.
+ * A value of `0.0` implies that there is no quota available regardless of the defined quota.
+ */
+public interface QuotaFactorSource extends Supplier<Double> {
+}
+```
+3. DataSourceTask
+```java
+/*
+ * Copyright Strimzi authors.
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
+
+package io.strimzi.kafka.quotas;
+
+import java.util.concurrent.TimeUnit;
+
+public interface DataSourceTask extends Runnable {
+    @Override
+    void run();
+
+    long getPeriod();
+
+    TimeUnit getPeriodUnit();
+}
+```
 
 ##### Message schema
 
