@@ -85,8 +85,7 @@ possible states of the plugin as:
 To make all this work the quota plugin will need to introduce some new interfaces:
 
 1. A Quota Policy - To encapsulate the logic for evaluating if a volume `complies` or `breaches` a policy
-2. A Quota Factor Source - To calculate the factor in the range `0..100`% to apply to the entries in the
-   quota map
+2. A Quota Factor Source - To calculate the factor in the range `0..100`% to apply to the entries in the quota map
 3. A Data Source - To publish the current volume usage for the broker in question.
 
 One can envisage a model where the Quota policy was externalised to a separate service which calculated the quota factor
@@ -96,7 +95,7 @@ proposal all three interfaces would be implemented with the current quota plugin
 In this proposal the Factor Source implementation would have the kafka consumer and delegate to the quota policy to
 determine what factor to apply.
 
-While the Data source would periodically calculate and publish the usage metrics for the local broker. 
+While the Data source would periodically calculate and publish the usage metrics for the local broker.
 
 ##### Message schema
 
@@ -151,3 +150,13 @@ Would require the quota plugin to:
 - to have a predictable and consistent naming convention
 
 It would also make the deployment of an external metrics a requirement for the quota-plugin to function.
+
+### KIP-73
+
+KIP-73 is designed to protect client performance while cluster re-balancing exercises are taking place by limiting the
+bandwidth available to the replication traffic. This is not suitable for use in preventing out of storage issues as the
+bandwidth limit is configured as part of the partition re-assignment operation. As it applies a bandwidth limit it is
+configured in  `units per second` which is problematic for the quota plugin to determine a sensible value for as it
+should really be related to the expected rate at which data is purged from the tail of the partitions on the volume in
+question. KIP-73 bandwidth limits are only applied to a specific set of `partition` & `replica` pairs which would
+require the ability for the plugin to resolve the required pairs. 
