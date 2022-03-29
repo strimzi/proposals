@@ -29,9 +29,7 @@ deploying the plugin to calculate a threshold for throttling and would require s
 out of space issues.
 
 ## Proposal
-
 ### Leverage Kafka to distribute volume usage metrics throughout the cluster.
-
 By publishing per volume usage metrics to a compacted topic keyed by the broker ID, each instance of the plugin will be able to start and quickly determine the state of the cluster and consistently apply throttling regardless of where the
 client is connected.
 
@@ -39,33 +37,38 @@ client is connected.
 possible states of the plugin as:
 `OPEN`, `THROTTLE` and `PAUSE` to accurately reflect the effects of transitioning between states.
 
-#### Limit Types
+This implies there are three roles.
+1. **Data source** - Publish volume usage metrics about the volumes underlying the brokers log dirs.
+2. **Data Sink** - Consume volume usage metrics and make those available for making Quota Policy decisions.
+3. **Quota Policy** - Convert volume usage metrics for the entire cluster into throttling decisions.
 
+This proposal envisages them all being implemented by the kafka-static-quota-plugin however by clearly distinguishing the roles we leave open future options to move each of the roles out of process.
+
+#### Limit Types
 1. Consumed space limit: Triggers if the consumed space of a volume breaches the value. Candidate for deprecation.
 2. Minimum Free Bytes: Triggers if the amount of free space on a volume drops below the configured level. Particularly
    useful for hard limits as an absolute minimum of free space.
 3. Minimum Free Percentage. Triggers if the amount of free space on the volume drops below the configured proportion of
    the volumes total capacity.
 
-#### The quota plugin data publisher should:
-
+#### The data source should:
 - Collect local volume usage
 - Publish usage to an internal compacted topic keyed by broker ID.
-- Collect and publish usage on start up and periodically after that.
+- Collect and publish volume usage metrics (using this [message schema](#Message-schema)) on start up and periodically after that.
 - Connect as an internal service using TLS and client certificates to connect to the Replication listener.
-- Publish Volume Information with the following [schema](#Message-schema)
 
-#### The quota plugin consumer should:
+#### The data sink should:
+- Connect as an internal service using TLS and client certificates to connect to the Replication listener.
+- On startup and periodically thereafter read the volume usage stats from the topic
+- Use the Kafka Admin client to discover the list of currently active brokers
 
+#### The quota policy should:
 - Should apply the largest delay caused by each disk which breaches the soft limit.
     - The amount of throttling should be proportional to how much of the difference between the soft and hard limit
       remains for a given volume. Applying more throttle the closer to the hard limit things are.
-- Should apply a `PAUSE` level throttle to client produce requests if *any* volume in the cluster breaches the hard
+- Should apply a `PAUSE` level throttle to client produce requests if **any** volume in the cluster breaches the hard
   limit.
-- Connect as an internal service using TLS and client certificates to connect to the Replication listener.
-- Use the Kafka Admin client to discover the list of currently active brokers
-- On startup and periodically thereafter read the volume usage stats from the topic
-- Ensure that the quota plugin volume updates are not throttled
+- Ensure that the quota plugin, and other Strimzi services, updates are not throttled.
 - Should take a configured action when it can not determine the state of all known brokers.
     - The action should be one of `PAUSE` or `OPEN`.
     - Defaulting to `PAUSE` as the fail-safe option.
@@ -238,7 +241,7 @@ Preserved for backwards compatability.
 - `client.quota.callback.static.storage.hard`
 - `client.quota.callback.static.storage.soft`
 
-Controlling the number of consumed bytes *above* which throttling is applied. 
+Controlling the number of consumed bytes **above** which throttling is applied. 
 
 ###### New properties
 - `client.quota.callback.static.storage.hard.min-free-bytes`
@@ -246,7 +249,7 @@ Controlling the number of consumed bytes *above* which throttling is applied.
 - `client.quota.callback.static.storage.soft.min-free-bytes`
 - `client.quota.callback.static.storage.soft.min-free-percent` Expressed as `0.0..1.0`    
 
-Expressed as the number of available bytes, derived from the proportion of the total volume size, *below* which throttling is applied.
+Expressed as the number of available bytes, derived from the proportion of the total volume size, **below** which throttling is applied.
 
 ## Rejected Alternatives
 
