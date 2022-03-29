@@ -53,8 +53,6 @@ possible states of the plugin as:
 - Publish usage to an internal compacted topic keyed by broker ID.
 - Collect and publish usage on start up and periodically after that.
 - Connect as an internal service using TLS and client certificates to connect to the Replication listener.
-- Publish metrics showing its connection status and a counter of the number of publication errors - to allow the
-  detection of connectivity issues.
 - Publish Volume Information with the following [schema](#Message-schema)
 
 #### The quota plugin consumer should:
@@ -71,11 +69,9 @@ possible states of the plugin as:
 - Should take a configured action when it can not determine the state of all known brokers.
     - The action should be one of `PAUSE` or `OPEN`.
     - Defaulting to `PAUSE` as the fail-safe option.
-- Publish a metric showing when it is applying throttling due to a lack of data.
 - Apply a freshness check to the volume usage it reads and ignore stale state [3]. The threshold for staleness should be a configuration parameter.
 
 #### Implementation details
-
 ##### Internal API within the quota plugin
 
 To make all this work the quota plugin will need to introduce some new interfaces:
@@ -196,7 +192,6 @@ public interface DataSourceTask extends Runnable {
 ```
 
 ##### Message schema
-
 For simplicity and debug ability the message should be encoded as JSON, but could be converted to a more space efficient
 format later on if justified.
 
@@ -230,6 +225,28 @@ Notes:
 2. One could view the limits defined at the message level as being broker wide defaults, they could then optionally be
    overridden at the VolumeDetails level with a volume specific limit.
 3. Separating freshness from topic eviction as freshness is a "business" concern of the plugin.
+
+##### Metrics
+- Throttling applied due lack of data. - Gauge with the value `0` not applied or `1` applied
+- Connection status - Gauge with the value `0` disconnected or `1` Connected
+- publication errors - Counter to allow the detection of connectivity issues.
+- Metrics showing usage per local volume.
+
+##### Configuring the plugin
+###### Existing properties
+Preserved for backwards compatability.
+- `client.quota.callback.static.storage.hard`
+- `client.quota.callback.static.storage.soft`
+
+Controlling the number of consumed bytes *above* which throttling is applied. 
+
+###### New properties
+- `client.quota.callback.static.storage.hard.min-free-bytes`
+- `client.quota.callback.static.storage.hard.min-free-percent` Expressed as `0.0..1.0`
+- `client.quota.callback.static.storage.soft.min-free-bytes`
+- `client.quota.callback.static.storage.soft.min-free-percent` Expressed as `0.0..1.0`    
+
+Expressed as the number of available bytes, derived from the proportion of the total volume size, *below* which throttling is applied.
 
 ## Rejected Alternatives
 
