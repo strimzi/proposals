@@ -2,8 +2,8 @@
 
 ## Current situation
 
-The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate thresholds and storage limits on connections to
-individual brokers, slowing producers down when consumed storage is over the soft limit (but below the hard limit) and
+The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate limits on connections to
+individual brokers (thresholds derived from storage limits), slowing producers down when consumed storage is over the soft limit (but below the hard limit) and
 effectively pausing publication when reaching or exceeding the hard limit. This largely prevents out of disk scenarios when topics
 are replicated to all brokers thus there is largely similar disk usage between all brokers. Assuming all the brokers
 have similar disk usage levels, they will all apply rate limits at similar times and levels, effectively giving cluster-wide out-of-storage protection.
@@ -67,7 +67,7 @@ possible states of the plugin as:
 - Connect as an internal service using TLS and client certificates to connect to the Replication listener.
 - Use the Kafka Admin client to discover the list of currently active brokers
 - On startup and periodically thereafter read the volume usage stats from the topic
-- Ensure that the quota plugin Volume updates are not throttled
+- Ensure that the quota plugin volume updates are not throttled
 - Should take a configured action when it can not determine the state of all known brokers.
     - The action should be one of `PAUSE` or `OPEN`.
     - Defaulting to `PAUSE` as the fail-safe option.
