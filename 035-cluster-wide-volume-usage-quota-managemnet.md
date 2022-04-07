@@ -42,7 +42,12 @@ This implies there are three roles.
 2. **Data Sink** - Consume volume usage metrics and make those available for making Quota Policy decisions.
 3. **Quota Policy** - Convert volume usage metrics for the entire cluster into throttling decisions.
 
-This proposal envisages them all being implemented by the kafka-static-quota-plugin however by clearly distinguishing the roles we leave open future options to move each of the roles out of process.
+This proposal envisages them all being implemented by the kafka-static-quota-plugin however by clearly distinguishing
+the roles we leave open future options to move each of the roles out of process. It also proposes each broker performing
+all roles without co-ordination. The
+following [communication diagram](https://www.uml-diagrams.org/communication-diagrams.html) illustrates the parallel
+nature of the proposal.
+![proposal Communication diagram](./images/035-quota-communication-diagram.jpg)
 
 #### Limit Types
 1. Consumed space limit: Triggers if the consumed space of a volume breaches the value. Candidate for deprecation.
@@ -153,7 +158,7 @@ public interface QuotaPolicy {
     Number getHardLimit();
 }
 ```
-2. QuotaFactorSource
+2. QuotaFactorSupplier
 ```java
 /*
  * Copyright Strimzi authors.
@@ -199,9 +204,209 @@ For simplicity and debug ability the message should be encoded as JSON, but coul
 format later on if justified.
 
 ###### Message
-
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "http://example.com/example.json",
+  "type": "object",
+  "title": "The root schema",
+  "description": "The root schema comprises the entire JSON document.",
+  "default": {},
+  "$defs": {
+    "limit": {
+      "type": "object",
+      "limit_type": {
+        "$id": "#/$defs/limit/limit_type",
+        "default": "",
+        "description": "An explanation about the purpose of this instance.",
+        "examples": [
+          "MinFreeBytes"
+        ],
+        "title": "The type schema",
+        "enum": [
+          "ConsumedBytes",
+          "MinFreeBytes",
+          "MinFreePercentage"
+        ],
+        "type": "string"
+      },
+      "level": {
+        "$id": "#/$defs/limit/level",
+        "type": "integer",
+        "title": "The level schema",
+        "description": "An explanation about the purpose of this instance.",
+        "default": 0,
+        "examples": [
+          1000000
+        ]
+      }
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "examples": [
+    {
+      "brokerId": "0",
+      "snapshotAt": "2022-04-07T13:00:00Z",
+      "hardLimit": {
+        "type": "MinFreeBytes",
+        "level": 1000000
+      },
+      "softLimit": {
+        "type": "MinFreePercentage",
+        "level": 5
+      },
+      "volumes": [
+        {
+          "volumeName": "/dev/sdd",
+          "capacity": 107374182400,
+          "consumed": 10737418240
+        }
+      ]
+    }
+  ],
+  "required": [
+    "brokerId",
+    "snapshotAt",
+    "hardLimit",
+    "softLimit",
+    "volumes"
+  ],
+  "properties": {
+    "brokerId": {
+      "$id": "#/properties/brokerId",
+      "type": "string",
+      "title": "The brokerId schema",
+      "description": "The Identifier of the broker. Expected to be the same as https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString() for the publishing broker",
+      "default": "",
+      "examples": [
+        "0"
+      ]
+    },
+    "snapshotAt": {
+      "$id": "#/properties/snapshotAt",
+      "type": "string",
+      "title": "snapshotAt",
+      "description": "The time at which the metrics were generated",
+      "default": "",
+      "format": "date-time",
+      "examples": [
+        "2022-04-07T13:00:00Z"
+      ]
+    },
+    "hardLimit": {
+      "$id": "#/properties/hardLimit",
+      "default": {},
+      "description": "Defines when the source broker believes the producers should be paused",
+      "examples": [
+        {
+          "type": "MinFreeBytes",
+          "level": 1000000
+        }
+      ],
+      "$ref": "#/$defs/limit",
+      "additionalProperties": true
+    },
+    "softLimit": {
+      "$id": "#/properties/softLimit",
+      "type": "object",
+      "title": "The softLimit schema",
+      "description": "Defines when the source broker believes the producers should be throttled",
+      "default": {},
+      "examples": [
+        {
+          "type": "MinFreePercentage",
+          "level": 5
+        }
+      ],
+      "$ref": "#/$defs/limit",
+      "additionalProperties": true
+    },
+    "volumes": {
+      "$id": "#/properties/volumes",
+      "type": "array",
+      "title": "AttachedVolumes schema",
+      "description": "Metrics for each volume attached to this broker",
+      "default": [],
+      "examples": [
+        [
+          {
+            "volumeName": "/dev/sdd",
+            "capacity": 107374182400,
+            "consumed": 10737418240
+          }
+        ]
+      ],
+      "additionalItems": true,
+      "items": {
+        "$id": "#/properties/volumes/items",
+        "anyOf": [
+          {
+            "$id": "#/properties/volumes/items/anyOf/0",
+            "type": "object",
+            "title": "Volume Schema",
+            "description": "Metrics for a given volume",
+            "default": {},
+            "examples": [
+              {
+                "volumeName": "/dev/sdd",
+                "capacity": 107374182400,
+                "consumed": 10737418240
+              }
+            ],
+            "required": [
+              "volumeName",
+              "capacity",
+              "consumed"
+            ],
+            "properties": {
+              "volumeName": {
+                "$id": "#/properties/volumes/items/anyOf/0/properties/volumeName",
+                "type": "string",
+                "title": "The volumeName schema",
+                "description": "A unique identifier (within the scope of a broker)",
+                "default": "",
+                "examples": [
+                  "/dev/sdd"
+                ]
+              },
+              "capacity": {
+                "$id": "#/properties/volumes/items/anyOf/0/properties/capacity",
+                "type": "integer",
+                "title": "VolumeCapacity",
+                "description": "The capacity of the volume expressed in bytes",
+                "default": 0,
+                "$ref": "#/$defs/bytes",
+                "examples": [
+                  107374182400
+                ]
+              },
+              "consumed": {
+                "$id": "#/properties/volumes/items/anyOf/0/properties/consumed",
+                "type": "integer",
+                "$ref": "#/$defs/bytes",
+                "title": "ConsumedBytes",
+                "description": "The number of bytes currently consumed on the volume",
+                "default": 0,
+                "examples": [
+                  10737418240
+                ]
+              }
+            },
+            "additionalProperties": true
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}
+```
 | Field      | Type                                    | Description                                                                   |
 |------------|-----------------------------------------|-------------------------------------------------------------------------------|
+| brokerId   | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
 | SnapshotAt | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
 | Hard limit | [Limit Definition](#limit-definition)   | Defines when the source broker believes the producers should be paused [2]    |
 | Soft limit | `Limit Definition`                      | Defines when the source broker believes the producers should be throttled [2] |
