@@ -59,7 +59,7 @@ nature of the proposal.
 #### The data source should:
 - Collect local volume usage
 - Publish usage to an internal compacted topic keyed by broker ID.
-- Collect and publish volume usage metrics (using this [message schema](#Message-schema)) on start up and periodically after that.
+- Collect and publish volume usage metrics (using the [volume metrics snapshot](#volume-metrics-snapshot-definition)) on start up and periodically after that.
 - Connect as an internal service using TLS and client certificates to connect to the Replication listener.
 
 #### The data sink should:
@@ -199,11 +199,50 @@ public interface DataSourceTask extends Runnable {
 }
 ```
 
-##### Message schema
-For simplicity and debug ability the message should be encoded as JSON, but could be converted to a more space efficient
+##### Volume Metrics snapshot definition
+Each metrics snapshot will be published with the brokerId as the records key and using the following schema as the record value.
+
+For simplicity and debug ability the record should be encoded as JSON, but could be converted to a more space efficient
 format later on if justified.
 
-###### Message
+###### Metrics Snapshot
+
+| Field      | Type                                    | Description                                                                   |
+|------------|-----------------------------------------|-------------------------------------------------------------------------------|
+| brokerId   | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
+| SnapshotAt | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
+| Hard limit | [Limit Definition](#limit-definition)   | Defines when the source broker believes the producers should be paused [2]    |
+| Soft limit | `Limit Definition`                      | Defines when the source broker believes the producers should be throttled [2] |
+| Volumes    | Set of [VolumeDetails](#volume-details) | Details of the storage volumes attached to the broker                         |
+
+###### Limit Definition
+
+| Field | Type   | Description                                                   |
+|-------|--------|---------------------------------------------------------------|
+| type  | Enum   | One of `ConsumedSpace`, `MinFreeBytes` or `MinFreePercentage` |
+| level | Number | Defines the level at which the limit applies                  |
+
+###### Volume Details
+
+| Field      | Type   | Description                                                      |
+|------------|--------|------------------------------------------------------------------|
+| VolumeName | String | An identifier to uniquely distinguish the disk. e.g. `/dev/sda1` |
+| Capacity   | long   | The capacity of the volume in bytes                              |
+| Consumed   | long   | The number of bytes currently in use on the volume               |
+
+Notes:
+
+1. Explicitly mark when the volume usage was captured rather than depending on message publication timestamps.
+2. One could view the limits defined at the message level as being broker wide defaults, they could then optionally be
+   overridden at the VolumeDetails level with a volume specific limit.
+3. Separating freshness from topic eviction as freshness is a "business" concern of the plugin.
+
+##### Message JSON schema
+
+If there are any disagreements between the textual schema above and
+the [JSON schema](./schemas/035-cluster-wide-volume-usage-quota-message-schema.json) the JSON schema should be
+considered authoritative.
+
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema",
@@ -404,35 +443,6 @@ format later on if justified.
   "additionalProperties": true
 }
 ```
-| Field      | Type                                    | Description                                                                   |
-|------------|-----------------------------------------|-------------------------------------------------------------------------------|
-| brokerId   | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
-| SnapshotAt | `ISO 8601 Date Time`                    | Timestamp when the snapshot of volume usage was generated [1]                 |
-| Hard limit | [Limit Definition](#limit-definition)   | Defines when the source broker believes the producers should be paused [2]    |
-| Soft limit | `Limit Definition`                      | Defines when the source broker believes the producers should be throttled [2] |
-| Volumes    | Set of [VolumeDetails](#volume-details) | Details of the storage volumes attached to the broker                         |
-
-###### Limit Definition
-
-| Field | Type   | Description                                                   |
-|-------|--------|---------------------------------------------------------------|
-| type  | Enum   | One of `ConsumedSpace`, `MinFreeBytes` or `MinFreePercentage` |
-| level | Number | Defines the level at which the limit applies                  |
-
-###### Volume Details
-
-| Field      | Type   | Description                                                      |
-|------------|--------|------------------------------------------------------------------|
-| VolumeName | String | An identifier to uniquely distinguish the disk. e.g. `/dev/sda1` |
-| Capacity   | long   | The capacity of the volume in bytes                              |
-| Consumed   | long   | The number of bytes currently in use on the volume               |
-
-Notes:
-
-1. Explicitly mark when the volume usage was captured rather than depending on message publication timestamps.
-2. One could view the limits defined at the message level as being broker wide defaults, they could then optionally be
-   overridden at the VolumeDetails level with a volume specific limit.
-3. Separating freshness from topic eviction as freshness is a "business" concern of the plugin.
 
 ##### Metrics
 - Throttling applied due lack of data. - Gauge with the value `0` not applied or `1` applied
