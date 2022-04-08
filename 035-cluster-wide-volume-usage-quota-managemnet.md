@@ -243,6 +243,9 @@ If there are any disagreements between the textual schema above and
 the [JSON schema](./schemas/035-cluster-wide-volume-usage-quota-message-schema.json) the JSON schema should be
 considered authoritative.
 
+<details><summary>Json Schema</summary>
+<p>
+
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema",
@@ -443,6 +446,8 @@ considered authoritative.
   "additionalProperties": true
 }
 ```
+</p>
+</details>
 
 ##### Metrics
 - Throttling applied due lack of data. - Gauge with the value `0` not applied or `1` applied
