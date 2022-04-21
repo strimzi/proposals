@@ -77,13 +77,28 @@ For this reason the proposal is about having the user to specify the added or re
 If needed, it also provides the flexibility to scale up the cluster but running the rebalancing taking into account only a subset of the newly added brokers and leaving others just for new topics.
 The same could happen by running a rebalance for removing brokers to make them "empty" but then not doing the actual scale down.
 
-In order to scale up the cluster, the user increases the number of replicas through the `spec.kafka.replicas` of the `Kafka` custom resource.
-When the scaling is done, a new `KafkaRebalance` custom resource can be created by setting the `spec.mode: add-broker` and the list of the new broker IDs in the `spec.brokers` field.
-The `KafkaRebalanceAssemblyOperator` will start the interaction with Cruise Control via the `/add_broker` for getting an optimization proposal first and then, after being accepted by the user applying the `strimzi.io/rebalance=approve` annotation on it, to run the actual rebalancing.
+#### Rebalance on scale up
 
-Before scaling down the cluster, the user can create a `KafkaRebalance` custom resource with `spec.mode: remove-broker` and the list of the target broker to remove in the `spec.brokers` field.
-The `KafkaRebalanceAssemblyOperator` will start the interaction with Cruise Control via the `/remove_broker` for getting an optimization proposal first and then, after being accepted by the user applying the `strimzi.io/rebalance=approve` annotation on it, to run the actual rebalancing.
-When the rebalancing is done, the user can finally scale down the cluster by decreasing the number of replicas through the `spec.kafka.replicas` of the `Kafka` custom resource.
+When scaling up the cluster, the user can go through the following procedure:
+
+1. The user increases the number of replicas through the `spec.kafka.replicas` of the `Kafka` custom resource.
+2. When the scaling up is done, a new `KafkaRebalance` custom resource can be created by setting the `spec.mode` field as `add-broker` and the list of the new brokers in the `spec.brokers` field.
+3. The `KafkaRebalanceAssemblyOperator` starts the interaction with Cruise Control via the `/add_broker` endpoint for getting an optimization proposal (by using the dryrun feature).
+4. The user accepts the proposal by applying the `strimzi.io/rebalance=approve` annotation on it.
+5. The `KafkaRebalanceAssemblyOperator` starts the interaction with Cruise Control via the `/add_broker` endpoint for running the actual rebalancing.
+
+#### Rebalance on scale down
+
+When scaling down the cluster, the user can go through the following procedure:
+
+1. The user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-broker` and the list of the target brokers to remove in the `spec.brokers` field.
+2. The `KafkaRebalanceAssemblyOperator` starts the interaction with Cruise Control via the `/remove_broker` endpoint for getting an optimization proposal (by using the dryrun feature).
+3. The user accepts the proposal by applying the `strimzi.io/rebalance=approve` annotation on it.
+4. The `KafkaRebalanceAssemblyOperator` starts the interaction with Cruise Control via the `/remove_broker` endpoint for running the actual rebalancing.
+5. When the rebalancing is done, the user can finally scale down the cluster by decreasing the number of replicas through the `spec.kafka.replicas` of the `Kafka` custom resource.
+
+It could happen that before the scaling down but after the rebalancing a new topic is created and replicas are added on the target brokers to remove.
+It is not part of this proposal, but the Strimzi cluster operator should avoid the scale down in this case.
 
 ## Affected/not affected projects
 
