@@ -1,6 +1,10 @@
-# Cruise Control rebalancing on scaling the Apache Kafka cluster
+# Extending the `KafkaRebalance` resource with rebalance types to help scaling the Apache Kafka cluster
 
 This proposal is about leveraging the Cruise Control integration in the Strimzi cluster operator in order to run an Apache Kafka cluster rebalancing when it's scaled up or down.
+It's related to add the integration with two specific Cruise Control API endpoints for helping to move replicas to newly added brokers or move them out from removed ones, during the scaling operations.
+The proposal doesn't assume any automation to run the rebalancing, it is always user driven by using the improved `KafkaRebalance` custom resource. See the [Flow](#flow) section for more details.
+It has to be considered as "phase 1" towards more automation.
+The future plan is about having the user able to specify some criteria to match in order to have the Strimzi cluster operator able to run the rebalancing operation automatically during the scale up and down, reducing the user manual intervention.
 
 ## Current situation
 
