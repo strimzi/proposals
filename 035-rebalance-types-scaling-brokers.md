@@ -17,6 +17,7 @@ It actually runs a full-rebalance with the drawback of more data movement, CPU u
 
 In the same way, if the cluster is scaled down, the replicas hosted on the target brokers to remove are not moved out before the scaling down happens.
 Right now the scaling down is not blocked but doing it is not part of this proposal.
+This [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/6736) tracks the need for such a support.
 This could result in some partitions having less ISR (In-Sync Replicas) than before the scaling down, with an impact on availability of the cluster.
 The current Cruise Control integration has no support, via the `KafkaRebalance` custom resource, to allow moving these replicas out of the target brokers before the scaling down happens.
 
