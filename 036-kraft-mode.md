@@ -55,7 +55,7 @@ This is expected to change before the KRaft support is considered production-rea
 The new feature gate will be called `UseKraft`.
 It will be introduced in an alpha state and will be disabled by default.
 At this point, there is no timeline for graduation of this feature gate to beta or GA phase since it depends on things outside of out control.
-The schedule will be updated later as the KRaft development progress both in Apache Kafka as well as in Strimzi
+The schedule will be updated later as the KRaft development progress both in Apache Kafka as well as in Strimzi.
 
 In the initial implementation, enabling or disabling this feature gate with pre-existing Kafka clusters will not be supported.
 Users will need to delete all clusters before enabling or disabling the feature gate.
@@ -78,7 +78,7 @@ Some of the known limitations are included in the following list:
   Users might need to delete the cluster, upgrade the operator and deploy a new Kafka cluster.
 * Entity Operator (both User and Topic operator) are not supported.
 * Authorization is not supported.
-* SCRAM-SHA-512 users are not supported
+* SCRAM-SHA-512 users are not supported.
 * JBOD storage is not supported (the `type: jbod` storage can be used, but the JBOD array can contain only one disk)
 * Liveness and readiness probes might have limited functionality.
 * KRaft architectures using separate controller and broker nodes.
