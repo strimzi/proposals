@@ -11,8 +11,9 @@ It is based on _Apache Kafka Raft_ consensus protocol, which is also called _KRa
 This is what gives the name to this proposal as well as to the feature gate discussed later.
 
 Strimzi aims to support the ZooKeeper-less Kafka and the KRaft protocol.
+The issue [strimzi/strimzi-kafka-operator#5615](https://github.com/strimzi/strimzi-kafka-operator/issues/5615) can be used to track the overall progress and production-ready support for KRaft.
 Since the announcement of the KIP-500, we are making sure that Strimzi is as ready as possible for when the KRaft mode becomes production-ready.
-This includes for example adopting the new APIs based on Kafka instead of ZooKeeper in components such as User Operator or Cruise Control.
+This includes for example adopting the new Kafka Admin APIs using Kafka instead of ZooKeeper in components such as User Operator or Cruise Control.
 But right now, you cannot really use Strimzi to run Kafka with the KRaft mode enabled.
 That makes it hard to continue working on some of the additional tasks needed to have Strimzi production-ready with KRaft in the future.
 For example the work on the readiness / liveness probes, Topic Operator improvements, upgrades etc.
@@ -52,7 +53,7 @@ This is expected to change before the KRaft support is considered production-rea
 
 ### Feature Gate
 
-The new feature gate will be called `UseKraft`.
+The new feature gate will be called `UseKRaft`.
 It will be introduced in an alpha state and will be disabled by default.
 At this point, there is no timeline for graduation of this feature gate to beta or GA phase since it depends on things outside of our control.
 The schedule will be updated later as the KRaft development progresses both in Apache Kafka as well as in Strimzi.
@@ -62,10 +63,10 @@ Users will need to delete all clusters before enabling or disabling the feature 
 
 #### Dependency on other feature gates
 
-The `UseKraft` feature gate will be designed to work only with the `UseStrimziPodSets` feature gate enabled.
+The `UseKRaft` feature gate will be designed to work only with the `UseStrimziPodSets` feature gate enabled (see the [StatefulSet removal proposal](https://github.com/strimzi/proposals/blob/main/031-statefulset-removal.md) for more details).
 The StrimziPodSets will be what Strimzi will use in the future instead of the StatefulSets.
 There is no plan to support the StatefulSets in the KRaft mode.
-The feature gate settings will be validated when the operator starts.
+The feature gate settings will be validated when the operator starts to ensure that both feature gates are set correctly.
 
 ### Limitations
 
@@ -80,7 +81,7 @@ Some of the known limitations are included in the following list:
 * Authorization is not supported.
 * SCRAM-SHA-512 users are not supported.
 * JBOD storage is not supported (the `type: jbod` storage can be used, but the JBOD array can contain only one disk)
-* Liveness and readiness probes might have limited functionality.
+* Liveness and readiness probes are disabled.
 * KRaft architectures using separate controller and broker nodes.
 
 As the implementation progresses, these features might be added later with separate PRs without a dedicated Strimzi Proposal.
