@@ -4,7 +4,7 @@
 
 The Apache Kafka project is working on removing its dependency on ZooKeeper.
 Because of the complexity of this task, the work is in progress already for more than one year.
-It was stared with the [Kafka Improvement Proposal 500 (KIP-500)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum) and will continue for at least six to twelve months until all work is done and it is production-ready.
+It was started with the [Kafka Improvement Proposal 500 (KIP-500)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum) and will continue for at least six to twelve months until all work is done and it is production-ready.
 Step by step, it removes the different dependencies on ZooKeeper.
 From the smaller things such as CLI tools or management APIs up to the complicated tasks such as quorum management and metadata management.
 It is based on _Apache Kafka Raft_ consensus protocol, which is also called _KRaft_.
@@ -24,7 +24,7 @@ This proposal suggests to add provisional support for the KRaft mode.
 It will be disabled by default and will be protected by a new feature gate.
 When the feature gate is enabled, it will use the KRaft mode to deploy the Kafka cluster.
 It will simplify development and testing of new Strimzi features in the KRaft mode.
-And it would also allow to help with testing of the KRaft mode it self and raise any issues in the Apache Kafka project.
+And it would also allow to help with testing of the KRaft mode itself and raise any issues in the Apache Kafka project.
 
 The KRaft support proposed here is called provisional, because the API in the Kafka CR for configuring the Kafka nodes is not final and will be changed later.
 Most of the code implemented by this proposal is expected to be used for the final production-ready implementation.
@@ -47,15 +47,15 @@ It will respect the `.spec.kafka.replicas` field and deploy the corresponding nu
 All nodes will be assigned both the `controller` and `broker` KRaft roles.
 This deployment architecture is suitable for development and testing clusters.
 
-Other architectures, such as separate controller and broker nodes, will be not supported form the start.
+Other architectures, such as separate controller and broker nodes, will be not supported from the start.
 This is expected to change before the KRaft support is considered production-ready.
 
 ### Feature Gate
 
 The new feature gate will be called `UseKraft`.
 It will be introduced in an alpha state and will be disabled by default.
-At this point, there is no timeline for graduation of this feature gate to beta or GA phase since it depends on things outside of out control.
-The schedule will be updated later as the KRaft development progress both in Apache Kafka as well as in Strimzi.
+At this point, there is no timeline for graduation of this feature gate to beta or GA phase since it depends on things outside of our control.
+The schedule will be updated later as the KRaft development progresses both in Apache Kafka as well as in Strimzi.
 
 In the initial implementation, enabling or disabling this feature gate with pre-existing Kafka clusters will not be supported.
 Users will need to delete all clusters before enabling or disabling the feature gate.
@@ -69,7 +69,7 @@ The feature gate settings will be validated when the operator starts.
 
 ### Limitations
 
-The initial implementation of this proposal has very limited set of features.
+The initial implementation of this proposal has a very limited set of features.
 These features might be missing because they are not supported at this point either by Apache Kafka or by Strimzi.
 Some of the known limitations are included in the following list:
 
@@ -97,7 +97,7 @@ This was rejected, because it would make it harder to contribute the new feature
 
 ## Risks
 
-This proposal suggests to add new feature in an very early development phase.
+This proposal suggests to add a new feature in a very early development phase.
 Maintaining this feature in the `main` branch might cause additional effort.
 It is also possible that some of the early code might be thrown away later.
-The expected benefits seem to currently out-weight the risks.
+The expected benefits seem to currently out-weigh the risks.
