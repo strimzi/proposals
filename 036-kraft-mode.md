@@ -3,29 +3,29 @@
 ## Motivation
 
 The Apache Kafka project is working on removing its dependency on ZooKeeper.
-Because of the complexity of this task, the work is in progress already for more than one year.
+Because of the complexity of this task, the work has already been in progress for more than a year.
 It was started with the [Kafka Improvement Proposal 500 (KIP-500)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum) and will continue for at least six to twelve months until all work is done and it is production-ready.
-Step by step, it removes the different dependencies on ZooKeeper.
-From the smaller things such as CLI tools or management APIs up to the complicated tasks such as quorum management and metadata management.
-It is based on _Apache Kafka Raft_ consensus protocol, which is also called _KRaft_.
+Step-by-step, Apache Kafka will remove all dependencies on ZooKeeper. 
+These range from smaller dependencies, such as CLI and management tools, to more complex dependencies involving  quorum and metadata management. 
+A consensus protocol called _Apache Kafka Raft_ (or _KRaft_) will replace ZooKeeper. 
 This is what gives the name to this proposal as well as to the feature gate discussed later.
 
 Strimzi aims to support the ZooKeeper-less Kafka and the KRaft protocol.
 The issue [strimzi/strimzi-kafka-operator#5615](https://github.com/strimzi/strimzi-kafka-operator/issues/5615) can be used to track the overall progress and production-ready support for KRaft.
-Since the announcement of the KIP-500, we are making sure that Strimzi is as ready as possible for when the KRaft mode becomes production-ready.
-This includes for example adopting the new Kafka Admin APIs using Kafka instead of ZooKeeper in components such as User Operator or Cruise Control.
+Since the announcement of the KIP-500, we have been making sure that Strimzi is as ready as possible for when the KRaft mode becomes production-ready.
+For example, Strimzi has adopted the new Kafka Admin APIs that use Kafka instead of ZooKeeper in components like the User Operator and Cruise Control.
 But right now, you cannot really use Strimzi to run Kafka with the KRaft mode enabled.
 That makes it hard to continue working on some of the additional tasks needed to have Strimzi production-ready with KRaft in the future.
-For example the work on the readiness / liveness probes, Topic Operator improvements, upgrades etc.
-All of these tasks will be easier to work on with Strimzi supporting the KRaft mode out-of-the-box.
+For example, work is pending on readiness / liveness probes, Topic Operator improvements, and upgrades.
+Task such as these will be easier to work on with Strimzi supporting the KRaft mode out-of-the-box.
 
 ## Proposal
 
-This proposal suggests to add provisional support for the KRaft mode.
+This proposal suggests adding provisional support for the KRaft mode.
 It will be disabled by default and will be protected by a new feature gate.
 When the feature gate is enabled, it will use the KRaft mode to deploy the Kafka cluster.
 It will simplify development and testing of new Strimzi features in the KRaft mode.
-And it would also allow to help with testing of the KRaft mode itself and raise any issues in the Apache Kafka project.
+And it will also help with testing of the KRaft mode and raising any issues that arise in the Apache Kafka project.
 
 The KRaft support proposed here is called provisional, because the API in the Kafka CR for configuring the Kafka nodes is not final and will be changed later.
 Most of the code implemented by this proposal is expected to be used for the final production-ready implementation.
@@ -80,7 +80,7 @@ Some of the known limitations are included in the following list:
 * Entity Operator (both User and Topic operator) are not supported.
 * Authorization is not supported.
 * SCRAM-SHA-512 users are not supported.
-* JBOD storage is not supported (the `type: jbod` storage can be used, but the JBOD array can contain only one disk)
+* JBOD storage is not supported (the `type: jbod` storage can be used, but the JBOD array can contain only one disk).
 * Liveness and readiness probes are disabled.
 * KRaft architectures using separate controller and broker nodes.
 
@@ -94,11 +94,11 @@ This proposal should have no impact on any existing Kafka clusters deployed with
 ## Rejected alternatives
 
 One of the alternatives which were rejected was to develop and maintain the KRaft implementation in a separate branch instead of doing it in the `main` branch using a feature gate.
-This was rejected, because it would make it harder to contribute the new features and it would make it also less accessible for regular users who might be interested to help with testing or further development of this feature.
+This was rejected, because it would make it harder to contribute the new features and it would also make it less accessible for regular users who might be interested to help with testing or further development of this feature.
 
 ## Risks
 
-This proposal suggests to add a new feature in a very early development phase.
+This proposal suggests adding a new feature in a very early development phase.
 Maintaining this feature in the `main` branch might cause additional effort.
 It is also possible that some of the early code might be thrown away later.
 The expected benefits seem to currently out-weigh the risks.
