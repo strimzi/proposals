@@ -45,7 +45,7 @@ The API is expected to change at a later phase before the KRaft support is consi
 The initial implementation will support only a single type of KRaft deployment.
 All Kafka nodes will be created according to `.spec.kafka` section of the `Kafka` CR.
 It will respect the `.spec.kafka.replicas` field and deploy the corresponding number of Kafka nodes.
-All nodes will be assigned both the `controller` and `broker` KRaft roles.
+All nodes will be assigned both the `controller` and `broker` KRaft roles (see the [KIP-500](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum) for more details about the `controller` and `broker` roles).
 This deployment architecture is suitable for development and testing clusters.
 
 Other architectures, such as separate controller and broker nodes, will be not supported from the start.
