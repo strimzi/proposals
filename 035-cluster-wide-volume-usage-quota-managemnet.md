@@ -1,55 +1,109 @@
-# Cluster Wide Volume Usage Quota Management
+# Re-thinking the quota plug-in
 
 ## Current situation
-
 The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate limits on connections to
 individual brokers (thresholds derived from storage limits), slowing producers down when consumed storage is over the soft limit (but below the hard limit) and
 effectively pausing publication when reaching or exceeding the hard limit. This largely prevents out of disk scenarios when topics
 are replicated to all brokers thus there is largely similar disk usage between all brokers. Assuming all the brokers
 have similar disk usage levels, they will all apply rate limits at similar times and levels, effectively giving cluster-wide out-of-storage protection.
 
-However, as clusters scale up the likelihood of even topic distribution drops. When topics are not evenly distributed it
-is possible for replication from broker `A` to broker `B` will cause broker `B` to consume all available disk space
-without triggering throttling of clients, as broker `A` disk usage remains acceptable.
+This however provides limited protection to clusters with un-even distribution of topics and thus storage usage.
+Additionally, it ties the plug-in directly to storage usage, there are other factors which users may wish to respond to.
 
-[KIP-73](https://cwiki.apache.org/confluence/display/KAFKA/KIP-73+Replication+Quotas) replication quotas are designed to
-manage the additional network load of migrating replicas between brokers, which does not address client publication
+### Cluster wide disk monitoring
+As clusters scale up the likelihood of even topic distribution drops. When topics are not evenly distributed it
+is possible for replication from broker `1` to broker `2` will cause broker `2` to consume all available storage
+without triggering throttling of clients, as broker `1` disk usage remains acceptable.
+
+Addressing the effects of uneven topic distribution sounds like it should come under
+[KIP-73](https://cwiki.apache.org/confluence/display/KAFKA/KIP-73+Replication+Quotas). Unfortunately replication quotas
+are designed to manage the additional network load of migrating replicas between brokers, which does not address client publication
 leading to out of disk conditions through replication.
 
-Currently, the kafka-static-quota-plugin considers the total quantity of storage and how much of that is consumed (
+Currently, the kafka-quotas-plugin considers the total quantity of storage and how much of that is consumed (
 see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply throttling to
-clients. This is problematic with respect
-to handling disk failure for JBODs [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as the broker
-will take partitions offline when the volume they are stored on runs out of space. Which in the case of unbalanced usage
+clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD) deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as the
+broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of unbalanced usage
 between volumes can lead to a volume running out of storage without throttling being applied. The broker will go offline
 if all volumes are unavailable.
 
-Configuring the soft and hard limit thresholds is currently done in terms of bytes consumed, which forces users
-deploying the plugin to calculate a threshold for throttling and would require separate thresholds per volume to avoid
-out of space issues.
+The current quota plug-in separates quotas into two parts:
+1. A fixed upper limit for the number of bytes per second
+2. A factor to reduce that quota by as the storage moves between the soft and hard limits. 
 
 ## Proposal
-### Leverage Kafka to distribute volume usage metrics throughout the cluster.
-By publishing per volume usage metrics to a compacted topic keyed by the broker ID, each instance of the plugin will be able to start and quickly determine the state of the cluster and consistently apply throttling regardless of where the
-client is connected.
+### High level changes
+To better support external sources for managing quotas this proposal introduces three new roles within the plugin.
 
-[KIP-257](https://cwiki.apache.org/confluence/display/KAFKA/KIP-257+-+Configurable+Quota+Management) describes configurable quota management, where quotas are defined in terms of how much of a delay to apply to a given produce request. This leads to defining the
-possible states of the plugin as:
+1. A `QuotaSupplier` to provide an injection point for stable quota values.
+2. A `QuotaFactorSupplier` to provide a more dynamic and responsive factor used to support progressive throttling as clients approach the limits.
+3. A `Task` interface which will be used to periodically execute work. Such as capturing total and free space of each volume attached to a broker.
+
+Explicitly separating quota generation into two parts allows for greater flexibility in how to derive the available
+quota for a request. The task interface is deliberately loose and should be considered optional in deployments.   
+
+While this document sets out in detail a potential implementation using Kafka as the underlying message transport. It's
+simple to imagine a version which implements a `QuotaFactorSupplier` which queries prometheus metrics to determine
+volume usage rather than a kafka topic. It's clear that a `Supplier` querying prometheus for disk usage should not
+concern itself in determining quota's for a given principal. 
+
+### Cluster wide out of storage protection
+
+[KIP-257](https://cwiki.apache.org/confluence/display/KAFKA/KIP-257+-+Configurable+Quota+Management) describes
+configurable quota management, where quotas are defined in terms of how much of a delay to apply to a given produce
+request. This leads to defining the possible states of the plugin as:
 `OPEN`, `THROTTLE` and `PAUSE` to accurately reflect the effects of transitioning between states.
 
-This implies there are three roles.
-1. **Data source** - Publish volume usage metrics about the volumes underlying the brokers log dirs.
-2. **Data Sink** - Consume volume usage metrics and make those available for making Quota Policy decisions.
-3. **Quota Policy** - Convert volume usage metrics for the entire cluster into throttling decisions.
+As there is no direct mechanism to dynamically throttle replication between brokers we need each broker to have a
+view on storage usage across the entire cluster. So that it can apply the appropriate state to the requests it handles.
 
-This proposal envisages them all being implemented by the kafka-static-quota-plugin however by clearly distinguishing
-the roles we leave open future options to move each of the roles out of process. It also proposes each broker performing
-all roles without co-ordination. The
-following [communication diagram](https://www.uml-diagrams.org/communication-diagrams.html) illustrates the parallel
-nature of the proposal.
-![proposal Communication diagram](./images/035-quota-communication-diagram.jpg)
+Fitting that into the roles outlined above we get:
 
-#### Limit Types
+ - Implement the `Task` interface to periodically capture the usage of each storage volume attached to the broker and make it available to the cluster.
+ - Implement the `QuotaFactorSupplier` interface read the storage usage snapshot and from that calculate the amount of the quota still available to the client.
+ - Wrap the existing Quota Config map in an implementation of the `QuotaSupplier` interface.
+
+### Leverage Kafka to distribute volume usage metrics throughout the cluster.
+
+By publishing per volume usage metrics to a compacted topic keyed by the broker ID, each instance of the plugin will be
+able to start and quickly determine the state of the cluster and consistently apply throttling regardless of where the
+client is connected.
+
+The following [communication diagram](https://www.uml-diagrams.org/communication-diagrams.html) illustrates the parallel
+nature of the proposal. ![proposal Communication diagram](./images/035-quota-communication-diagram.jpg)
+
+## Rejected Alternatives
+
+### Using JMX metrics
+
+Using JMX metrics directly would require a web of connections between brokers and the exposing of the JMX port to the
+rest of the cluster. Using JMX is also problematic for tracking state across restarts of brokers as each broker would
+lose state across restarts and thus lose track of any broker which is temporarily offline.
+
+### External metrics store
+
+Would require the following:
+
+- The quota plugin understands the API of the external metrics system
+- A metrics system endpoint exposed to the broker for consuming metrics
+- A predictable and consistent naming convention
+
+It would also make the deployment of an external metrics store a requirement for the kafka-static-quota-plugin to function.
+
+### KIP-73
+
+KIP-73 is designed to protect client performance while cluster re-balancing exercises are taking place by limiting the
+bandwidth available to the replication traffic. This is not suitable for use in preventing out of storage issues as the
+bandwidth limit is configured as part of the partition re-assignment operation. As it applies a bandwidth limit it is
+configured in  `units per second` which is problematic for the quota plugin to determine a sensible value for as it
+should really be related to the expected rate at which data is purged from the tail of the partitions on the volume in
+question. KIP-73 bandwidth limits are only applied to a specific set of `partition` & `replica` pairs which would
+require the ability for the plugin to resolve the required pairs.
+
+[//]: # (TODO should this be a new proposal)
+#### Implementation details
+
+##### Limit Types
 1. Consumed space limit: Triggers if the consumed space of a volume breaches the value. Candidate for deprecation.
 2. Minimum Free Bytes: Triggers if the amount of free space on a volume drops below the configured level. Particularly
    useful for hard limits as an absolute minimum of free space.
@@ -79,7 +133,6 @@ nature of the proposal.
     - Defaulting to `PAUSE` as the fail-safe option.
 - Apply a freshness check to the volume usage it reads and ignore stale state [3]. The threshold for staleness should be a configuration parameter.
 
-#### Implementation details
 ##### Internal API within the quota plugin
 
 To make all this work the quota plugin will need to introduce some new interfaces:
@@ -470,31 +523,3 @@ Controlling the number of consumed bytes **above** which throttling is applied.
 - `client.quota.callback.static.storage.soft.min-free-percent` Expressed as `0.0..1.0`    
 
 Expressed as the number of available bytes, derived from the proportion of the total volume size, **below** which throttling is applied.
-
-## Rejected Alternatives
-
-### Using JMX metrics
-
-Using JMX metrics directly would require a web of connections between brokers and the exposing of the JMX port to the
-rest of the cluster. Using JMX is also problematic for tracking state across restarts of brokers as each broker would
-lose state across restarts and thus lose track of any broker which is temporarily offline.
-
-### External metrics store
-
-Would require the following:
-
-- The quota plugin understands the API of the external metrics system
-- A metrics system endpoint exposed to the broker for consuming metrics
-- A predictable and consistent naming convention
-
-It would also make the deployment of an external metrics store a requirement for the kafka-static-quota-plugin to function.
-
-### KIP-73
-
-KIP-73 is designed to protect client performance while cluster re-balancing exercises are taking place by limiting the
-bandwidth available to the replication traffic. This is not suitable for use in preventing out of storage issues as the
-bandwidth limit is configured as part of the partition re-assignment operation. As it applies a bandwidth limit it is
-configured in  `units per second` which is problematic for the quota plugin to determine a sensible value for as it
-should really be related to the expected rate at which data is purged from the tail of the partitions on the volume in
-question. KIP-73 bandwidth limits are only applied to a specific set of `partition` & `replica` pairs which would
-require the ability for the plugin to resolve the required pairs. 
