@@ -18,7 +18,7 @@ If the partitions are still available on the broker which is going to be scaled,
 
 This proposal suggest how we can add the check to detect if the broker still contains any partitions and what to do if the broker scale down is not possible.
 
-Checking if the broker contains partition
+### Checking if the broker contains partition
 The best way to detect if the broker contains any partitions is to query the topics.
 To do this, we will have to make use of the `AdminClient` class.
 We should probably put the logic for this check inside the `scaleDown` method present in the `KafkaReconciler` class.
@@ -29,9 +29,7 @@ Methods to be created in the process:
 
 - `getTopicNamesAndDescriptions` (Boolean Type) - This method will be placed inside the `scaleDown()` method in `KafkaReconciler` class and will provide us with the Collection of `TopicDescription`.
 - `describeTopics()` and `topicNames()`  - These two methods will provide us with the description and names of all the topics ie first we will get the names of the topics using the `topicNames` method and using these names we will extract the description of the topics.
-- `brokerHasAnyTopics()` - This method will take as input a podId and a `Collection<TopicDescription>`.
-  It will go through all the broker and see if any partitions are assigned to it.
-
+- `brokerContainsPartitions` - This method will take as input a `Collection<TopicDescription>` and then generate a map of type `HashMap<Integer podId, Boolean containsPartitions>`.
 ### Flow :
 
 When the replicas are changed inside the Kafka resource, reconciliation will happen.
@@ -39,14 +37,19 @@ During this reconciliation, we move to the `scaleDown()` method present in the `
 The `scaleDown()` method contains the complete mechanism on how the broker is scaled down. So there, we will first create our `adminClient` and provide it with the Secrets.
 Then we will call the `getTopicNamesAndDescriptions()` method which will give us the `Collection<TopicDescription>`. 
 
-The `getTopicNamesAndDescriptions()` method will call the `topicNames()` method to get the set of topic names and then these topic names will be used by the `describeTopics()` methods to get the `Collection<TopicDescription>`.
-Once the `Collection<TopicDescription>` is computed we will move back to the `scaledown()` method and there we will run a loop from `(previous replicas - 1)` to `current replicas` and inside the loop we will call the `brokersHasAnyTopics()` method which will take the `Collection<TopicDescription>` and `podId(index of the loop)` to check if the broker contains any partition and provide us with a boolean result. 
-
+The `getTopicNamesAndDescriptions()` method will call the `topicNames()` method to get the set of topic names and then these topic names will be used by the `describeTopics()` methods to get the `Collection<TopicDescription>`. 
+Once the `Collection<TopicDescription>` is computed we will move back to the `scaledown()` method and there we can call `brokerContainsPartition()` method which will take the `Collection<TopicDescription>` and then create a `hasAssignedTopicPartitions` which contains key as `podId` and value as `boolean` type. Now we can use this map to check if the broker contains any partition and provide us with a boolean result. 
 ### What to do if a broker contains partitions?
 If a partition is detected over a broker then we should trigger some log warnings and let the partitions remain the same as they were before.
 For example, if we try to scale down the broker from 5 to 3, but the check detected that the broker to be scaled down contains a partition then we should keep the replicas as 5 only display the appropriate warnings.
 
-To handle the case, if broker contain some partitions, we can make use of an `if` statement. If we see the current code in the `scaleDown()` method we can see that we are checking whether we are using `StatefulSets` or `StrimziPodSets` and then doing the scale down accordingly, so we can introduce an `if` just before this logic. This `if` condition will check if the boolean result was `true` or `false`. If the result is `false` then we will return a succeeded future i.e. no need to scale down but if the result is `true` then we can run the logic of scale down as per `StatefulSets` or `StrimziPodSets`.
+To handle the case, if broker contain some partitions, we can  create a variable named `scaleDown` which will be set to `false` by default and if broker doesn't contain any partition, then we will set this variable to `true` else, it will stay `false`.
+
+Then we can use can an `if` statement to check if the boolean result is `true` or `false`. We will set this `if` just before the logic where scale down w.r.t to `StatefulSet` or `StrimziPodSet` happens. If the result is `false` then we will return a warning log as `Broker contains Partition` and return a succeeded future i.e. no need to scale down, but if the result is `true` then we can run the logic of scale down as per `StatefulSets` or `StrimziPodSets`.
+
+Error Handling
+
+If we somehow fail to connect to the Kafka Cluster or there are some other error which happens during the reconciliation, in that case also we will set the `scaleDown` variable to `false`, and provide a warning log on reason why the `scaleDown` was not done.
 
 ## Affected/not affected projects
 
