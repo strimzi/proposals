@@ -15,7 +15,8 @@ We believe the Canary component could deliver significant value for Strimzi user
 However, these Canary improvements are held back by technical and non-technical issues:
 
 * We've experienced [numerous bugs]((https://github.com/strimzi/strimzi-canary/issues?q=is%3Aissue+is%3Aclosed)) in the Kafka client library being used, and believe we're likely to see a long tail of further bugs.
-* The client library doesn't support all the features we want. Those features would needed to realize the Canary's true potential.
+* The client library does not support all the features we want. Those features would needed to realize the Canary's true potential.
+* The client library is not (currently) evolving at the same pace as the Java clients, i.e. it seems to be falling further behind in terms of features.
 * The Strimzi community's lack of golang expertise (or indeed enthusiasm) means it is somewhat unloved.
 
 ## Proposal
@@ -78,7 +79,7 @@ The API of the existing canary comprises:
 
 * The configuration env vars
 * Metrics (via the Prometheus scrape endpoint)
-* The health endpoints
+* The status and health endpoints
 
 ### Configuration
 While we can strive to minimize incompatibilities, it seems of questionable value.
@@ -93,9 +94,9 @@ It seems likely that metric names and labels can be maintained, so in that respe
 Detailed assessment of whether the metric values were being measured in a compatible way is beyond the scope of this document.
 If measurements were incompatible it would require existing users to adjust thresholds used in any alerting they might have that was based on the old metrics.
 
-### Health endpoints
+### Status and Health endpoints
 
-Providing compatibility for these will be trivial.
+Providing compatibility for these should be trivial.
 
 ## Rejected alternatives
 
