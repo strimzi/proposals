@@ -11,8 +11,8 @@ The [documentation](https://strimzi.io/docs/operators/latest/configuring.html#sc
 
 ## Motivation
 
-We should definitely introduce some sort of logic which can detect if the broker which is going to be removed still contains the partition replicas or not.
-If the partition replicas are still available on the broker which is going to be scaled, then we should get some warning in the logs which will prompt users to do the reassignment and hopefully reduce the chance of data loss.
+We should introduce the logic which can detect if the broker which is going to be removed still contains the partition replicas or not.
+If the partition replicas are still assigned to the broker which is going to be scaled up/down, then we should get some warning in the status of the Kafka resource which will prompt users to do the reassignment and hopefully reduce the chance of data loss.
 
 ## Proposal
 
@@ -26,17 +26,19 @@ This proposal suggest how we can add the check to detect if the broker still con
 - We can create an Admin client instance for this purpose which can be used to get connect with the cluster and get us the topic details(topic name and topic description)
 - We can later on query the topic's description to get the information regarding the `topic partition replicas`.
 - Then we can use this information to check if the broker contains any partition replicas or not.
-- We should make sure that there is no partial scale down by checking the replicas on the brokers(to be scaled down) first and only do the whole scale down after we make sure that the brokers that are going to be removed aren't containing any partition replicas.
+- The scale down is done after we make sure that the brokers that are going to be removed aren't containing any partition replicas. By doing this we avoid any partial scale down.
 
 #### What to do if a broker contains partitions?
 
-- If a partition is detected over a broker then we should update the Kafka CR with the desired warnings
-- In case, if the admin client is not able to connect to the cluster, or we are not able to somehow get the topic details then in that case we should not do any scale down and wait for the next reconciliation to happen, but we will update the Kafka CR with the corresponding error message. 
-  Once the user decides to either change the `spec.replicas` back to the previous count or reassign the partition replicas to other brokers, we can move the process accordingly.
+#### Flow
 
-### Error Handling
+- A check will be placed just before the scale down steps happens. 
+- If a partition is detected over a broker then the Kafka CR will be updated with the desired warnings.
+  The warnings will be displayed in the status.
+- When the scale down is happening, if the admin client is not able to connect to the cluster, or not able to get the topic details, scale down will not be proceeded, and we will wait for the next reconciliation to happen.
+Once the user decides to either change the `spec.replicas` back to the previous count or reassign the partition replicas to other brokers, we can move the process accordingly.
+  
 
-If we somehow fail to connect to the Kafka Cluster or there are some other error which happens during the reconciliation, in that case also we will set the `scaleDown` variable to `false`, and provide a warning log on reason why the `scaleDown` was not done.
 
 ## Affected/not affected projects
 
