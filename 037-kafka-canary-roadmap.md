@@ -15,7 +15,7 @@ We believe the Canary component could deliver significant value for Strimzi user
 However, these Canary improvements are held back by technical and non-technical issues:
 
 * We've experienced [numerous bugs]((https://github.com/strimzi/strimzi-canary/issues?q=is%3Aissue+is%3Aclosed)) in the Kafka client library being used, and believe we're likely to see a long tail of further bugs.
-* The client library does not support all the features we want. Those features would needed to realize the Canary's true potential.
+* The client library does not support all the features we want. Those features would be needed to realize the Canary's true potential.
 * The client library is not (currently) evolving at the same pace as the Java clients, i.e. it seems to be falling further behind in terms of features.
 * The Strimzi community's lack of Golang expertise (or indeed enthusiasm) means it is somewhat unloved.
 
@@ -53,7 +53,7 @@ For example, in a cluster with multiple listeners using different authentication
 There are many dimensions in which you can do this: 
 
 * DNS resolution
-* TLS (e.g. different versions or detecting imminent broker certificate expiry
+* TLS (e.g. different versions or detecting imminent broker certificate expiry)
 * Producing to replicas on different volumes
 * With/without transactional producers, to flush out problems with transaction coordinators.
 * Similarly with/without using consumer groups. Using different group ids to detect problems with group coordinators.
