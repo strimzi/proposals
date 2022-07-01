@@ -7,7 +7,7 @@ This proposal describes a possible future set of improvement and features for th
 The project [README.md](https://github.com/strimzi/strimzi-canary/blob/main/README.md) explains the current feature set.
 
 The Canary was added to Strimzi under [proposal 13](013-kafka-canary.md).
-The implementation is in golang and uses the [Sarama](https://github.com/Shopify/sarama/) Kafka client.
+The implementation is in Golang and uses the [Sarama](https://github.com/Shopify/sarama/) Kafka client.
 
 ## Motivation
 
@@ -17,7 +17,7 @@ However, these Canary improvements are held back by technical and non-technical 
 * We've experienced [numerous bugs]((https://github.com/strimzi/strimzi-canary/issues?q=is%3Aissue+is%3Aclosed)) in the Kafka client library being used, and believe we're likely to see a long tail of further bugs.
 * The client library does not support all the features we want. Those features would needed to realize the Canary's true potential.
 * The client library is not (currently) evolving at the same pace as the Java clients, i.e. it seems to be falling further behind in terms of features.
-* The Strimzi community's lack of golang expertise (or indeed enthusiasm) means it is somewhat unloved.
+* The Strimzi community's lack of Golang expertise (or indeed enthusiasm) means it is somewhat unloved.
 
 ## Proposal
 
@@ -28,12 +28,12 @@ Naturally those clients are extremely well-tested, with both current and older b
 So generally speaking, we would expect the Canary to experience fewer issues due to client bugs.
 It would also necessarily support the latest versions of the Kafka protocol, which would enable support for more features.
 
-The Canary also stands out as being the only Strimzi project that's written in golang.
-There's nothing wrong with golang, but there are non-technical drawbacks to this situation.
-Most existing Strimzi developers have more experience with Java than golang.
-Some don't really know golang at all.
+The Canary also stands out as being the only Strimzi project that's written in Golang.
+There's nothing wrong with Golang, but there are non-technical drawbacks to this situation.
+Most existing Strimzi developers have more experience with Java than Golang.
+Some don't really know Golang at all.
 It's difficult to motivate people to use another language if they're using it only for one relatively small part of their job.
-Likewise, existing golang developers are not going to be drawn to contributing to Strimzi on account of a single golang component.
+Likewise, existing Golang developers are not going to be drawn to contributing to Strimzi on account of a single Golang component.
 So over all we expect our community would be better able to engage with the Canary component if it was implemented in Java.
 
 ### Desirable features
@@ -100,7 +100,7 @@ Providing compatibility for these should be trivial.
 
 ## Rejected alternatives
 
-The main alternative would be to stick with golang and Sarama.
+The main alternative would be to stick with Golang and Sarama.
 Doing this means:
 * the feature improvements be blocked, waiting for support to be added for the missing features.
 * the non-technical issues described would remain unaddressed. 
