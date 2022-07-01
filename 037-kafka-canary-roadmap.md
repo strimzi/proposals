@@ -58,12 +58,6 @@ There are many dimensions in which you can do this:
 * With/without transactional producers, to flush out problems with transaction coordinators.
 * Similarly with/without using consumer groups. Using different group ids to detect problems with group coordinators.
 
-### Integration examples
-
-Currently the Canary provides a binary and nothing more. 
-This limits uptake of the canary because to use it for its intended purpose you need to configure prometheus scraping, alerting and dashboards to make sense of what the canary is telling you. 
-
-We would like to provide example of all these things, as we [do for the operator](https://github.com/strimzi/strimzi-kafka-operator/tree/main/examples/metrics).
 
 ### Actionable documentation
 
