@@ -93,28 +93,65 @@ The reason for having this interface in the `api` module is that this module is 
 Users will be able to write their implementations by using the `api` module as dependency.
 
 The interface will have methods for providing security contexts for all Pods created by Strimzi, and all containers.
-The methods will take as a parameter the user-configured security context from the `.template` section of the custom resources.
-The methods for the Pods using storage configuration (Kafka and ZooKeeper) will also have the storage configuration as parameter.
-These methods will have the default implementation which will always just return the user-specified context.
-For example:
+The methods providing the security context will get as a parameter an object of type `PodSecurityProviderContext`.
+This will be an object created by Strimzi which will encapsulate the different infromation which strimzi will provide to the Provider plugin to make its decisions when generating the Kubernetes security context.
+The `PodSecurityProviderContext` will be defines as another interface in the `api` module:
 
 ```java
-    default PodSecurityContext kafkaPodSecurityContext(PodSecurityContext userSecurityContext, Storage storage) {
+interface PodSecurityProviderContext {
+    Storage storage();
+    PodSecurityContext userSuppliedContext();
+}
+```
+
+This encapsulation should make it easier to add additional information in the future without changing the signature of the provider methods but only by adding new methods to the Strimzi provided context.
+
+The provider methods will have the default implementation which will always just return the user-specified context.
+For example (just few methods are listed in this example):
+
+```java
+public interface PodSecurityProvider {
+    // ...
+
+    default PodSecurityContext kafkaPodSecurityContext(PodSecurityProviderContext context) {
         return userSecurityContext;
     }
 
-    default SecurityContext kafkaContainerSecurityContext(SecurityContext userSecurityContext, Storage storage) {
+    default SecurityContext kafkaContainerSecurityContext(PodSecurityProviderContext context) {
         return userSecurityContext;
     }
 
-    default SecurityContext kafkaInitContainerSecurityContext(SecurityContext userSecurityContext) {
+    default SecurityContext kafkaInitContainerSecurityContext(PodSecurityProviderContext context) {
         return userSecurityContext;
     }
+
+    // ...
+}
 ```
 
 The interface will also have a `configure` method for configuring the provider.
 The `configure` method will get as a parameter an object describing the platform (Kubernetes version, features / APIs) which can be taken into account when creating the security context.
 This method will not have any default implementation.
+
+```java
+public interface PodSecurityProvider {
+    // ...
+    void configure(PlatformFeatures platformFeatures);
+    // ...
+}
+```
+
+`PlatformFeatures` in this method is another new interface which provides some of the methods provided by the `PlatformFeaturesAvailability` class which is part of the `operator-common` module`
+It uses the features which might be relevant for generating the securitny context:
+
+```java
+public interface PlatformFeatures {
+    KubernetesVersion getKubernetesVersion();
+    boolean isOpenshift();
+}
+```
+
+The `configure(...)` method can in addition to the `PlatformFeatures` also for example use environment variables to configure the provider.
 
 #### Implementations
 
