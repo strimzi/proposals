@@ -114,15 +114,15 @@ public interface PodSecurityProvider {
     // ...
 
     default PodSecurityContext kafkaPodSecurityContext(PodSecurityProviderContext context) {
-        return userSecurityContext;
+        return context.userSuppliedContext();
     }
 
     default SecurityContext kafkaContainerSecurityContext(PodSecurityProviderContext context) {
-        return userSecurityContext;
+        return context.userSuppliedContext();
     }
 
     default SecurityContext kafkaInitContainerSecurityContext(PodSecurityProviderContext context) {
-        return userSecurityContext;
+        return context.userSuppliedContext();
     }
 
     // ...
@@ -162,17 +162,17 @@ We will provide two implementations to support the baseline (default) and restri
 These implementations will be also part of the `api` module so that users can just extend them instead of implementing the provider from scratch.
 
 The `BaselinePodSecurityProvider` will implement the current behaviour:
-* Return the user-configured security context when specified
-* When the user-configured context is `null` and we are on OpenShift:
+* Return the user-supplied security context when specified
+* When the user-supplied context is `null` and we are on OpenShift:
     * A `null` will be returned (OpenShift injects its own Security Context in that case) for all Pods and containers
-* When the user-configured context is `null` and we are not on OpenShift:
+* When the user-supplied context is `null` and we are not on OpenShift:
     * Pods with storage will get a Security Context specifying the file system group as `0`
     * All other pods will get `null` Security Context
     * All containers will get `null` Security Context
 
 The `RestrictedPodSecurityProvider` will implement the following behaviour:
-* Return the user-configured security context when specified
-* When the user-configured context is `null`:
+* Return the user-supplied security context when specified
+* When the user-supplied context is `null`:
     * Pods with storage will get a Security Context specifying the file system group as `0`
     * All other pods will get `null` Security Context
     * For the Kaniko container, an exception will be thrown since Kaniko cannot run under the Restricted profile
