@@ -142,7 +142,7 @@ public interface PodSecurityProvider {
 ```
 
 `PlatformFeatures` in this method is another new interface which provides some of the methods provided by the `PlatformFeaturesAvailability` class which is part of the `operator-common` module`
-It uses the features which might be relevant for generating the securitny context:
+It uses the features which might be relevant for generating the security context:
 
 ```java
 public interface PlatformFeatures {
