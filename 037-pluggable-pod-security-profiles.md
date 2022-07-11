@@ -2,7 +2,7 @@
 
 Kubernetes supports configuration of a Security Context (SC) which can limit what the applications running on top of it are or are not allowed to do.
 The SC can be configured on the Pod level (Pod Security Context) or on the container level.
-When configured on the Pod level, it applies to all containers in given Pod.
+When configured on the Pod level, it applies to all the containers in a given Pod.
 The security context allows you to configure different security related aspects of the containers.
 For example:
 * Users and group used for running the container
