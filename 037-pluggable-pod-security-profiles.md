@@ -42,7 +42,7 @@ The _baseline_ profile basically means that you just use the default settings wi
 So without any of the additional tooling mentioned previously, Strimzi operators and the Pods created by them at present match the _baseline_ profile.
 If you try to run Strimzi in a cluster where the _restricted_ profile is enforced, it does not work out of the box.
 
-Apart from the Kaniko builder used for the Kafka Connect build, all our components are able to run under the _restricted_ profile.
+Apart from the Kaniko builder used for the Kafka Connect build (Kaniko currently requires running as root), all our components are able to run under the _restricted_ profile.
 But the operator doesn't configure the appropriate security context and the admission plugin will reject them.
 Users have to _manually_ add the matching security context configuration into the `.template` sections of the custom resources and into the operator deployments to allow the pods to be created under the _restricted_ profile.
 To match the _restricted_ profile, users must configure the following security context:
@@ -63,7 +63,7 @@ To match the _restricted_ profile, users must configure the following security c
 While users can configure the security context, it is not user-friendly.
 The Pod security context does not cover all the different options required by the _restricted_ profile.
 So the security context has to be configured for every container (including init containers, sidecars etc.).
-So a single Kafka cluster might need configuration in 9 different places in the `Kafka` custom resource: ZooKeeper, Kafka broker, Kafka init-container, Topic Operator, User Operator, TLS sidecar, Kafka Exporter, Cruise Control, and another TLS sidecar.
+So a single Kafka cluster might need configuration in 8 different places in the `Kafka` custom resource: ZooKeeper, Kafka broker, Kafka init-container, Topic Operator, User Operator, TLS sidecar, Kafka Exporter, and Cruise Control.
 
 ## Proposal
 
@@ -159,6 +159,8 @@ We will provide two implementations to support the baseline (default) and restri
 * `BaselinePodSecurityProvider`
 * `RestrictedPodSecurityProvider`
 
+_(Strimzi does not require any privileged access, so there is no need to provide a build in profile for that. Any user running Strimzi under the privileged can use the baseline provider which will work without any issues.)_
+
 These implementations will be also part of the `api` module so that users can just extend them instead of implementing the provider from scratch.
 
 The `BaselinePodSecurityProvider` will implement the current behaviour:
@@ -169,6 +171,15 @@ The `BaselinePodSecurityProvider` will implement the current behaviour:
     * Pods with storage will get a Security Context specifying the file system group as `0`
     * All other pods will get `null` Security Context
     * All containers will get `null` Security Context
+
+In the YAML format, the generated security context will look like this:
+* No container security contexts will be set
+* No pod security contexts will be set for Pods without persistent storage
+* For Pods with persistent storage, following security context will be set:
+  ```yaml
+  securityContext:
+    fsGroup: 0
+  ```
 
 The `RestrictedPodSecurityProvider` will implement the following behaviour:
 * Return the user-supplied security context when specified
@@ -181,6 +192,25 @@ The `RestrictedPodSecurityProvider` will implement the following behaviour:
         * Run as non-root
         * Specify the Seccomp profile as `RuntimeDefault`
         * Drop all capabilities
+
+In the YAML format, the generated security context will look like this:
+* All containers (apart from Kaniko) will have the following security context:
+  ```yaml
+  securityContext:
+    allowPriviledgeEscalation: false
+    runAsNonRoot: true
+    secCompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  ```
+* No pod security contexts will be set for Pods without persistent storage
+* For Pods with persistent storage, following security context will be set:
+  ```yaml
+  securityContext:
+    fsGroup: 0
+  ```
 
 #### Loading the plugins
 
