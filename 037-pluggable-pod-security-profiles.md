@@ -197,7 +197,7 @@ In the YAML format, the generated security context will look like this:
 * All containers (apart from Kaniko) will have the following security context:
   ```yaml
   securityContext:
-    allowPriviledgeEscalation: false
+    allowPrivilegeEscalation: false
     runAsNonRoot: true
     secCompProfile:
       type: RuntimeDefault
