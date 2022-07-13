@@ -1,4 +1,4 @@
-# Pluggable Pod Security Profile
+# Pluggable Pod Security Profiles
 
 Kubernetes supports configuration of a Security Context (SC) which can limit what the applications running on top of it are or are not allowed to do.
 The SC can be configured on the Pod level (Pod Security Context) or on the container level.
