@@ -1,11 +1,11 @@
 # Auto-approval mechanism for optimization proposals
 
-This proposal is about allowing the user to create a `KafkaRebalance` custom resource for getting an optimization proposal and running a rebalance, but without the need of the manual approval via the `strimzi.io/rebalance=approve` annotation.
-It means that the user can just create the `KafkaRebalance` custom resource and the corresponding generated optimization proposal will be automatically approved.
+This proposal is about allowing the user to create a `KafkaRebalance` custom resource for getting an optimization proposal and running a rebalance, but without the need for the manual approval via the `strimzi.io/rebalance=approve` annotation.
+This means that the user can simply create the `KafkaRebalance` custom resource and the corresponding generated optimization proposal will be approved automatically.
 
 ## Current situation
 
-Currently, when the users want to run a cluster rebalance, they have to create a `KafkaRebalance` custom resource for getting an optimization proposal first.
+Currently, when the users want to run a cluster rebalance, they have to create a `KafkaRebalance` custom resource in order to generate an optimization proposal first.
 After getting the proposal, the only way to start the rebalancing operation is by approving it by annotating the custom resource with the `strimzi.io/rebalance=approve` annotation.
 There is the need for a manual intervention of the user and this is a two steps process.
 
