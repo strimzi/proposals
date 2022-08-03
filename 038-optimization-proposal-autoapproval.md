@@ -17,11 +17,11 @@ It enables more automation where just creating a `KafkaRebalance` custom resourc
 
 ## Proposal
 
-The `KafkaRebalance` custom resource can be extended with a new `spec.autoApproval` field for this purpose.
+The `KafkaRebalance` custom resource can be annotated with a new `strimzi.io/rebalance-auto-approval` annotation for this purpose.
 
 ### Auto-approval
 
-The auto-approval can be enabled just adding an empty `spec.autoApproval` field.
+The auto-approval can be enabled just annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance-auto-approval=true` annotation.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -30,26 +30,30 @@ metadata:
   name: my-rebalance
   labels:
     strimzi.io/cluster: my-cluster
+  annotations:
+    strimzi.io/rebalance-auto-approval: true
 spec:
   mode: # any mode
-  autoApproval: {}
+  # ...
 ```
 
 The reason for not having a simple boolean `spec.autoApproval` field is for leaving space for a future extension, maybe adding some criteria or rules that have to be matched for auto-approving the optimization proposal.
+It allows the community to take more time to understand if such a support is really useful and the direction to go.
 
 ### No auto-approval (default)
 
-If the `spec.autoApproval` field is not specified at all, the default behavior will be the current one, so the need for manual approval by the user annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation.
+If the `strimzi.io/rebalance-auto-approval` annotation is not specified at all, the default behavior will be the current one, so the need for manual approval by the user annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation.
+Of course, the annotation `strimzi.io/rebalance-auto-approval` can be set to `false` to get the same result.
 
 ### Flow
 
-As described before, the user interaction flow assumes that the `spec.autoApproval` field is specified in the `KafkaRebalance` custom resource.
+As described before, the user interaction flow assumes that the `strimzi.io/rebalance-auto-approval` annotation is specified in the `KafkaRebalance` custom resource.
 
 1. The user creates a `KafkaRebalance` custom resource.
 2. The cluster operator asks Cruise Control to generate an optimization proposal via the REST API.
-3. When the optimization proposal is ready, the cluster operator checks if the user has specified the `spec.autoApproval`.
-    * If the `spec.autoApproval` is not specified at all, the user has to approve the proposal manually as usual.
-    * If the `spec.autoApproval` is specified, the cluster operator approves the proposal automatically by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation.
+3. When the optimization proposal is ready, the cluster operator checks if the user has specified the `strimzi.io/rebalance-auto-approval` annotation.
+    * If the `strimzi.io/rebalance-auto-approval` annotation is not specified at all or it is set to `false`, the user has to approve the proposal manually as usual.
+    * If the `strimzi.io/rebalance-auto-approval` is specified and set to `true`, the cluster operator approves the proposal automatically by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation.
 
 ## Affected/not affected projects
 
@@ -58,9 +62,19 @@ This proposal impacts the Strimzi Cluster Operator only and mostly the `KafkaReb
 ## Compatibility
 
 The manual approval will be still in place as it is today.
-As described before, if the `spec.autoApproval` field is not specified in the `KafkaRebalance` custom resource, the default behavior will be the current one, so the need for manual approval by the user.
+As described before, if the `strimzi.io/rebalance-auto-approval` annotation is not specified or set to `false` in the `KafkaRebalance` custom resource, the default behavior will be the current one, so the need for manual approval by the user.
 
 ## Rejected alternatives
 
-Having a simple boolean `spec.autoApproval` field was rejected because the current proposal allows more extensibility for the future if it's needed to add more configuration like for example criteria or rules to be met for auto-approving the proposal.
+### Using `spec.autoApproval` boolean field
+
+Having a simple boolean `spec.autoApproval` field was rejected because it is possible that we could need more extensibility for the future if it's needed to add more configuration like for example criteria or rules to be met for auto-approving the proposal.
 Using a boolean, would have need an additional field for that like `spec.autoApprovalRules`.
+It is anyway possible that if, at some point, the community agree that criteria and rules won't be supported anymore, the proposed annotation will be promoted to be such a boolean field.
+
+### Using `spec.autoApproval` object field
+
+Having a more complex `spec.autoApproval` field was rejected because currently there is no clear plan about how supporting criteria or rules for the auto-approval process.
+It is actually not clear if we want them and what is the right shape.
+Going through an annotation for now allows to use the feature but having more time to think about the possible criteria and rules support.
+Even in this case, it is possible that the current proposed annotation will be promoted in a such more complex field to allow more configuration related to the auto-approval process.
