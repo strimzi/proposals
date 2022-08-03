@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 38  | [Auto-approval mechanism for optimization proposals](./038-optimization-proposal-autoapproval.md) |
 | 37  | [Pluggable Pod Security Profiles](./037-pluggable-pod-security-profiles.md) |
 | 36  | [KRaft support: ZooKeeper-less Kafka](./036-kraft-mode.md) |
 | 35  | [Extending the `KafkaRebalance` resource with rebalance types to help scaling the Apache Kafka cluster](./035-rebalance-types-scaling-brokers.md) |
