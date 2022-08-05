@@ -55,12 +55,12 @@ spec:
 
 The user has the flexibility to specify the [goals and the other rebalancing related configurations](https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaRebalance-reference) the same way they already do today on a `KafkaRebalance` custom resource.
 This allows the user to not rely on the default Cruise Control goals configuration which would be common for any rebalance without overriding goals.
-They could define different goals based on the status of the Kafka cluster or skip hard goals in some scenarios for examples.
+They could define different goals based on the status of the Kafka cluster or skip hard goals in some scenarios for example.
 As already mentioned, specifying goals but more in general customizing the optimization proposal request is already possible in the current usage of a `KafkaRebalance` custom resource so it should be allowed for the auto-rebalancing as well.
 In the end, the cluster operator will use that configuration from the `KafkaRebalanceTemplate` to fill the corresponding `KafkaRebalance` but adding the `spec.mode` and `spec.brokers` accordingly.
-It will also add the `spec.autoApproval` field, as described by this [proposal](https://github.com/strimzi/proposals/pull/56), for enabling auto-approval.
+It will also add the `strimzi.io/rebalance-auto-approval=true` annotation, as described by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md), for enabling auto-approval.
 
-We would also need to extend the `Kafka` custom resource to allow the user specifying that he wants auto-rebalancing on scaling by using a template.
+We would also need to extend the `Kafka` custom resource to allow the user specifying that they want auto-rebalancing on scaling by using a template.
 A new `spec.cruiseControl.autoRebalance` field could be added for this purpose.
 Because we are talking about auto-rebalancing, the corresponding field could also be not limited to the rebalancing on scaling but a more general full "continuous” auto-rebalancing to enable on the cluster.
 
@@ -135,9 +135,9 @@ Following the operator flow when auto-rebalancing on scaling up.
 2. The `KafkaReconciler` takes care of it by scaling up the cluster as usual, by adding additional brokers.
 3. If the `spec.cruiseControl.autoRebalance` contains an entry with `add-brokers` mode, the `KafkaReconciler` creates a `KafkaRebalance` custom resource named as `<cluster-name>-auto-rebalance-add-brokers` by using the corresponding template and sets:
    * the `spec.mode` as `add-brokers` and the `spec.brokers` with the list of brokers already added to the cluster.
-   * the `spec.autoApproval` as described by this [proposal](https://github.com/strimzi/proposals/pull/56).
+   * the `strimzi.io/rebalance-auto-approval=true` annotation as described by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 4. The `KafkaRebalanceAssemblyOperator` detects the new rebalancing resource and acts as usual by requesting Cruise Control to generate an optimization proposal via the REST API on the `/add_broker` endpoint.
-5. When the optimization proposal is ready, the `KafkaRebalanceAssemblyOperator` approves it automatically, because of the `spec.autoApproval` field, by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation as defined by this [proposal](https://github.com/strimzi/proposals/pull/56).
+5. When the optimization proposal is ready, the `KafkaRebalanceAssemblyOperator` approves it automatically, because of the `strimzi.io/rebalance-auto-approval=true` annotation, by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation as defined by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 6. If/When the rebalancing ends successfully, the corresponding `KafkaRebalance` custom resource is deleted by the `KafkaReconciler`.
 
 #### Error handling
@@ -159,9 +159,9 @@ It's the user who should deal with this scenario:
 1. The user scales down the cluster by decreasing the `spec.kafka.replicas` field.
 2. If the `spec.cruiseControl.autoRebalance` contains an entry with `remove-brokers` mode, the `KafkaReconciler` creates a `KafkaRebalance` custom resource named as `<cluster-name>-auto-rebalance-remove-brokers` by using the corresponding template and sets:
    * the `spec.mode` as `remove-brokers` and the `spec.brokers` with the list of brokers that will be removed.
-   * the `spec.autoApproval` as described by this [proposal](https://github.com/strimzi/proposals/pull/56).
+   * the `strimzi.io/rebalance-auto-approval=true` annotation as described by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 3. The `KafkaRebalanceAssemblyOperator` detects the new rebalancing resource and acts as usual by requesting Cruise Control to generate an optimization proposal via the REST API on the `/remove_broker` endpoint.
-4. When the optimization proposal is ready, the `KafkaRebalanceAssemblyOperator` approves it automatically, because of the `spec.autoApproval` field, by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation as defined by this [proposal](https://github.com/strimzi/proposals/pull/56).
+4. When the optimization proposal is ready, the `KafkaRebalanceAssemblyOperator` approves it automatically, because of the `strimzi.io/rebalance-auto-approval=true` annotation, by annotating the `KafkaRebalance` custom resource with the `strimzi.io/rebalance=approve` annotation as defined by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 5. If/When the rebalancing ends successfully, the corresponding `KafkaRebalance` custom resource is deleted by the `KafkaReconciler`.
 6. Finally, the `KafkaReconciler` can continue to scale down the cluster by deleting the brokers.
 
@@ -187,7 +187,7 @@ Of course, the user could change his mind by reverting back the `spec.kafka.repl
 
 This proposal impacts the Strimzi Cluster Operator only.
 The `KafkaReconciler` is impacted on handling the `KafkaRebalanceTemplate` custom resource and generating/deleting the corresponding `KafkaRebalance`.
-The `KafkaRebalanceAssemblyOperator` is impacted mostly on the auto-approval side but it is already defined by this [proposal](https://github.com/strimzi/proposals/pull/56).
+The `KafkaRebalanceAssemblyOperator` is impacted mostly on the auto-approval side but it is already defined by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 It handles the `KafkaRebalance` custom resource the same way as it was created by the user but it has to annotate the custom resource automatically.
 
 ## Compatibility
@@ -204,7 +204,10 @@ The only fields that the cluster operator has to specify, when creating the `Kaf
 
 * `spec.mode` : should be `add-brokers` or `remove-brokers` if scaling up or down.
 * `spec.brokers` : with the list of brokers to add/remove.
-* `spec.autoApproval` : for allowing the auto-approval as defined by this [proposal](https://github.com/strimzi/proposals/pull/56).
+
+The cluster operator has also to add the following annotation on the `KafkaRebalance` custom resource:
+
+* `strimzi.io/rebalance-auto-approval` : set to `true`, for allowing the auto-approval as defined by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md).
 
 The drawback of this solution is that if the user wants to customize the rebalancing, he has to use the `spec.cruiseControl.config` field in the Kafka custom resource. It’s important to mention that it affects the overall Cruise Control configuration so that any other “empty” rebalancing request, not related to scaling, will use the same options.
 Users won't also be able to skip hard goals to move forward with a rebalancing if they are not met anyway.
@@ -256,6 +259,6 @@ spec:
         # ... other rebalancing related configuration  
 ```
 
-For handling the auto-approval, a `spec.autoApproval` field, as described by this [proposal](https://github.com/strimzi/proposals/pull/56), would be needed as well.
+For handling the auto-approval, a `strimzi.io/rebalance-auto-approval=true` annotation, as described by proposal [038](https://github.com/strimzi/proposals/blob/main/038-optimization-proposal-autoapproval.md), would be needed as well.
 This proposal was rejected because it pollutes the `Kafka` custom resource with too many details and configuration related to a rebalancing operation when the user wants to specify specific desires compared to the default ones in the Cruise Control configuration.
 To understand how big the configuration for each rebalancing mode could be, [here](https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaRebalance-reference) the options that we support today which could anyway increase in the future.
