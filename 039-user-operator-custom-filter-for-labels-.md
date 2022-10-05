@@ -80,7 +80,8 @@ public static UserOperatorConfig fromMap(Map<String, String> map) {
     String strimziLabelsExclusionPatternEnvVar = map.get(UserOperatorConfig.STRIMZI_LABELS_EXCLUSION_PATTERN);
     
     if (strimziLabelsExclusionPattern != null) {
-        strimziLabelsExclusionPattern = strimziLabelsExclusionPatternEnvVar;
+        // note that we will compile such regex into FSM only once here and thus eliminate workload inside KafkaUserModel
+        strimziLabelsExclusionPattern = Pattern.compile(strimziLabelsExclusionPatternEnvVar);
     }
     ...
 }
