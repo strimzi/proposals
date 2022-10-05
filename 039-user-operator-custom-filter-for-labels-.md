@@ -4,7 +4,7 @@ This proposal is about adding the ability to filter the automatically assigned l
 When User Operator creates `KafkaUser`, it also creates an associated Secret, where it automatically adds the label
 `app.kubernetes.io/instance: <username>`.
 Such a label could be used for many uses, and different users have various requirements and expectations.
-Nevertheless, it could also lead to not likeable scenarios (e.g., [permanent deletion and creation of specific Secret](https://github.com/strimzi/strimzi-kafka-operator/issues/5690)).
+Nevertheless, it could also lead to not likeable scenarios (e.g., [repeated deletion and re-creation of specific Secret](https://github.com/strimzi/strimzi-kafka-operator/issues/5690)).
 Therefore, we propose to implement configurable exclusion of labels.
 
 ## Current situation
@@ -69,7 +69,7 @@ Based on the environment variable value, we will determine what to do (a) env is
 
 ### More implementation details
 
-### 1 Parsing part
+#### Parsing part
 
 As we mentioned details about the `UserOperatorConfig` class, we will elaborate more on the specific details in this section.
 Moreover, we will obtain the environment variable inside the `fromMap` method used to construct the class.
@@ -86,7 +86,7 @@ public static UserOperatorConfig fromMap(Map<String, String> map) {
 }
 ```
 
-### 2 Exclusion part
+#### Exclusion part
 
 The exclusion part will be placed in the `KafkaUserModel` class.
 Moreover, we would need to get the value of the environment variable to such a class.
@@ -110,22 +110,21 @@ Then, we can use such value to store it as an instance attribute of `KafkaUserMo
 following method:
 ```java
 protected Secret createSecret(Map<String, String> data) {
-    final Secret secret = return new SecretBuilder()
+    final Map<String, String> labels = Util.mergeLabelsOrAnnotations(labels.toMap(), templateSecretLabels);
+    // here, we have to do pre-processing (i.e., filtering) of labels by exclusion pattern
+    // filter by value of instance variable `this.getStrimziLabelsExclusionPattern`
+    
+    return return new SecretBuilder()
         .withNewMetadata()
             .withName(getSecretName())
             .withNamespace(namespace)
-            .withLabels(Util.mergeLabelsOrAnnotations(labels.toMap(), templateSecretLabels))
+            .withLabels(labels)
             .withAnnotations(Util.mergeLabelsOrAnnotations(null, templateSecretAnnotations))
             .withOwnerReferences(createOwnerReference())
         .endMetadata()
         .withType("Opaque")
         .withData(data)
         .build();
-    
-    // here, we have to do post-processing (i.e., filtering) of labels by exclusion pattern
-    // filter by value of instance variable `this.getStrimziLabelsExclusionPattern`
-    
-    return secret;
 }
 ```
 
