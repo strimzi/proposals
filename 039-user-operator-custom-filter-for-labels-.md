@@ -106,7 +106,7 @@ protected Future<KafkaUserStatus> createOrUpdate(Reconciliation reconciliation, 
     ...
 }
 ```
-Then, we can use such value to store it as an instance attribute of `KafkaUserModel` and implement post-processing of labels in the
+Then, we can use such value to store it as an instance attribute of `KafkaUserModel` and implement pre-processing of labels in the
 following method:
 ```java
 protected Secret createSecret(Map<String, String> data) {
