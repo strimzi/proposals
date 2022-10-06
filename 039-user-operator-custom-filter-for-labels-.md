@@ -21,7 +21,7 @@ spec:
   authentication:
     type: tls
 ```
-The User Operator then creates an associated Kubernetes Secret.
+The User Operator then creates an associated Kubernetes `Secret`.
 ```yaml
 kind: Secret
 metadata:
