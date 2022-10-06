@@ -43,7 +43,7 @@ If we do not want the label that has been assigned, the only way to get rid of i
 
 This proposal suggests adding configurable exclusion of labels.
 We can implement this feature similarly to [issue 4394](https://github.com/strimzi/strimzi-kafka-operator/pull/4791).
-We can create an environment variable and inject such value through the `Kafka` custom resource.
+We can create an environment variable and inject the value through the `Kafka` custom resource.
 Specifically, in the `spec.entityOperator.template.userOperatorContainer.env`.
 For instance, we can have the following `Kafka` resource:
 ```yaml
