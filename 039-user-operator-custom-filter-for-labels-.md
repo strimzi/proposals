@@ -90,7 +90,7 @@ public static UserOperatorConfig fromMap(Map<String, String> map) {
 
 The exclusion part will be placed in the `KafkaUserModel` class.
 Moreover, we would need to get the value of the environment variable to such a class.
-In the `UserOperatorConfig` class, we will obtain value, and then in the `KafkaUserOperaor` class, specifically in the following method:
+In the `UserOperatorConfig` class, we will obtain the environment variable value, and then in the `KafkaUserOperator` class, specifically in the following method:
 ```java
 protected Future<KafkaUserStatus> createOrUpdate(Reconciliation reconciliation, KafkaUser resource) {
     KafkaUserModel user;
