@@ -45,7 +45,7 @@ and therefore, one way how to get rid of this already assigned label is to filte
 This proposal suggests adding configurable exclusion of labels.
 We can implement this feature similarly to [issue](https://github.com/strimzi/strimzi-kafka-operator/pull/4791).
 We can create an environment variable and inject such value through the `Kafka` custom resource.
-Specifically, in the `spec.entityOperator.template.topicOperatorContainer.env`.
+Specifically, in the `spec.entityOperator.template.userOperatorContainer.env`.
 For instance, we can have the following `Kafka` resource:
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
