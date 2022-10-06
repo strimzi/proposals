@@ -4,7 +4,7 @@ This proposal is about adding the ability to filter the automatically assigned l
 When User Operator creates `KafkaUser`, it also creates an associated Secret, where it automatically adds the label
 `app.kubernetes.io/instance: <username>`.
 Such a label could be used for many uses, and different users have various requirements and expectations.
-Nevertheless, it could also lead to not likeable scenarios (e.g., [repeated deletion and re-creation of specific Secret](https://github.com/strimzi/strimzi-kafka-operator/issues/5690)).
+Nevertheless, it could also lead to undesirable scenarios (e.g., [repeated deletion and re-creation of specific Secret](https://github.com/strimzi/strimzi-kafka-operator/issues/5690)).
 Therefore, we propose to implement configurable exclusion of labels.
 
 ## Current situation
