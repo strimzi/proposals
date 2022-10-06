@@ -63,8 +63,8 @@ spec:
     userOperator: {}
 ```
 Then, we would obtain a value from the environment variable and parse it in the `UserOperatorConfig` class.
-Based on the environment variable value, we will determine what to do (a) env is not specified, and therefore we do not exclude any label from Secret
-(b) env is specified by a regex, and then we will filter and remove such labels which match the input regex.
+Based on the environment variable value, (a) when `env` is not specified, we do not exclude any label from the secret
+(b) when `env` is specified by a regex, we filter and remove those labels which match the regex.
 
 ### More implementation details
 
