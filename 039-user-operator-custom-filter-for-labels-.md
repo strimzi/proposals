@@ -9,7 +9,7 @@ Therefore, we propose to implement configurable exclusion of labels.
 
 ## Current situation
 
-Presently, when a user attempts to create a KafkaUser defined as follows:
+Presently, when a user attempts to create a `KafkaUser` defined as follows:
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaUser
