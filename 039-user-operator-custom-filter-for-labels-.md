@@ -37,8 +37,7 @@ metadata:
 ...
 ```
 We can see that User Operator automatically adds the `app.kubernetes.io/instance: my-user` label.
-In some situations, we do not want a such label to be automatically created (i.e., [endless deletion and creation of specific Secret](https://github.com/strimzi/strimzi-kafka-operator/issues/5690))
-and therefore, one way how to get rid of this already assigned label is to filter it.
+If we do not want the label that has been assigned, the only way to get rid of it is to filter it.
 
 ## Proposal
 
