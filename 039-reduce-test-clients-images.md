@@ -47,7 +47,7 @@ will be changed to `quay.io/strimzi-test-clients/test-clients:{version}-kafka-{k
 * Environment variables will be reduced
   * `TEST_PRODUCER_IMAGE`, `TEST_CONSUMER_IMAGE` and other environment variables will be removed
   * `TEST_CLIENT_IMAGE` will be added
-* Container configuration of each client will contain `args` section with appropriate `run.sh`
+* Container configuration of each client will contain `args` section with appropriate `*_run.sh`
     ```yaml
      args:
       - /opt/test-clients/bin/http_producer_run.sh
