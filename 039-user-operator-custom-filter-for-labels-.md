@@ -131,7 +131,7 @@ protected Secret createSecret(Map<String, String> data) {
 ## Compatibility
 
 This proposal does not change any of the existing CRDs or the Kubernetes secrets that are being created.
-The user only needs to modify Kafka's custom resource to use such a feature.
+The user only needs to modify either User Operator deployment in the case of a standalone approach or Kafka's custom resource to use such a feature.
 
 ## Rejected alternatives
 
