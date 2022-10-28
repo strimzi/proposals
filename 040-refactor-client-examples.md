@@ -31,7 +31,6 @@ For example:
 ```
 KAFKA_BOOTSTRAP_SERVERS for `bootstrap.servers` property
 KAFKA_GROUP_ID for `group.id` property
-KAFKA_TOPIC for `topic` property
 …
 ```
 Then we could create a properties file by looping through the environment variables and translating them into a properties configuration like so:
@@ -48,6 +47,12 @@ This removes the need for fields, getters, setters, and hard coded Strings for s
 Note that the configuration options which cannot be directly configured as Kafka configuration properties would be configured with environment variables starting with a `STRIMZI_` prefix.
 These would be handled directly in the Java code. 
 This change would include configuration options for things like tracing initialization (interceptors can be set through `KAFKA_` variables, but the tracer would still need to be initialized).
+For example:
+```
+STRIMZI_TOPIC for topic configuration
+STRIMZI_TRACING_SYSTEM for tracingSystem configuration
+...
+```
 However, other functionality that does not cover the basic example use-case like blocking producer or transactions support used for the Strimzi system tests in the past would be removed.
 Thanks to these changes, the majority of the configuration would take place in the YAML deployment files, be easier to read for the users, and be easier to _translate_ to other clients.
 
