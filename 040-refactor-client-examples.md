@@ -12,7 +12,7 @@ As an example, you can have a look at the logic around setting Kafka’s `securi
 
 The main purpose of the Client Examples is to show users how to write a simple Kafka client based on the Kafka Consumer, Producer and Streams API. 
 However, over time, we added a lot of complexity to the client code because it was being used in the System Tests at some point in time. 
-So a user who wants to learn from the Client Examples has to dig through this code to understand what and how is configured. 
+So a user who wants to learn from the Client Examples has to dig through this code to understand how they are configured.
 This is currently not easy because of how the configuration is generated through the Java code.
 In addition to that, we found adding Kafka client configuration updates to the `Kafka*Config` files of the Java modules in the [Strimzi Client Examples repo](https://github.com/strimzi/client-examples) to be a little more verbose and messier than necessary.
 The current method requires creating a field, getter, setter, and hard coded String per new Kafka client config field. 
@@ -21,7 +21,7 @@ So for any users who want to write their own Kafka client in Java, this is neith
 
 ## Proposal
 
-We could greatly reduce the complexity and size of the class if we standardize the naming scheme of environment variables used to configure the clients of the [Strimzi Client Examples repo](https://github.com/strimzi/client-examples)
+We could greatly reduce the complexity and size of the class if we standardize the naming scheme of environment variables used to configure the clients of the [Strimzi Client Examples repo](https://github.com/strimzi/client-examples).
 
 We could standardize the env vars used to configure the Kafka client properties in the following manner:
 ```
@@ -53,7 +53,7 @@ STRIMZI_TOPIC for topic configuration
 STRIMZI_TRACING_SYSTEM for tracingSystem configuration
 ...
 ```
-However, other functionality that does not cover the basic example use-case like blocking producer or transactions support used for the Strimzi system tests in the past would be removed.
+However, other functionality that does not cover the basic example use-case like blocking the producer or transactions support used for the Strimzi system tests in the past would be removed.
 Thanks to these changes, the majority of the configuration would take place in the YAML deployment files, be easier to read for the users, and be easier to _translate_ to other clients.
 
 ## Affected projects
