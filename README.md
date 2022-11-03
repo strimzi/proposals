@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 41  | [User Operator: Configurable exclusion of labels](./041-user-operator-configurable-exclusion-of-labels.md) |
 | 40  | [Refactor KafkaConfig files in Strimzi Client Examples](./040-refactor-client-examples.md) |
 | 39  | [Reduce Strimzi test-client's images](./039-reduce-test-clients-images.md) |
 | 38  | [Auto-approval mechanism for optimization proposals](./038-optimization-proposal-autoapproval.md) |
