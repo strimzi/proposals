@@ -29,6 +29,8 @@ It involves removing different parts of the codebase:
 * All the corresponding tests.
 * All the documentation about the AMQP 1.0 support design and usage (see `amqp` folder) and configuration for using the [Qpid Dispatch Router](https://qpid.apache.org/components/dispatch-router/index.html) with it (see `qdrouterd` folder).
 
+In the future, but without any actual roadmap or ETA for it, we could come back to have a support for AMQP 1.0 to Apache Kafka bridging with a separate component under the Strimzi organization and by implementing the [Event Stream Extensions for AMQP Version 1.0](https://docs.oasis-open.org/amqp/event-streams/v1.0/csd01/event-streams-v1.0-csd01.html) OASIS standard.
+
 ## Affected/not affected projects
 
 This proposal affects the Strimzi bridge project only.
