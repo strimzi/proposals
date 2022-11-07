@@ -15,7 +15,12 @@ We haven't ever seen users opening GitHub issues or discussions about adding new
 The same applies on the CNCF Slack #strimzi channel and the mailing lists.
 Even asking users about their AMQP 1.0 usage didn't get any answer.
 It seems that the Strimzi bridge is mostly used for its HTTP protocol support, which is where we see more engagement from the users.
-Right the AMQP 1.0 support is just bringing one more Vert.x dependency, the Vert.x Proton component, which seems to be useless.
+Currently the AMQP 1.0 support offers no benefit to users and comes with costs to the project:
+
+* costs in terms of a more complex bridge architecture, requiring abstraction over HTTP and AMQP protocols.
+* on-going cost for testing.
+* an extra Vert.x dependency, the Vert.x Proton component.
+
 Removing it allows to reduce the dependencies surface which could be impacted by bugs and CVEs.
 
 ## Proposal
