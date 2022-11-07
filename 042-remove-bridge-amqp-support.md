@@ -6,7 +6,7 @@ This proposal is about removing the current support for the AMQP 1.0 protocol fr
 
 Currently the Strimzi bridge provides support for the AMQP 1.0 protocol other than HTTP.
 The AMQP 1.0 protocol support is provided by using the [Vert.x Proton](https://github.com/vert-x3/vertx-proton) component for handling the communication on the wire.
-The current implementation doesn't follow any specific standard, like the new available [Event Stream Extensions for AMQP Version 1.0](https://docs.oasis-open.org/amqp/event-streams/v1.0/csd01/event-streams-v1.0-csd01.html).
+The current implementation comes from a custom design in terms of usage of AMQP 1.0 message properties, addresses and so on but not following any specific standard, like the new available [Event Stream Extensions for AMQP Version 1.0](https://docs.oasis-open.org/amqp/event-streams/v1.0/csd01/event-streams-v1.0-csd01.html).
 
 ## Motivation
 
