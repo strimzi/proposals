@@ -52,7 +52,7 @@ In the second phase - as part of Strimzi 0.35 (currently expected to be release 
 * The Strimzi 0.35 and later will check for existence of the JMX Trans resources and delete them if they would exist.
   The rest of the operator code related to JMX Trans will be removed.
 * The container image for JMX Trans will be removed.
-* Remove JMX Trans form the docs.
+* Remove JMX Trans from the docs.
 
 In the final phase - as part of Strimzi 0.40 - we will:
 * Completely remove the operator functionality which checks for the JMX Trans resources and delete them.
