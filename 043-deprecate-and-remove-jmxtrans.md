@@ -2,7 +2,7 @@
 
 ## Current situation
 
-[JMX Trans](https://github.com/jmxtrans/jmxtrans) is a tool which allows to collect data from JMX endpoints of Java applications and send them to other applications and services.
+[JMX Trans](https://github.com/jmxtrans/jmxtrans) is a tool which allows data collection from JMX endpoints of Java applications to send them to other applications and services.
 Strimzi integrates JMX Trans as part of the `Kafka` custom resource.
 You can configure it in `.spec.jmxTrans` section:
 
@@ -47,7 +47,7 @@ In the first phase - as part of Strimzi 0.33 (currently expected in the second p
 * Announce the deprecation to the users as part of the Strimzi 0.33 communication (release notes, change log etc.).
 
 In the second phase - as part of Strimzi 0.35 (currently expected to be release in March or April 2023) - we will:
-* The `.spec.jmxTrans` API in the Kafka custom resource has to remain.
+* Retain the `.spec.jmxTrans` API in the Kafka custom resource.
   But it will stay deprecated and will be ignored by the operator (a warning will be issued if it is present in the custom resource).
 * The Strimzi 0.35 and later will check for existence of the JMX Trans resources and delete them if they would exist.
   The rest of the operator code related to JMX Trans will be removed.
