@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 46  | [KRaft liveness and readiness probs](./44-kraft-liveness-readiness.md) |
 | 45  | [Stable identities for Kafka Connect worker nodes](./045-Stable-identities-for-Kafka-Connect-worker-nodes.md) |
 | 44  | [StrimziPodSets graduation](./044-StrimziPodSets-graduation.md) |
 | 43  | [Deprecate and remove JMX Trans](./043-deprecate-and-remove-jmxtrans.md) |
