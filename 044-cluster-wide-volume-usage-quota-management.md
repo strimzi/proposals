@@ -1,4 +1,4 @@
-# #44 - Cluster Wide Volume Usage Quota Management
+# Cluster Wide Volume Usage Quota Management
 
 Extend the static quota mechanism to throttle message production in a broker if any active broker in the cluster is running out of disk.
 
@@ -50,15 +50,10 @@ if all volumes are unavailable.
 Throttling down message production on all broker nodes will protect the cluster from
 running out of disk due to replication.
 
-See also:
-* [kafka-quotas-plugin issue #28 - KIP-827 support](https://github.com/strimzi/kafka-quotas-plugin/issues/28)
-* [kafka-quotas-plugin issue #2 - Improve support for JBOD storage](https://github.com/strimzi/kafka-quotas-plugin/issues/2)
-
 ## Motivation
 
 Users need better protection against running out of disk on any of their nodes as it can degrade the service
-in unpredictable ways (corrupted segment logs, affect other users of that disk etc) which could impede
-the interventions required to recover.
+in unpredictable ways (corrupted segment logs) which could impede the interventions required to recover.
 
 ## Proposal
 
@@ -115,7 +110,7 @@ Local will be the default if the property isn't provided but is deprecated from 
 
 #### Cluster Volume Source
 
-With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+logdirs+total+and+usable+space+via+Kafka+API) in
+With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+log+dirs+total+and+usable+space+via+Kafka+API) in
 kafka 3.3 we can now obtain the total and usable bytes per log dir as part of the DescribeLogDirsResponse.
 
 Note: if a single disk contains multiple log dirs, it will be described multiple times through the kafka APIs. This
