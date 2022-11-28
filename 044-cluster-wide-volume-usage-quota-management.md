@@ -163,10 +163,10 @@ The limits we want are:
 
 Using configuration properties like:
 
-1. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.soft=1000`
-2. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.hard=5000`
-3. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.soft=5000`
-4. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.hard=1000`
+1. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.soft=14000000000`
+2. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.hard=15000000000`
+3. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.soft=5000000000`
+4. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.hard=1000000000`
 5. `client.quota.callback.static.storage.perVolumeLimit.usableRatioBelow.soft=0.05`
 6. `client.quota.callback.static.storage.perVolumeLimit.usableRatioBelow.hard=0.01`
 
