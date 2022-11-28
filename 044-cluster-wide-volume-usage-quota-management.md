@@ -127,6 +127,11 @@ impact the outcome.
 
 The Cluster Volume Source will use this API to discover volume information for the whole cluster.
 
+The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
+upstream as part of the KIP, which should be low cost. The performance impact of polling is managed by making the poll
+interval configurable. The poll interval will be configurable using the existing `client.quota.callback.static.storage.check-interval` 
+property (default is 0 - disabled).
+
 ##### Admin Client Configuration
 
 To obtain log dir descriptions though the admin api we need to construct an admin client. We intend to
