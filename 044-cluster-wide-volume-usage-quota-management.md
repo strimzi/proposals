@@ -178,8 +178,8 @@ Using configuration properties like:
 
 We are going to depend on using the admin client to get volume information. This brings all the baggage of making a
 connection and dealing with possible failures. Also, we can potentially have an inconsistent view of the world between
-determining the active broker set and asking for a description of all log dirs. So we need to react somehow to cases
-where we cannot get the volume data for all active brokers.
+determining the active broker set and asking for a description of all log dirs (because we make two independent API calls)
+. So we need to react somehow to cases where we cannot get the volume data for all active brokers.
 
 Example inconsistent state:
 1. we call `describeCluster` and get a response that says broker 1 and 2 are active
