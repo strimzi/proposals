@@ -59,7 +59,7 @@ in unpredictable ways (corrupted segment logs) which could impede the interventi
 
 1. Extend the kafka-quotas-plugin so that we can choose to observe the disk usage 
 of all brokers in the cluster.
-2. Deprecate the existing local disk observations.
+2. [Deprecate](#compatibility) the existing local disk observations.
 3. Add new limit types, so that it is explicit what is being limited and better support heterogeneous disks
    1. throttle if used bytes exceeds threshold on any volume
    2. throttle if available bytes less than threshold on any volume
@@ -250,15 +250,19 @@ require the ability for the plugin to resolve the required pairs.
 * strimzi/kafka-quota-plugin
 
 ## Compatibility
-Backwards compatibility would be maintained at first.
+Backwards compatibility would be maintained while kafka 3.2 is a supported version. We want to support users of older 
+kafka brokers as the local volume source can protect users in some scenarios (homogeneous disks with well-balanced data).
+
+Attempting to use a `cluster` volume source with a kafka older than 3.3.0 will prevent the broker from starting up
+and emit some sane log indicating the broker version is incompatible.
+
+Users would have to opt in to this new volume source by setting `client.quota.callback.static.storage.volume.source`
+to `cluster`.
 
 Configuration preserved for backwards compatability:
 - `client.quota.callback.static.storage.hard`
 - `client.quota.callback.static.storage.soft`
 Controlling the number of aggregate used bytes **above** which throttling is applied. Compatible only with local volume source.
-
-Attempting to use a `cluster` volume source with a kafka older than 3.3.0 will prevent the broker from starting up
-and emit some sane log indicating the broker version is incompatible.
 
 The existing metrics would also be deprecated but continue to be emitted if the plugin is using locally sourced volumes:
 - `io.strimzi.kafka.quotas:type=StorageChecker,name=TotalStorageUsedBytes`
