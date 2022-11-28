@@ -24,7 +24,7 @@ Deprecate the current implementation that considers only aggregate local volume 
 ## Current situation
 
 The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate limits on client connections to
-individual brokers (thresholds derived from storage limits), slowing producers down when consumed storage is over the soft limit (but below the hard limit) and
+individual brokers (thresholds derived from storage limits), slowing producers down when used storage is over the soft limit (but below the hard limit) and
 effectively pausing publication when reaching or exceeding the hard limit. This largely prevents out of disk scenarios when topics
 are replicated to all brokers thus there is largely similar disk usage between all brokers. Assuming all the brokers
 have similar disk usage levels, they will all apply rate limits at similar times and levels, effectively giving cluster-wide out-of-storage protection.
@@ -40,7 +40,7 @@ Addressing the effects of uneven topic distribution sounds like it should come u
 are designed to manage the additional network load of migrating replicas between brokers, which does not address client publication
 leading to out of disk conditions through replication.
 
-Currently, the kafka-quotas-plugin considers the total quantity of storage and how much of that is consumed (
+Currently, the kafka-quotas-plugin considers the total quantity of storage and how much of that is used (
 see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply throttling to
 clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD) deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as the
 broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of unbalanced usage
@@ -61,9 +61,9 @@ in unpredictable ways (corrupted segment logs) which could impede the interventi
 of all brokers in the cluster.
 2. Deprecate the existing local disk observations.
 3. Add new limit types, so that it is explicit what is being limited and better support heterogeneous disks
-   1. throttle if consumed bytes exceeds threshold on any volume
-   2. throttle if usable bytes less than threshold on any volume
-   3. throttle if usable ratio less than threshold on any volume
+   1. throttle if used bytes exceeds threshold on any volume
+   2. throttle if available bytes less than threshold on any volume
+   3. throttle if available ratio less than threshold on any volume
 4. Introduce an extension point in the quotas-plugin to support pluggable sources of quotas
 5. Introduce a fallback throttle factor in case we cannot retrieve the cluster state
 
@@ -92,8 +92,10 @@ metric names and provide an extension point in case we want to externalise the T
 The storage quotas operate on observations about a **Volume** with these characteristics:
 1. `logDir`: the path of the logdir
 2. `brokerId`
-3. `capacityBytes`
-4. `usableBytes`
+3. `totalBytes`
+4. `availableBytes`
+5. `usedBytes` (totalBytes - availableBytes)
+6. `availableRatio` (availableBytes/totalBytes)
 
 #### Volume Source
 
@@ -111,7 +113,7 @@ Local will be the default if the property isn't provided but is deprecated from 
 #### Cluster Volume Source
 
 With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+log+dirs+total+and+usable+space+via+Kafka+API) in
-kafka 3.3 we can now obtain the total and usable bytes per log dir as part of the DescribeLogDirsResponse.
+kafka 3.3 we can now obtain the total and usable (available) bytes per log dir as part of the DescribeLogDirsResponse.
 
 Note: if a single disk contains multiple log dirs, it will be described multiple times through the kafka APIs. This
 repetition is acceptable as our new limit types will be applied per-volume, so redundant volume descriptions don't
@@ -140,7 +142,7 @@ The admin client will re-use the broker SSL configuration
 ##### Limit Type Configuration
 
 When operating with cluster sourced volume data the existing limit types applied to the aggregate
-consumed bytes of all volumes would be meaningless. Nodes enter and exit the active set as part of normal operation.
+used bytes of all volumes would be meaningless. Nodes enter and exit the active set as part of normal operation.
 So we propose that the existing limiting method should be incompatible with cluster sourced volumes.
 
 Instead, we propose introducing new limit types applied on a per-volume basis. Meaning that there is a single value
@@ -151,26 +153,26 @@ stop message production) for all limit types.
 
 The only requirement is a single hard-limit configuration, if no soft-limit is configured we will infer that soft-limit==hard-limit.
 
-The different limit types can be combined, so you could combine a consumedBytesExceeds soft limit with a usableRatioBelow
+The different limit types can be combined, so you could combine a usedBytesExceeds soft limit with a availableRatioBelow
 hard limit.
 
 Defining multiple soft limits or multiple hard limits would be an invalid state.
 
 The limits we want are:
-1. throttle if consumedBytes is greater-than-or-equal-to some threshold for any volume
-2. throttle if usableBytes is less-than-or-equal-to some threshold for any volume
-3. throttle if the ratio of usableBytes to capacityBytes is less-than-or-equal-to some threshold for any volume
+1. throttle if [usedBytes](#volume) is greater-than-or-equal-to some threshold for any volume
+2. throttle if [availableBytes](#volume) is less-than-or-equal-to some threshold for any volume
+3. throttle if the [availableRatio](#volume) is less-than-or-equal-to some threshold for any volume
 
 Using configuration properties like:
 
-1. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.soft=14000000000`
-2. `client.quota.callback.static.storage.perVolumeLimit.consumedBytesExceeds.hard=15000000000`
-3. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.soft=5000000000`
-4. `client.quota.callback.static.storage.perVolumeLimit.usableBytesBelow.hard=1000000000`
-5. `client.quota.callback.static.storage.perVolumeLimit.usableRatioBelow.soft=0.05`
-6. `client.quota.callback.static.storage.perVolumeLimit.usableRatioBelow.hard=0.01`
+1. `client.quota.callback.static.storage.perVolumeLimit.usedBytesExceeds.soft=14000000000`
+2. `client.quota.callback.static.storage.perVolumeLimit.usedBytesExceeds.hard=15000000000`
+3. `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.soft=5000000000`
+4. `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard=1000000000`
+5. `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.soft=0.05`
+6. `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.hard=0.01`
 
-`usableRatioBelow` value can be in the range (0.0, 1.0)
+`availableRatioBelow` value can be in the range (0.0, 1.0)
 
 #### Fallback Throttle Factor
 
@@ -237,7 +239,7 @@ Backwards compatibility would be maintained at first.
 Configuration preserved for backwards compatability:
 - `client.quota.callback.static.storage.hard`
 - `client.quota.callback.static.storage.soft`
-Controlling the number of aggregate consumed bytes **above** which throttling is applied. Compatible only with local volume source.
+Controlling the number of aggregate used bytes **above** which throttling is applied. Compatible only with local volume source.
 
 Attempting to use a `cluster` volume source with a kafka older than 3.3.0 will prevent the broker from starting up
 and emit some sane log indicating the broker version is incompatible.
