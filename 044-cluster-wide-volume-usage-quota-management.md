@@ -12,6 +12,7 @@ Deprecate the current implementation that considers only aggregate local volume 
     - [Volume Source](#volume-source)
     - [Quota Source](#quota-source)
     - [Throttle Factor](#throttle-factor)
+    - [Throttle Factor Source](#throttle-factor-source)
     - [Cluster Volume Source](#cluster-volume-source)
       - [Admin Client Configuration](#admin-client-configuration)
       - [Limit Type Configuration](#limit-type-configuration)
@@ -44,8 +45,7 @@ Currently, the kafka-quotas-plugin considers the total quantity of storage and h
 see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply throttling to
 clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD) deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as the
 broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of unbalanced usage
-between volumes can lead to a volume running out of storage without throttling being applied. The broker will go offline
-if all volumes are unavailable.
+between volumes can lead to a volume running out of storage without throttling being applied.
 
 Throttling down message production on all broker nodes will protect the cluster from
 running out of disk due to replication.
@@ -64,12 +64,13 @@ of all brokers in the cluster.
    1. throttle if used bytes exceeds threshold on any volume
    2. throttle if available bytes less than threshold on any volume
    3. throttle if available ratio less than threshold on any volume
-4. Introduce an extension point in the quotas-plugin to support pluggable sources of quotas
+4. Introduce extension points in the quotas-plugin to support pluggable sources of quotas and throttle factors
 5. Introduce a fallback throttle factor in case we cannot retrieve the cluster state
 
-So every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes. If it detects that any volume in
-the cluster is becoming too full it will throttle production of messages. The kafka quota API isn't rich enough to do anything 
-smarter about only throttling writes to the brokers running out of space, so we fence the whole cluster.
+So every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes.
+The brokers should all operate on a similar view of the cluster state and make a deterministic decision. If a broker detects that
+any volume in the cluster is becoming too full it will throttle production of messages. The kafka quota API isn't rich 
+enough to do anything smarter about only throttling writes to the brokers running out of space, so we fence the whole cluster.
 
 ### High level changes
 To better support external sources for managing quotas this proposal introduces some new concepts to the plugin:
@@ -86,6 +87,11 @@ calculate the final byte rate limit.
 
 This is a concept that was already implicit in the current calculations, but we want to name it so that we can use it in 
 metric names and provide an extension point in case we want to externalise the Throttle Factor.
+
+#### Throttle Factor Source
+
+We propose adding a Throttle Factor Source concept to the plugin to provide an extension point where we could plug in
+future sources of throttle factors, like pull factors from a single decision-making broker.
 
 #### Volume
 
@@ -230,7 +236,7 @@ It would also make the deployment of an external metrics store a requirement for
 KIP-73 is designed to protect client performance while cluster re-balancing exercises are taking place by limiting the
 bandwidth available to the replication traffic. This is not suitable for use in preventing out of storage issues as the
 bandwidth limit is configured as part of the partition re-assignment operation. As it applies a bandwidth limit it is
-configured in  `units per second` which is problematic for the quota plugin to determine a sensible value for as it
+configured in `units per second` which is problematic for the quota plugin to determine a sensible value for as it
 should really be related to the expected rate at which data is purged from the tail of the partitions on the volume in
 question. KIP-73 bandwidth limits are only applied to a specific set of `partition` & `replica` pairs which would
 require the ability for the plugin to resolve the required pairs.
