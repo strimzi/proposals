@@ -181,6 +181,11 @@ connection and dealing with possible failures. Also, we can potentially have an 
 determining the active broker set and asking for a description of all log dirs. So we need to react somehow to cases
 where we cannot get the volume data for all active brokers.
 
+Example inconsistent state:
+1. we call `describeCluster` and get a response that says broker 1 and 2 are active
+2. broker 2 shuts down cleanly and is removed from the active set
+3. we call `describeLogDirs( brokerIds = [1,2] )` and only receive descriptions for logdirs on broker 1
+
 We propose introducing a configurable **fallback throttle factor** to be applied in situations where we don't have enough
 information to act. With a default value of 0.0 ie effectively stopping all production to the cluster. This would allow
 users to opt in to more dangerous behaviour like disabling this failsafe.
