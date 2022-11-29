@@ -22,8 +22,8 @@ This section contains some background information about the ports and metrics we
 
 ### Ports
 In KRaft mode there are two different ports that the node could be listening on.
-If it has a controller process it should be listening on the port defined as the `controller.listener.names` which in Strimzi is currently hard-coded to 9090.
-If it has a broker process it should be listening on the replication port which is hard-coded to 9091.
+If it has a controller process it should be listening on the port defined as the `controller.listener.names` which in Strimzi is hard-coded to 9090.
+If it has a broker process it should be listening on the replication port specified as the `inter.broker.listener.name` which is hard-coded to 9091.
 If the node is running as a combined mode, it should be listening on both ports
 
 ### BrokerState
@@ -41,7 +41,7 @@ Some useful things to be aware of with the current-state metric and how the cont
 If this metric shows one of these two states, this means the leader election has happened and a controller quorum has been successfully formed.
 * The current-state metric is not accessible as a Yammer metric, so cannot be accessed by the KafkaAgent in the same way it currently reads the BrokerState metric.
 * The current-state metric could perhaps be read by the KafkaAgent if it called the MBean server within the JVM directly or read it from `$LOG_DIR/__cluster_metadata-0/quorum-state`.
-* The broker nodes will not move to a RUNNING state until the quorum leader election has happened.
+* The broker nodes will not move out of the STARTING state until the quorum leader election has happened.
 
 ## Proposal
 
@@ -152,5 +152,3 @@ This will not cause any compatibility problems because currently the KafkaAgent 
 the RUNNING state.
 The change will make the code between KRaft and ZooKeeper mode simpler and protect readiness if in future the agent is 
 updated to continue running once the broker is "ready".
-
-## Rejected alternatives
