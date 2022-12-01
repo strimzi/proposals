@@ -72,6 +72,7 @@ of all brokers in the cluster.
    3. throttle if available ratio less than threshold on any volume
 4. Introduce extension points in the quotas-plugin to support pluggable sources of quotas and throttle factors
 5. Introduce a fallback throttle factor in case we cannot retrieve the cluster state
+6. strimzi-kafka-operator becomes responsible for configuring the admin client connection properties of the plugin
 
 So every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes.
 The brokers should all operate on a similar view of the cluster state and make a deterministic decision. If a broker detects that
@@ -158,23 +159,20 @@ upstream as part of the KIP, which should be low cost. The performance impact of
 interval configurable. The poll interval will be configurable using the existing `client.quota.callback.static.storage.check-interval` 
 property (default is 0 - disabled).
 
-##### Admin Client Configuration
-
-To obtain log dir descriptions though the admin api we need to construct an admin client. We intend to
-connect to the replication listener and will piggyback on the broker's existing SSL configuration to
-obtain keystore/truststore properties.
-
-If using cluster sourced volumes we will expose these optional properties to customise the admin connection:
-
-1. `client.quota.callback.kafka.listener.name` (default `replication-9091`)
-2. `client.quota.callback.kafka.listener.port` (default `9091`)
-3. `client.quota.callback.kafka.listener.protocol` (default `SSL`)
-4. `client.quota.callback.kafka.clientIdPrefix` (default `__strimzi`)
-
 Setting `client.quota.callback.static.storage.hard` or `client.quota.callback.static.storage.soft` would be incompatible
 with the cluster sourced volumes and fail configuration of the plugin.
 
-The admin client will re-use the broker SSL configuration
+##### Admin Client Configuration
+
+To obtain log dir descriptions through the admin api we need to construct an admin client.
+
+If using cluster sourced volumes we require the admin client bootstrap to be configured using `client.quota.callback.kafka.admin.bootstrap.servers`
+
+Additional admin client configuration can be passed using the form `client.quota.callback.kafka.admin.${configuration}`.
+For example: `client.quota.callback.kafka.admin.security.protocol=SSL`
+
+The strimzi-kafka-operator would be responsible for configuring the admin client to connect to the
+replication listener of the broker.
 
 ##### Limit Type Configuration
 
@@ -274,6 +272,7 @@ require the ability for the plugin to resolve the required pairs.
 
 ## Affected projects
 * strimzi/kafka-quota-plugin
+* strimzi/kafka-cluster-operator
 
 ## Compatibility
 Backwards compatibility would be maintained while kafka 3.2 is a supported version. We want to support users of older 
