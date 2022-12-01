@@ -7,6 +7,7 @@ Deprecate the current implementation that considers only aggregate local volume 
 - [Current situation](#current-situation)
 - [Motivation](#motivation)
 - [Proposal](#proposal)
+  - [Caveat - Kraft Disk Usage](#caveat---kraft-disk-usage)
   - [High Level Changes](#high-level-changes)
     - [Volume](#volume)
     - [Volume Source](#volume-source)
@@ -77,6 +78,26 @@ The brokers should all operate on a similar view of the cluster state and make a
 any volume in the cluster is becoming too full it will throttle production of messages. The kafka quota API isn't rich 
 enough to do anything smarter about only throttling writes to the brokers running out of space, so we fence the whole cluster.
 
+### Caveat - KRaft Disk Usage
+
+This proposal will only help prevent running out-of-disk caused by topic data. It will not prevent disks being exhausted
+due to writes to the upcoming KRaft metadata log.
+
+Currently, when using separate controller-only nodes*, those nodes are not described by `Admin#describeCluster` and we cannot use 
+`Admin#describeLogDirs` against the controllers. So the disk usage of the volume could be invisible.
+
+When using controller+broker mode*, by default the metadata log is kept in the first `log.dirs` directory but could be 
+configured to a custom location, potentially on its own volume. If it was put on a separate volume it would not be
+described in the describeLogDirs response, nor contribute to the volume usage of an existing log dir.
+
+So in some cases with controller+broker mode it would afford some protection, as growth of the metadata log dir could
+cause throttling of topic writes (because they are on the same volume as another log dir).
+
+Even if we had reliable insight into the disk usage (by extending the admin apis for example), of the volume the metadata dir 
+resides on, we cannot take effective measures from the quota plugin. Potentially you could use an Authorization
+plugin instead and block metadata-generating operations.
+
+*tested with kafka 3.3.1
 ### High level changes
 To better support external sources for managing quotas this proposal introduces some new concepts to the plugin:
 
