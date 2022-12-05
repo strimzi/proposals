@@ -33,15 +33,10 @@ NOT_RUNNING (0) -> STARTING (1) -> RECOVERY (2) -> RUNNING (3) -> PENDING_CONTRO
 
 The other possible value is 127 which represents UNKNOWN.
 
-### Current state metric and quorum
+You can see how the state transitions in the [BrokerLifecycleManager](https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/server/BrokerLifecycleManager.scala#L379), specifically that 
+the broker transitions from STARTING to RECOVERY once it has caught up with the cluster metadata, then it transitions to RUNNING as long as it is not fenced.
 
-Some useful things to be aware of with the current-state metric and how the controller quorum affects the broker nodes:
-
-* The [current-state](https://kafka.apache.org/documentation/#kraft_quorum_monitoring) metric indicates whether a controller is currently a leader or follower.
-If this metric shows one of these two states, this means the leader election has happened and a controller quorum has been successfully formed.
-* The current-state metric is not accessible as a Yammer metric, so cannot be accessed by the KafkaAgent in the same way it currently reads the BrokerState metric.
-* The current-state metric could perhaps be read by the KafkaAgent if it called the MBean server within the JVM directly or read it from `$LOG_DIR/__cluster_metadata-0/quorum-state`.
-* The broker nodes will not move out of the STARTING state until the quorum leader election has happened.
+The broker nodes cannot catch up with the cluster metadata until the controller quorum has been formed, so they will not move out of the STARTING state until the quorum leader election has happened.
 
 ## Proposal
 
@@ -59,23 +54,23 @@ The following statements describe the intent of the proposed probes:
 * A combined node is:
     * "alive" if it has a process running.
     * "ready" when it is ready to start accepting producer/consumer requests.
+        * This relies on the node still accepting incoming connections from other controller nodes even if it isn't actually marked as "ready" yet.
 
 ### Controller only mode
 
 The proposed probes are:
 
-* Liveness: controller is listening on 9090
-* Readiness: it is possible to make a TCP connection to port 9090 on the controller
-(i.e. client socket gets into the `ESTABLISHED` TCP socket state)
+* Liveness: controller is listening on the port of the first address in `controller.listener.names` (9090)
+* Readiness: controller is listening on the port of the first address in `controller.listener.names` (9090)
 
 ### Broker only mode
 
 The proposed probes are:
 
-* Liveness: broker is listening on 9091
+* Liveness: broker is listening on the port of the address of `inter.broker.listener.name` (9091)
 * Readiness: the BrokerState metric >=3 && != 127
 
-**Note:** This means the brokers will not become ready until all the controllers 
+**Note:** This means the brokers will not become ready until a majority of the controllers 
 are up and running.
 This is similar to the current behaviour of brokers when ZooKeeper is not ready.
 
@@ -83,26 +78,29 @@ This is similar to the current behaviour of brokers when ZooKeeper is not ready.
 
 The proposed probes are:
 
-* Liveness: node is listening on 9090
+* Liveness: node is listening on the port of the first address in `controller.listener.names` (9090)
 * Readiness: the BrokerState metric >=3 && != 127
 
-**Note:** This means the nodes will not become ready until all the other nodes
-are up and running.
+**Note:** This means the nodes will not become ready until a majority of the other controllers are up and running.
 This is acceptable because the Strimzi headless services use "publishNotReadyAddresses", which 
 means the nodes will be able to communicate even if they are currently marked as not ready.
 
 ### Impact on the KafkaRoller
 
 The existing KafkaRoller checks whether a pod is marked as ready to determine whether it needs to be rolled. 
-It does not take into account the state of other broker pods.
-The move to KRaft mode introduces some new requirements in terms of when a pod should or should not be rolled:
+This relies on the fact that currently the pod being ready implies that the BrokerState is >= RUNNING.
+Additionally, it does not take into account the state of other broker pods.
+The move to KRaft mode introduces some new requirements in terms of when a pod should or should not be rolled.
+This combined with the varying readiness checks means we need to change the way the KafkaRoller works:
 
+* The KafkaRoller should observe the BrokerState metric and any other metrics it needs directly, rather than inferring the state based on readiness.
+* If more than one controller pod has not become ready, KafkaRoller should try to role the controllers that aren't the current active controller first.
 * If a broker pod has not become ready, KafkaRoller should check the controller quorum is formed before rolling the pod.
 * If a combined pod has not become ready, KafkaRoller should check that all other combined pods have been scheduled 
 (i.e. not in pending state) before rolling the pod or waiting for it to become ready.
 
-The proposed readiness checks for combined mode will not work without changes to the KafkaRoller.
-This is because the brokers do not move to RUNNING until a quorum has been formed.
+The reason for the final bullet (combined pod not being ready) might not be immediately obvious, so it is explained below.
+The brokers do not move to RUNNING until a quorum has been formed.
 For example in combined mode during normal startup the following would happen:
 
 * All the pods are started at the same time
@@ -152,3 +150,24 @@ This will not cause any compatibility problems because currently the KafkaAgent 
 the RUNNING state.
 The change will make the code between KRaft and ZooKeeper mode simpler and protect readiness if in future the agent is 
 updated to continue running once the broker is "ready".
+
+## Rejected alternatives
+
+### Use the current-state metric for controller readiness
+The [current-state](https://kafka.apache.org/documentation/#kraft_quorum_monitoring) metric indicates the current state of the quorum.
+Previous versions of this proposal discussed whether we could check if this metric had a state of either follower or leader and use that to infer that the controller quorum had been formed and the controller should be marked as ready.
+This approach had a couple of problems:
+* The individual state of the controller doesn't always imply the full quorum state. 
+For example, this particular controller might be offline, but the rest of the quorum is still healthy.
+Also, during a leadership election the metric might show a state of `candidate` or `voted`.
+* In general readiness checks in Kubernetes should be based on individual nodes, not the cluster as a whole.
+* The current-state metric is not accessible as a Yammer metric, so cannot be accessed by the KafkaAgent in the same way it currently reads the BrokerState metric.
+Although it could perhaps be read by the KafkaAgent if it called the MBean server within the JVM directly or read it from `$LOG_DIR/__cluster_metadata-0/quorum-state`.
+* The broker nodes will not move out of the STARTING state until the quorum leader election has happened.
+
+### Only mark controller nodes as ready when they are accepting incoming connections
+
+We could only mark the controller node as ready when it is possible to make a TCP connection to the first port in `controller.listener.names` on the controller.
+However, this would require us to make a client TCP connection to the controller, which in turn would create a lot of noise in the logs.
+On further investigation into the [ControllerServer](https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/server/ControllerServer.scala) class there seems to be very few actions taking place between the controller starting to listen and accepting connections.
+As a result it was deemed there would be minimal benefit to having a check that is specific to making a connection, over just checking if the controller is listening on the required port.
