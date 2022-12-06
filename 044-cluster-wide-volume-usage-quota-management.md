@@ -299,6 +299,16 @@ When using cluster sourced volumes the user may optionally configure a single so
 
 ## Rejected Alternatives
 
+### Using an Authorizer Plugin
+
+Using an [authorizer plugin](https://kafka.apache.org/33/javadoc/org/apache/kafka/server/authorizer/Authorizer.html) 
+to deny operations is another alternative. It would allow finer-grained control but would potentially be surprising 
+to kafka clients to see unexpected authorization denials. Also, the API would need careful attention to performance 
+as it's called per-operation. 
+
+Enabling it to chain with another user-configured authorizer is another complexity. The plugin would have to be made 
+aware of the delegate class, instantiate it and drive its lifecycle.
+
 ### Using a kafka topic to distribute metrics. 
 
 See the original proposal PR [#51](https://github.com/strimzi/proposals/pull/51). We considered using a kafka topic to
