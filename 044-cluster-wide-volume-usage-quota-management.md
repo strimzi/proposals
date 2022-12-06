@@ -106,12 +106,15 @@ plugin instead and block metadata-generating operations.
 
 *tested with kafka 3.3.1
 ### High level changes
-To better support external sources for managing quotas this proposal introduces some new concepts to the plugin:
+
+To better support alternative sources for managing quotas and how they interact with volume usage this proposal
+separates some existing concepts and separates their responsibilities. We envisage the architecture looking like
+this ![Component interactions](images/044-quota-plugin-interactions.png)
 
 #### Quota Source
 
-We propose adding a Quota Source concept to the plugin to provide an extension point where we could plug in
-future sources of quotas, like pull them from an external system.
+We propose adding a Quota Source concept to the plugin to provide an abstraction through which where we could provide
+external sources of quotas, like pull them from an external system.
 
 #### Throttle Factor
 
@@ -123,8 +126,8 @@ metric names and provide an extension point in case we want to externalise the T
 
 #### Throttle Factor Source
 
-We propose adding a Throttle Factor Source concept to the plugin to provide an extension point where we could plug in
-future sources of throttle factors, like pull factors from a single decision-making broker.
+We propose adding a Throttle Factor Source concept to the plugin to provide an abstraction through which we could
+provide alternative sources of throttle factors, such as pull the factor from a single decision-making broker.
 
 #### Volume
 
