@@ -18,6 +18,9 @@ Deprecate the current implementation that considers only aggregate local volume 
       - [Admin Client Configuration](#admin-client-configuration)
       - [Limit Type Configuration](#limit-type-configuration)
     - [Fallback Throttle Factor](#fallback-throttle-factor)
+- [Configuration Summary](#configuration-summary)
+  - [Hard Limit Configuration](#hard-limit-configuration)
+  - [Soft Limit Configuration](#soft-limit-configuration)
 - [Metrics](#metrics)
 - [Rejected Alternatives](#rejected-alternatives)
 - [Affected Projects](#affected-projects)
@@ -188,26 +191,30 @@ stop message production) for all limit types.
 
 The only requirement is a single hard-limit configuration, if no soft-limit is configured we will infer that soft-limit==hard-limit.
 
-The different limit types can be combined, so you could combine a usedBytesExceeds soft limit with a availableRatioBelow
+The different limit types can be combined, so you could combine an availableBytesBelow soft limit with a availableRatioBelow
 hard limit.
 
 Defining multiple soft limits or multiple hard limits would be an invalid state.
 
 The limits we want are:
-1. throttle if [usedBytes](#volume) is greater-than-or-equal-to some threshold for any volume
-2. throttle if [availableBytes](#volume) is less-than-or-equal-to some threshold for any volume
-3. throttle if the [availableRatio](#volume) is less-than-or-equal-to some threshold for any volume
+1. throttle if [availableBytes](#volume) is less-than-or-equal-to some threshold for any volume
+2. throttle if the [availableRatio](#volume) is less-than-or-equal-to some threshold for any volume
 
-Using configuration properties like:
+For example, to configure a soft limit when availableBytes is below 5GB and hard limit when availableBytes is below 1GB:
+- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.soft=5000000000`
+- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard=1000000000`
 
-1. `client.quota.callback.static.storage.perVolumeLimit.usedBytesExceeds.soft=14000000000`
-2. `client.quota.callback.static.storage.perVolumeLimit.usedBytesExceeds.hard=15000000000`
-3. `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.soft=5000000000`
-4. `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard=1000000000`
-5. `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.soft=0.05`
-6. `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.hard=0.01`
+Another example, to configure a soft limit when availableRatio is below 0.05 (5%) and hard limit when availableRatio is below 0.01 (1%):
+- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.soft=0.05`
+- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.hard=0.01`
 
-`availableRatioBelow` value can be in the range (0.0, 1.0)
+Or mixing the two types, which is also valid to soft limit at 0.05 (5%) availableRatio and hard limit at 1GB availableBytes:
+- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.soft=0.05`
+- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard=1000000000`
+
+Defining more than one hard or soft limit is **invalid**, for example the below is disallowed:
+- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.hard=0.05`
+- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard=5000000000`
 
 #### Fallback Throttle Factor
 
@@ -228,6 +235,30 @@ users to opt in to more dangerous behaviour like disabling this failsafe.
 Fallback throttle factor can be in the range (0.0, 1.0)
 
 Example configuration: `client.quota.callback.static.fallback.throttle.factor=0.0`
+
+## Configuration Summary
+
+|                                                     | type   | default | valid values   |                                                                                                                                  |
+|-----------------------------------------------------|--------|---------|----------------|----------------------------------------------------------------------------------------------------------------------------------|
+| client.quota.callback.static.storage.volume.source  | string | local   | local, cluster | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
+| client.quota.callback.kafka.admin.bootstrap.servers | string | null    |                | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
+| client.quota.callback.kafka.admin.*                 | ?      |         |                | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
+
+### Hard Limit Configuration
+When using cluster sourced volumes the user must configure a single hard [limit type](#limit-type-configuration), all are incompatible with `local` volume source
+
+|                                                                              | type   | default | valid values |                                                         |
+|------------------------------------------------------------------------------|--------|---------|--------------|---------------------------------------------------------|
+| client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.hard | long   | null    | (0, ...)     | stop message production if availableBytes <= this value |
+| client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.hard | double | null    | (0.0, 1.0)   | stop message production if availableRatio <= this value |
+
+### Soft Limit Configuration
+When using cluster sourced volumes the user may optionally configure a single soft [limit type](#limit-type-configuration), all are incompatible with `local` volume source
+
+|                                                                              | type   | default | valid values |                                                         |
+|------------------------------------------------------------------------------|--------|---------|--------------|---------------------------------------------------------|
+| client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow.soft | long   | null    | (0, ...)     | slow message production if availableBytes <= this value |
+| client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow.soft | double | null    | (0.0, 1.0)   | slow message production if availableRatio <= this value |
 
 ## Metrics
 
