@@ -29,36 +29,38 @@ Deprecate the current implementation that considers only aggregate local volume 
 
 ## Current situation
 
-The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate limits on client connections to
-individual brokers (thresholds derived from storage limits), slowing producers down when used storage is over the soft limit (but below the hard limit) and
-effectively pausing publication when reaching or exceeding the hard limit. This largely prevents out of disk scenarios when topics
-are replicated to all brokers thus there is largely similar disk usage between all brokers. Assuming all the brokers
-have similar disk usage levels, they will all apply rate limits at similar times and levels, effectively giving cluster-wide out-of-storage protection.
+The [kafka-static-quota-plugin](https://github.com/strimzi/kafka-quotas-plugin) applies byte-rate limits on client
+connections to individual brokers (thresholds derived from storage limits), slowing producers down when used storage is
+over the soft limit (but below the hard limit) and effectively pausing publication when reaching or exceeding the hard
+limit. This largely prevents out of disk scenarios when partition replicas are replicated to all brokers thus there is largely
+similar disk usage between all brokers. Assuming all the brokers have similar disk usage levels, they will all apply
+rate limits at similar times and levels, effectively giving cluster-wide out-of-storage protection.
 
-This however provides limited protection to clusters with un-even distribution of topics and thus storage usage.
-Additionally, it ties the plug-in directly to storage usage, there are other factors which users may wish to respond to.
+This however provides limited protection to clusters with un-even distribution of partition replicas and thus storage
+usage. Additionally, it ties the plug-in directly to storage usage, there are other factors which users may wish to
+respond to.
 
-As clusters scale up the likelihood of even topic distribution drops. When topics are not evenly distributed it
-is possible for replication from broker `1` to broker `2` will cause broker `2` to consume all available storage
-without triggering throttling of clients, as broker `1` disk usage remains acceptable.
+As clusters scale up the likelihood of even partition replica distribution drops. When partition replica are not evenly
+distributed it is possible for replication from broker `1` to broker `2` will cause broker `2` to consume all available
+storage without triggering throttling of clients, as broker `1` disk usage remains acceptable.
 
-Addressing the effects of uneven topic distribution sounds like it should come
+Addressing the effects of uneven partition replicas distribution sounds like it should come
 under [KIP-73](https://cwiki.apache.org/confluence/display/KAFKA/KIP-73+Replication+Quotas). Unfortunately replication
 quotas are designed to manage the additional network load of migrating replicas between brokers, which does not address
-client publication leading to out of disk conditions through replication. As replication throttling is configured in terms
-of `TopicPartitions` the quota plug-in would need a mechanism to translate a logDir into the set of TopicPartitions replicated to that directory.
-Assuming it generated the appropriate throttle configuration this could lead to unpredictable latency spikes
-for producers configured with `acks >= 1` as the replication from partition leader to follower maybe delayed due to the 
-throttle.
+client publication leading to out of disk conditions through replication. As replication throttling is configured in
+terms of `TopicPartitions` the quota plug-in would need a mechanism to translate a logDir into the set of
+TopicPartitions replicated to that directory. Assuming it generated the appropriate throttle configuration this could
+lead to unpredictable latency spikes for producers configured with `acks = 1` or `acks = all` as the replication from
+partition leader to follower maybe delayed due to the throttle.
 
 Currently, the kafka-quotas-plugin considers the total quantity of storage and how much of that is used (
 see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply throttling to
-clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD) deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as the
-broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of unbalanced usage
-between volumes can lead to a volume running out of storage without throttling being applied.
+clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD)
+deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as
+the broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of
+unbalanced usage between volumes can lead to a volume running out of storage without throttling being applied.
 
-Throttling down message production on all broker nodes will protect the cluster from
-running out of disk due to replication.
+Throttling down message production on all broker nodes will protect the cluster from running out of disk due to replication.
 
 ## Motivation
 
