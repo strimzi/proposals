@@ -45,8 +45,8 @@ Addressing the effects of uneven topic distribution sounds like it should come
 under [KIP-73](https://cwiki.apache.org/confluence/display/KAFKA/KIP-73+Replication+Quotas). Unfortunately replication
 quotas are designed to manage the additional network load of migrating replicas between brokers, which does not address
 client publication leading to out of disk conditions through replication. As replication throttling is configured in terms
-of `TopicPartitions` the quota plug-in would need a mechanism to translate a logDir into a set of TopicPartitions.
-Assuming it could select generate the appropriate throttle configuration this could lead to unpredictable latency spikes
+of `TopicPartitions` the quota plug-in would need a mechanism to translate a logDir into the set of TopicPartitions replicated to that directory.
+Assuming it generated the appropriate throttle configuration this could lead to unpredictable latency spikes
 for producers configured with `acks >= 1` as the replication from partition leader to follower maybe delayed due to the 
 throttle.
 
