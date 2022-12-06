@@ -155,7 +155,9 @@ Note: if a single disk contains multiple log dirs, it will be described multiple
 repetition is acceptable as our new limit types will be applied per-volume, so redundant volume descriptions don't
 impact the outcome.
 
-The Cluster Volume Source will use this API to discover volume information for the whole cluster.
+The Cluster Volume Source will use this API to discover volume information for the whole cluster. We intend to continue
+using `client.quota.callback.static.storage.check-interval` to configure the millisecond interval between polling the
+cluster state.
 
 The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
 upstream as part of the KIP, which should be low cost. The performance impact of polling is managed by making the poll
@@ -229,8 +231,9 @@ Example inconsistent state:
 3. we call `describeLogDirs( brokerIds = [1,2] )` and only receive descriptions for logdirs on broker 1
 
 We propose introducing a configurable **fallback throttle factor** to be applied in situations where we don't have enough
-information to act. With a default value of 0.0 ie effectively stopping all production to the cluster. This would allow
-users to opt in to more dangerous behaviour like disabling this failsafe.
+information to act. With a default value of 1.0 to optimistically allow all the quota to be used. This would allow
+users to opt in to more pessimistic behaviour like using a factor of 0.0 to prevent writes when we are in an unknown
+state.
 
 Fallback throttle factor can be in the range (0.0, 1.0)
 
@@ -238,11 +241,13 @@ Example configuration: `client.quota.callback.static.fallback.throttle.factor=0.
 
 ## Configuration Summary
 
-|                                                     | type   | default | valid values   |                                                                                                                                  |
-|-----------------------------------------------------|--------|---------|----------------|----------------------------------------------------------------------------------------------------------------------------------|
-| client.quota.callback.static.storage.volume.source  | string | local   | local, cluster | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
-| client.quota.callback.kafka.admin.bootstrap.servers | string | null    |                | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
-| client.quota.callback.kafka.admin.*                 | ?      |         |                | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
+|                                                       | type   | default | valid values   |                                                                                                                                  |
+|-------------------------------------------------------|--------|---------|----------------|----------------------------------------------------------------------------------------------------------------------------------|
+| client.quota.callback.static.storage.volume.source    | string | local   | local, cluster | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
+| client.quota.callback.static.storage.check-interval   | long   | 0       | (0, ...)       | 0 means disabled, otherwise this is the milliseconds between polling to describe the cluster (this is an existing configuration) |
+| client.quota.callback.kafka.admin.bootstrap.servers   | string | null    |                | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
+| client.quota.callback.kafka.admin.*                   | ?      |         |                | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
+| client.quota.callback.static.fallback.throttle.factor | double | 1.0     | (0.0, 1.0)     | sets the [Fallback Throttle Factor](#fallback-throttle-factor)                                                                   |
 
 ### Hard Limit Configuration
 When using cluster sourced volumes the user must configure a single hard [limit type](#limit-type-configuration), all are incompatible with `local` volume source
