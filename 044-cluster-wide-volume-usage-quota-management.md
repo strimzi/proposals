@@ -18,7 +18,7 @@ Deprecate the current implementation that considers only aggregate local volume 
       - [Admin Client Configuration](#admin-client-configuration)
       - [Limit Type Configuration](#limit-type-configuration)
     - [Throttle Factor Fallback](#throttle-factor-fallback)
-      - [Throttle Factor Valid For Polls](#throttle-factor-valid-for-polls)
+      - [Throttle Factor Validity Duration](#throttle-factor-validity-duration)
 - [Configuration Summary](#configuration-summary)
   - [Hard Limit Configuration](#hard-limit-configuration)
   - [Soft Limit Configuration](#soft-limit-configuration)
@@ -72,12 +72,11 @@ in unpredictable ways (corrupted segment logs) which could impede the interventi
 1. Extend the kafka-quotas-plugin so that we can choose to observe the disk usage 
 of all brokers in the cluster.
 2. [Deprecate](#compatibility) the existing local disk observations.
-3. Add new limit types, so that it is explicit what is being limited and better support heterogeneous disks
-   1. throttle if used bytes exceeds threshold on any volume
-   2. throttle if available bytes less than threshold on any volume
-   3. throttle if available ratio less than threshold on any volume
+3. Add new [limit types](#limit-type-configuration), so that it is explicit what is being limited and better support heterogeneous disks
+   1. throttle if available bytes less than threshold on any volume
+   2. throttle if available ratio less than threshold on any volume
 4. Introduce extension points in the quotas-plugin to support pluggable sources of quotas and throttle factors
-5. Introduce a throttle factor fallback and throttle factor valid-for-polls in case we cannot retrieve the cluster state
+5. Introduce a [throttle factor fallback](#throttle-factor-fallback) and [throttle factor validity duration](#throttle-factor-validity-duration) in case we cannot retrieve the cluster state
 6. strimzi-kafka-operator becomes responsible for configuring the admin client connection properties of the plugin
 
 So every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes.
