@@ -245,31 +245,34 @@ Throttle factor fallback can be in the range (0.0, 1.0)
 
 Example configuration: `client.quota.callback.static.throttle.factor.fallback=0.0`
 
-##### Throttle Factor Valid For Polls
+##### Throttle Factor Validity Duration
 
 To make the throttle factor logic more resilient in the face of transient failures we want to continue
-using a previously calculated throttle factor for some duration, rather than immediately using the throttle factor
-fallback after a single failure.
+using a previously calculated valid throttle factor for some duration, rather than immediately using the 
+throttle factor fallback after a single failure.
 
-So we will enable the user to specify how many poll intervals a valid throttle factor should apply for with
-`client.quota.callback.static.throttle.factor.valid-for-polls`. Default value 2.
+So we will enable the user to specify how long a valid throttle factor can be applied for with
+`client.quota.callback.static.throttle.factor.validity-duration`. Where the value is an ISO8601 duration.
+Default value "PT5M", 5 minutes.
 
-For example if validity intervals is 1 then we could expect this behaviour:
+For example if validity duration is 2 minutes then we could expect this behaviour:
 
-1. poll #1 success, calculated throttle factor 0.6
-2. poll #2 failed to calculate throttle factor, keep using 0.6 as we are <= 1 interval after 0.6 was calculated
-3. poll #3 failed, use the throttle factor fallback of 1.0 because we are > 1 interval after 0.6 was calculated
+1. throttle factor recalculation at minute 0 succeeded, calculated throttle factor 0.6 and use it
+2. throttle factor recalculation at minute 1 failed, continue using throttle factor 0.6
+3. throttle factor recalculation at minute 2 failed, continue using throttle factor 0.6
+4. throttle factor recalculation at minute 3 failed, use throttle factor fallback of 1.0
+5. throttle factor recalculation at minute 4 succeeded, calculated throttle factor 0.6 and use it
 
 ## Configuration Summary
 
-|                                                              | type   | default | valid values   |                                                                                                                                  |
-|--------------------------------------------------------------|--------|---------|----------------|----------------------------------------------------------------------------------------------------------------------------------|
-| client.quota.callback.static.storage.volume.source           | string | local   | local, cluster | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
-| client.quota.callback.static.storage.check-interval          | long   | 0       | (0, ...)       | 0 means disabled, otherwise this is the milliseconds between polling to describe the cluster (this is an existing configuration) |
-| client.quota.callback.static.kafka.admin.bootstrap.servers   | string | null    |                | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
-| client.quota.callback.static.kafka.admin.*                   | ?      |         |                | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
-| client.quota.callback.static.throttle.factor.fallback        | double | 1.0     | (0.0, 1.0)     | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                                   |
-| client.quota.callback.static.throttle.factor.valid-for-polls | long   | 2       | (0, ...)       | sets the [Throttle Factor Valid For Polls](#throttle-factor-valid-for-polls)                                                     |
+|                                                                | type   | default | valid values      |                                                                                                                                  |
+|----------------------------------------------------------------|--------|---------|-------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| client.quota.callback.static.storage.volume.source             | string | local   | local, cluster    | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
+| client.quota.callback.static.storage.check-interval            | long   | 0       | (0, ...)          | 0 means disabled, otherwise this is the milliseconds between polling to describe the cluster (this is an existing configuration) |
+| client.quota.callback.static.kafka.admin.bootstrap.servers     | string | null    |                   | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
+| client.quota.callback.static.kafka.admin.*                     | ?      |         |                   | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
+| client.quota.callback.static.throttle.factor.fallback          | double | 1.0     | (0.0, 1.0)        | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                                   |
+| client.quota.callback.static.throttle.factor.validity-duration | string | PT5M    | ISO8601 durations | sets the [Throttle Factor Validity Duration](#throttle-factor-validity-duration)                                                 |
 
 ### Hard Limit Configuration
 When using cluster sourced volumes the user must configure a single hard [limit type](#limit-type-configuration), all are incompatible with `local` volume source
