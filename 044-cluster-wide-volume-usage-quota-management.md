@@ -53,9 +53,9 @@ TopicPartitions replicated to that directory. Assuming it generated the appropri
 lead to unpredictable latency spikes for producers configured with `acks = 1` or `acks = all` as the replication from
 partition leader to follower maybe delayed due to the throttle.
 
-Currently, the kafka-quotas-plugin considers the total quantity of storage and how much of that is used (
-see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply throttling to
-clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD)
+Currently, the kafka-quotas-plugin considers the total quantity of storage attached to a single broker and how much of
+that is used ( see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply
+throttling to clients. This is problematic with respect to handling disk failure for Just a Bunch Of Disks (JBOD)
 deployments [(KIP-112)](https://cwiki.apache.org/confluence/display/KAFKA/KIP-112%3A+Handle+disk+failure+for+JBOD) as
 the broker will take partitions offline when the volume they are stored on runs out of space. Which in the case of
 unbalanced usage between volumes can lead to a volume running out of storage without throttling being applied.
