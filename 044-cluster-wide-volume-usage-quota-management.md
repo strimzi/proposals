@@ -161,12 +161,8 @@ impact the outcome.
 
 The Cluster Volume Source will use this API to discover volume information for the whole cluster. We intend to continue
 using `client.quota.callback.static.storage.check-interval` to configure the millisecond interval between polling the
-cluster state.
-
-The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
-upstream as part of the KIP, which should be low cost. The performance impact of polling is managed by making the poll
-interval configurable. The poll interval will be configurable using the existing `client.quota.callback.static.storage.check-interval` 
-property (default is 0 - disabled).
+cluster state (default is 0 - disabled). The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
+upstream as part of the KIP, which should be low cost.
 
 Setting `client.quota.callback.static.storage.hard` or `client.quota.callback.static.storage.soft` would be incompatible
 with the cluster sourced volumes and fail configuration of the plugin.
@@ -226,7 +222,8 @@ Example inconsistent state:
 We propose introducing a configurable **throttle factor fallback** to be applied in situations where we don't have enough
 information to act. With a default value of 1.0 to optimistically allow all the quota to be used. This would allow
 users to opt in to more pessimistic behaviour like using a factor of 0.0 to prevent writes when we are in an unknown
-state.
+state. (note: we will also use the [Throttle Factor Validity Duration](#throttle-factor-validity-duration) to control
+when the fallback is applied)
 
 Throttle factor fallback can be in the range (0.0, 1.0)
 
