@@ -270,7 +270,7 @@ When using cluster sourced volumes the user must configure a single [limit type]
 
 1. Add a `io.strimzi.kafka.quotas:type=LocalThrottleFactor,name=ThrottleFactor` gauge. This would emit the most recently calculated throttle factor.
 2. Add a `io.strimzi.kafka.quotas:type=LocalThrottleFactor,name=FallbackThrottleFactorApplied` counter.
-3. Add a `io.strimzi.kafka.quotas:type=LocalThrottleFactor,name=ThrottlingVolume,brokerId=1,volumeLogDir=/path` gauge. The volume that most recently and severely breached a limit.
+3. Add a `io.strimzi.kafka.quotas:type=LocalThrottleFactor,name=LimitViolated` counter. Incremented when a volume violates a limit.
 4. Add a `io.strimzi.kafka.quotas:type=ClusterVolumeSouce,name=ActiveBrokers` gauge. To expose how many brokers this node considered most recently
 5. Add a `io.strimzi.kafka.quotas:type=ClusterVolumeSouce,name=ActiveLogDirs` gauge. To expose how many log dirs this node considered most recently
 
