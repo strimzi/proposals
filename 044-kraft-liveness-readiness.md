@@ -54,6 +54,7 @@ The following statements describe the intent of the proposed probes:
 * A combined node is:
     * "alive" if it has a process running.
     * "ready" when it is ready to start accepting producer/consumer requests.
+        * This implies that the controller quorum will have been formed while the nodes are not marked as ready, since it cannot start accepting producer/consumer requests until it can talk to the leader.
         * This relies on the node still accepting incoming connections from other controller nodes even if it isn't actually marked as "ready" yet.
 
 ### Controller only mode
@@ -94,7 +95,7 @@ The move to KRaft mode introduces some new requirements in terms of when a pod s
 This combined with the varying readiness checks means we need to change the way the KafkaRoller works:
 
 * The KafkaRoller should observe the BrokerState metric and any other metrics it needs directly, rather than inferring the state based on readiness.
-* If more than one controller pod has not become ready, KafkaRoller should try to role the controllers that aren't the current active controller first.
+* If more than one controller pod has not become ready, KafkaRoller should try to roll the controllers that aren't the current active controller first.
 * If a broker pod has not become ready, KafkaRoller should check the controller quorum is formed before rolling the pod.
 * If a combined pod has not become ready, KafkaRoller should check that all other combined pods have been scheduled 
 (i.e. not in pending state) before rolling the pod or waiting for it to become ready.
@@ -105,14 +106,14 @@ For example in combined mode during normal startup the following would happen:
 
 * All the pods are started at the same time
 * The controller processes in each pod form a quorum
-* The broker processes start up and start talking to the controller quorum so the controller unfences them and they move to STARTED and are marked as ready
+* The broker processes start up and start talking to the controller quorum so the controller unfences them and they move to RUNNING and are marked as ready
 * All pods are now ready
 
 However, if the pods are started initially with affinity constraints so they are all in pending, then the constraint is removed, the following would happen:
 
 * The first pod is scheduled
 * The controller process starts up but cannot form a quorum because the other controllers are missing
-* The broker process starts up but since there is no controller quorum it does not move to STARTED, it stays in STARTING. This means the pod is not marked as ready
+* The broker process starts up but since there is no controller quorum it does not move to RUNNING, it stays in STARTING. This means the pod is not marked as ready
 * Because this pod doesn't become ready the other pods aren't scheduled, so the pod just sits in crash loop backoff
 
 ## Proposed order of tasks to complete this proposal
