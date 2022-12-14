@@ -1,6 +1,6 @@
 # StrimziPodSets graduation
 
-This proposal proposes updated schedule for StrimziPodSet gradutation.
+This proposal proposes updated schedule for StrimziPodSet graduation.
 
 ## Current situation
 
