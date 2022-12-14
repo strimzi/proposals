@@ -17,7 +17,7 @@ There are no known issues, bugs or missing features on Strimzi side
 ## Proposal
 
 This proposal suggests an updated graduation schedule:
-* Strimzi 0.33 and 0.34 will be released with the `USeStrimziPodSet` feature gate still in beta
+* Strimzi 0.33 and 0.34 will be released with the `UseStrimziPodSet` feature gate still in beta
 * Unless some major issues are found during Strimzi 0.33 life-cycle (i.e. between the release of Strimzi 0.33 and 0.34), the feature gate will move to GA right after the 0.34.0 release and the code paths related to StatefulSets will be removed.
   The only StatefulSet related functionality which will remain will be related to upgrading from StatefulSets to StrimziPodSets.
   This will be the deletion of the old resources (StatefulSets, shared ConfigMaps etc).
@@ -30,8 +30,8 @@ Thanks to this timeline:
 Assuming this proposal is approved, the 0.33 release can be used to announce this and encourage users to test the StrimziPodSets.
 If any major bugs are found before the 0.34 release and before the StatefulSets code is removed, the timeline can be still reconsidered.
 
-Moving forward with StrimziPodSets will make it easier for to continu the development of the additional features built on top of StrimziPodSets.
-This includes KRaft support, Node pools or in the long term strecth clusters.
+Moving forward with StrimziPodSets will make it easier to continue the development of the additional features built on top of StrimziPodSets.
+This includes KRaft support, Node pools or in the long term stretch clusters.
 It will also simplify testing.
 
 ## Rejected alternatives
@@ -40,4 +40,4 @@ It will also simplify testing.
 
 One considered alternative was to move the feature gate to GA already as part of 0.34 release.
 However, this would either mean that we would remove the code _last minute_ before the release.
-Or we would remove it right after the 0.33 release whihc would mean that if any major issue is found later and we decide to change the schedule, it will be complicated to revert the changes.
+Or we would remove it right after the 0.33 release which would mean that if any major issue is found later and we decide to change the schedule, it will be complicated to revert the changes.
