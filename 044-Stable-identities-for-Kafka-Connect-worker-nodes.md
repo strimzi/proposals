@@ -1,12 +1,12 @@
 # Stable identities for Kafka Connect worker nodes
 
 This proposal covers improvements to how we deploy and manage Kafka Connect.
-It also covers Kafka Mirror Maker 2 which is based on top of Kafka Connect.
-Everything in this proposal applies implicitly also to Kafka Mirror Maker 2.
+It also covers Kafka MirrorMaker 2 which is based on top of Kafka Connect.
+Everything in this proposal applies implicitly also to Kafka MirrorMaker 2.
 
 ## Current situation
 
-Kafka Connect cluster can consist of one or more worker nodes.
+A Kafka Connect cluster consists of one or more worker nodes.
 The Kafka Connect worker nodes run as Kubernetes Pods.
 Strimzi is using the Kubernetes Deployment to run the Kafka Connect workers.
 The number of `replicas` in the Kubernetes Deployment corresponds to the number of desired Kafka Connect worker nodes.
@@ -17,7 +17,7 @@ The individual Kafka Connect worker nodes which are members of the same cluster 
 When configuring the worker nodes, each is assigned an advertised address and port which they use for the communication.
 The advertised address forms the identity of the worker node.
 When Kubernetes creates the Pods, they have a randomized name and are assigned an unique IP address.
-This IP address is used as the advertised address and gives the worker node its identity.. 
+This IP address is used as the advertised address and gives the worker node its identity.
 
 When connectors and their tasks are deployed, they are scheduled to the individual worker nodes based on their identity.
 Each connector task is running on a specific worker node with given identity (IP address).
@@ -42,7 +42,7 @@ _However, the new Pod still gets a new IP address so the identity of the Pod cha
 
 This means that the worker nodes where the connector tasks are scheduled all disappear during the rolling update and the tasks need to be rescheduled.
 It will take some time (by default 5 minutes) for the cluster to detect that the old nodes left the cluster and reschedule the tasks on other nodes.
-Until this happens, it is possible that the tasks will be scheduled to one of the pods which was deleted and are thus not running.
+Until this happens, it is possible that the tasks will be scheduled to one of the pods which was deleted and is thus not running.
 
 ## Proposal
 
@@ -55,7 +55,7 @@ The pods will be named `<cluster-name>-connect-<index>` where the `<cluster-name
 For example, the pod names for Kafka Connect cluster created by `KafkaConnect` custom resource named `my-connect` with 3 replicas will be `my-connect-connect-0`, `my-connect-connect-1`, and `my-connect-connect-2`
 This pattern follows the way the pods are currently named as well.
 
-In addition to the StrimziPodSet resource used to manage the Pods, Strimzi will create a headless Kubernetes Service to give these pods a stable DNS names.
+In addition to the StrimziPodSet resource used to manage the Pods, Strimzi will create a headless Kubernetes Service to give these pods stable DNS names.
 The headless service will be named `<cluster-name>-connect`.
 For example `my-connect-connect`.
 The existing `ClusterIP` type service names `<cluster-name>-connect-api` will remain unchanged and will round-robin across all the Connect worker pods.
@@ -81,8 +81,8 @@ The CO will:
 ### Scaling up or down
 
 When scaling-up, Strimzi will start new Connect pods with the lowest available (unused) index numbers.
-When scaling-down, the Pods will removed starting with the highest used index numbers.
-Since all Pods will share the same configuration, there is no need to support things such as scaling own some pods from the middle or beginning of the sequence.
+When scaling-down, the Pods will be removed starting with the highest used index numbers.
+Since all Pods will share the same configuration, there is no need to support things such as scaling down pods from the middle or beginning of the sequence.
 
 ### Feature Gate
 
@@ -90,7 +90,7 @@ The stable identities for the Kafka Connect worker nodes will be introduced grad
 There will be only one Feature Gate for both Kafka Connect and Kafka Mirror Maker 2.
 The new Feature gate will be named `StableConnectIdentities`.
 To enable this feature gate, the `UseStrimziPodSets` feature gate would need to be enabled as well.
-The following table shows the expected graduation of the feature gate:
+The following table shows the expected graduation of the `StableConnectIdentities` feature gate:
 
 | Phase | Strimzi versions       | Default state                                          |
 |:------|:-----------------------|:-------------------------------------------------------|
@@ -165,12 +165,12 @@ Any other operands (including Kafka Mirror Maker 1) or other Strimzi projects ar
 ### Using StatefulSets instead of StrimziPodSets
 
 I considered using StatefulSets instead of StrimziPodSets.
-Some of the issues we had with StatefulSets when using the for the Kafka brokers do not apply to Kafka Connect today.
+Some of the issues we had with StatefulSets when using them for the Kafka brokers do not apply to Kafka Connect today.
 For example, we do not need asymmetric configuration of the worker nodes since Kafka Connect doesn't support advanced scheduling and you thus cannot ensure that some tasks get scheduled only on some _special_ nodes.
 
 However, this idea was ultimately rejected as StrimziPodSets might give us more options in the future.
 For example:
 * If we in the future support stretched Kafka clusters across multiple Kubernetes clusters, it might make sense to support stretched clusters also for Connect.
-  While you cannot easily schedule the tasks across the Pods running on the different Kubernetes clusters, having the workers running in all of will provide improved availability since the tasks can be more easily rescheduled if one of the Kubernetes clusters goes offline.
+  While you cannot easily schedule the tasks across the Pods running on the different Kubernetes clusters, having the workers running in all of the clusters will provide improved availability since the tasks can be more easily rescheduled if one of the Kubernetes clusters goes offline.
 * It is also possible that in the future Kafka Connect will improve support for scheduling the connector tasks on particular nodes.
   Using StrimziPodSets would make it easier to leverage such feature.
