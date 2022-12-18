@@ -51,7 +51,7 @@ Since the worker identity is based on the Pod address, it means that we need to 
 
 To achieve that, we should migrate the Kafka Connect clusters from Kubernetes Deployment resource to the StrimziPodSet resources.
 The Pods created by the StrimziPodSet will use stable pod names instead of the randomized names used for the Pods managed by Kubernetes Deployments.
-The pods will be named `<cluster-name>-connect-<index>` where the `<cluster-name>` is the name of the custom resource and the `<index>` will be a sequential index number starting with 0.
+The pods will be named `<cluster-name>-connect-<index>` where the `<cluster-name>` is the name of the `KafkaConnect` or `KafkaMirrorMaker2` custom resource and the `<index>` will be a sequential index number starting with 0.
 For example, the pod names for Kafka Connect cluster created by `KafkaConnect` custom resource named `my-connect` with 3 replicas will be `my-connect-connect-0`, `my-connect-connect-1`, and `my-connect-connect-2`
 This pattern follows the way the pods are currently named as well.
 
