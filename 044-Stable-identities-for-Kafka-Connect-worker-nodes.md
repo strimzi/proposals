@@ -122,7 +122,7 @@ The migration will happen automatically and will use the following steps:
     5) ... repeat steps 2-4 until the StrimziPodSet has the desired number of Pods and the Deployment has 0 replicas
     6) Delete the Deployment
 
-Doing the things in the right oder is important because otherwise it might happen that there will be no space in the cluster to start the new Pod and the migration might get stuck.
+Doing the things in the right order is important because otherwise it might happen that there will be no space in the cluster to start the new Pod and the migration might get stuck.
 
 ### Downgrades
 
@@ -146,7 +146,7 @@ The migration will happen automatically and will use the following steps:
     5) ... repeat steps 2-4 until the Deployment has the desired number of Pods and the StrimziPodSet has no Pods
     6) Delete the StrimziPodSet
 
-Doing the things in the right oder is important because otherwise it might happen that there will be no space in the cluster to start the new Pod and the migration might get stuck.
+Doing the things in the right order is important because otherwise it might happen that there will be no space in the cluster to start the new Pod and the migration might get stuck.
 
 #### Downgrades to Strimzi versions before the `StableConnectIdentities` feature gate
 
