@@ -198,14 +198,14 @@ The limits we want are:
 2. throttle if the [availableRatio](#volume) is less-than-or-equal-to some threshold for any volume
 
 For example, to configure a limit when availableBytes is below 1GB:
-- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow=1000000000`
+- `client.quota.callback.static.storage.per.volume.limit.min.available.bytes=1000000000`
 
 Another example, to configure a limit when availableRatio is below 0.01 (1%):
-- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow=0.01`
+- `client.quota.callback.static.storage.per.volume.limit.min.available.ratio=0.01`
 
 Defining more than one limit is **invalid**, for example the below is disallowed:
-- `client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow=0.05`
-- `client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow=5000000000`
+- `client.quota.callback.static.storage.per.volume.limit.min.available.ratio=0.05`
+- `client.quota.callback.static.storage.per.volume.limit.min.available.bytes=5000000000`
 
 #### Throttle Factor Fallback
 
@@ -236,7 +236,7 @@ using a previously calculated valid throttle factor for some duration, rather th
 throttle factor fallback after a single failure.
 
 So we will enable the user to specify how long a valid throttle factor can be applied for with
-`client.quota.callback.static.throttle.factor.validity-duration`. Where the value is an ISO8601 duration.
+`client.quota.callback.static.throttle.factor.validity.duration`. Where the value is an ISO8601 duration.
 Default value "PT5M", 5 minutes.
 
 For example if validity duration is 2 minutes then we could expect this behaviour:
@@ -256,15 +256,15 @@ For example if validity duration is 2 minutes then we could expect this behaviou
 | client.quota.callback.static.kafka.admin.bootstrap.servers     | string | null    |                   | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
 | client.quota.callback.static.kafka.admin.*                     | ?      |         |                   | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
 | client.quota.callback.static.throttle.factor.fallback          | double | 1.0     | (0.0, 1.0)        | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                                   |
-| client.quota.callback.static.throttle.factor.validity-duration | string | PT5M    | ISO8601 durations | sets the [Throttle Factor Validity Duration](#throttle-factor-validity-duration)                                                 |
+| client.quota.callback.static.throttle.factor.validity.duration | string | PT5M    | ISO8601 durations | sets the [Throttle Factor Validity Duration](#throttle-factor-validity-duration)                                                 |
 
 ### Limit Configuration
 When using cluster sourced volumes the user must configure a single [limit type](#limit-type-configuration), all are incompatible with `local` volume source
 
 |                                                                         | type   | default | valid values |                                                         |
 |-------------------------------------------------------------------------|--------|---------|--------------|---------------------------------------------------------|
-| client.quota.callback.static.storage.perVolumeLimit.availableBytesBelow | long   | null    | (0, ...)     | stop message production if availableBytes <= this value |
-| client.quota.callback.static.storage.perVolumeLimit.availableRatioBelow | double | null    | (0.0, 1.0)   | stop message production if availableRatio <= this value |
+| client.quota.callback.static.storage.per.volume.limit.min.available.bytes | long   | null    | (0, ...)     | stop message production if availableBytes <= this value |
+| client.quota.callback.static.storage.per.volume.limit.min.available.ratio | double | null    | (0.0, 1.0)   | stop message production if availableRatio <= this value |
 
 ## Metrics
 
