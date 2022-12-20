@@ -76,11 +76,11 @@ of all brokers in the cluster.
    2. throttle if available ratio less than threshold on any volume
 4. Introduce extension points in the quotas-plugin to support pluggable sources of quotas and throttle factors
 5. Introduce a [throttle factor fallback](#throttle-factor-fallback) and [throttle factor validity duration](#throttle-factor-validity-duration) in case we cannot retrieve the cluster state
-6. strimzi-kafka-operator becomes responsible for configuring the admin client connection properties of the plugin
+6. Strimzi Cluster Operator becomes responsible for configuring the admin client connection properties of the plugin
 
-So every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes.
+Every broker will make its own independent throttling decision based on knowledge of the volumes on all active broker nodes.
 The brokers should all operate on a similar view of the cluster state and make a deterministic decision. If a broker detects that
-any volume in the cluster is becoming too full it will throttle production of messages. The kafka quota API isn't rich 
+any volume in the cluster is becoming too full it will throttle production of messages. The Kafka quota API isn't rich 
 enough to do anything smarter about only throttling writes to the brokers running out of space, so we fence the whole cluster.
 
 ### Caveat - KRaft Disk Usage
@@ -89,7 +89,8 @@ This proposal will only help prevent running out-of-disk caused by topic data. I
 due to writes to the upcoming KRaft metadata log.
 
 Currently, when using separate controller-only nodes*, those nodes are not described by `Admin#describeCluster` and we cannot use 
-`Admin#describeLogDirs` against the controllers. So the disk usage of the volume could be invisible.
+`Admin#describeLogDirs` against the controllers. So the disk usage of the volume could be invisible. We should not
+enable this plugin on a controller-only node.
 
 When using controller+broker mode*, by default the metadata log is kept in the first `log.dirs` directory but could be 
 configured to a custom location, potentially on its own volume. If it was put on a separate volume it would not be
@@ -98,11 +99,12 @@ described in the describeLogDirs response, nor contribute to the volume usage of
 So in some cases with controller+broker mode it would afford some protection, as growth of the metadata log dir could
 cause throttling of topic writes (because they are on the same volume as another log dir).
 
-Even if we had reliable insight into the disk usage (by extending the admin apis for example), of the volume the metadata dir 
+Even if we had reliable insight into the disk usage (by extending the Admin APIs for example), of the volume the metadata dir 
 resides on, we cannot take effective measures from the quota plugin. Potentially you could use an Authorization
 plugin instead and block metadata-generating operations.
 
-*tested with kafka 3.3.1
+*tested with Kafka 3.3.1
+
 ### High level changes
 
 To better support alternative sources for managing quotas and how they interact with volume usage this proposal
@@ -142,7 +144,7 @@ The storage quotas operate on observations about a **Volume** with these charact
 The quota plugin operates on observations about Volumes, the **Volume Source** determines where
 we obtain those observations. Values are:
 1. `local`: we inspect this brokers local log dirs to discover the state of their Volume
-2. `cluster`: we ask kafka for the state of all log dirs for all currently active nodes
+2. `cluster`: we ask Kafka for the state of all log dirs for all currently active nodes
 
 the source will be configurable with a property like:
 
@@ -155,7 +157,7 @@ Local will be the default if the property isn't provided but is deprecated from 
 With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+log+dirs+total+and+usable+space+via+Kafka+API) in
 kafka 3.3 we can now obtain the total and usable (available) bytes per log dir as part of the DescribeLogDirsResponse.
 
-Note: if a single disk contains multiple log dirs, it will be described multiple times through the kafka APIs. This
+Note: if a single disk contains multiple log dirs, it will be described multiple times through the Kafka APIs. This
 repetition is acceptable as our new limit types will be applied per-volume, so redundant volume descriptions don't
 impact the outcome.
 
@@ -169,14 +171,14 @@ with the cluster sourced volumes and fail configuration of the plugin.
 
 ##### Admin Client Configuration
 
-To obtain log dir descriptions through the admin api we need to construct an admin client.
+To obtain log dir descriptions through the Admin API we need to construct an admin client.
 
 If using cluster sourced volumes we require the admin client bootstrap to be configured using `client.quota.callback.static.kafka.admin.bootstrap.servers`
 
 Additional admin client configuration can be passed using the form `client.quota.callback.static.kafka.admin.${configuration}`.
 For example: `client.quota.callback.static.kafka.admin.security.protocol=SSL`
 
-The strimzi-kafka-operator would be responsible for configuring the admin client to connect to the
+The Strimzi Cluster Operator would be responsible for configuring the admin client to connect to the
 replication listener of the broker.
 
 ##### Limit Type Configuration
@@ -280,15 +282,15 @@ When using cluster sourced volumes the user must configure a single [limit type]
 
 Using an [authorizer plugin](https://kafka.apache.org/33/javadoc/org/apache/kafka/server/authorizer/Authorizer.html) 
 to deny operations is another alternative. It would allow finer-grained control but would potentially be surprising 
-to kafka clients to see unexpected authorization denials. Also, the API would need careful attention to performance 
+to Kafka clients to see unexpected authorization denials. Also, the API would need careful attention to performance 
 as it's called per-operation. 
 
 Enabling it to chain with another user-configured authorizer is another complexity. The plugin would have to be made 
 aware of the delegate class, instantiate it and drive its lifecycle.
 
-### Using a kafka topic to distribute metrics. 
+### Using a Kafka topic to distribute metrics. 
 
-See the original proposal PR [#51](https://github.com/strimzi/proposals/pull/51). We considered using a kafka topic to
+See the original proposal PR [#51](https://github.com/strimzi/proposals/pull/51). We considered using a Kafka topic to
 push volume usage metrics out to all the brokers. KIP-827 made this redundant.
 
 ### Using JMX metrics
@@ -318,14 +320,16 @@ question. KIP-73 bandwidth limits are only applied to a specific set of `partiti
 require the ability for the plugin to resolve the required pairs.
 
 ## Affected projects
+
 * strimzi/kafka-quota-plugin
 * strimzi/kafka-cluster-operator
 
 ## Compatibility
-Backwards compatibility would be maintained while kafka 3.2 is a supported version. We want to support users of older 
-kafka brokers as the local volume source can protect users in some scenarios (homogeneous disks with well-balanced data).
 
-Attempting to use a `cluster` volume source with a kafka older than 3.3.0 will prevent the broker from starting up
+Backwards compatibility would be maintained while Kafka 3.2 is a supported version. We want to support users of older 
+Kafka brokers as the local volume source can protect users in some scenarios (homogeneous disks with well-balanced data).
+
+Attempting to use a `cluster` volume source with a Kafka older than 3.3.0 will prevent the broker from starting up
 and emit some sane log indicating the broker version is incompatible.
 
 Users would have to opt in to this new volume source by setting `client.quota.callback.static.storage.volume.source`
