@@ -189,7 +189,13 @@ So we propose that the existing limiting method should be incompatible with clus
 
 Instead, we propose introducing new limit types applied on a per-volume basis. Meaning that there is a single value
 for each limit which we test against each volume. i.e. we do not support limiting based on a specific volume. When
-that limit is exceeded we effectively stop messages being produced.
+that limit is exceeded we effectively stop messages being produced (by calculating a Throttle Factor of 0.0).
+
+We will not support the pre-existing concept of a **soft limit**. In the existing code the soft limit is where
+you begin slowing down the rate of message production. As you approach the hard limit the production quota is reduced
+linearly. Then at the hard limit message production is stopped. We decided this additional signal that something is
+failing is not a core feature of this plugin. We expect users to have their own disk usage monitoring to prompt
+intervention before this plugin shuts down all message production.
 
 If the plugin is configured to use a cluster volume source, we also require one limit to be configured.
 
@@ -241,13 +247,13 @@ So we will enable the user to specify how long a valid throttle factor can be ap
 `client.quota.callback.static.throttle.factor.validity.duration`. Where the value is an ISO8601 duration.
 Default value "PT5M", 5 minutes.
 
-For example if validity duration is 2 minutes then we could expect this behaviour:
+For example if validity duration is 2 minutes and throttle factor fallback is 0.0, then we could expect this behaviour:
 
-1. throttle factor recalculation at minute 0 succeeded, calculated throttle factor 0.6 and use it
-2. throttle factor recalculation at minute 1 failed, continue using throttle factor 0.6
-3. throttle factor recalculation at minute 2 failed, continue using throttle factor 0.6
-4. throttle factor recalculation at minute 3 failed, use throttle factor fallback of 1.0
-5. throttle factor recalculation at minute 4 succeeded, calculated throttle factor 0.6 and use it
+1. throttle factor recalculation at minute 0 succeeded, calculated throttle factor 1.0 and use it
+2. throttle factor recalculation at minute 1 failed, continue using throttle factor 1.0
+3. throttle factor recalculation at minute 2 failed, continue using throttle factor 1.0
+4. throttle factor recalculation at minute 3 failed, use throttle factor fallback of 0.0
+5. throttle factor recalculation at minute 4 succeeded, calculated throttle factor 1.0 and use it
 
 ## Configuration Summary
 
