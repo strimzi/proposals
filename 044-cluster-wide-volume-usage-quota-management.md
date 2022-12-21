@@ -2,8 +2,6 @@
 
 Extend the static quota mechanism to throttle message production in a broker if any active broker in the cluster is running out of disk.
 
-Deprecate the current implementation that considers only aggregate local volume usage.
-
 - [Current situation](#current-situation)
 - [Motivation](#motivation)
 - [Proposal](#proposal)
@@ -140,7 +138,7 @@ The storage quotas operate on observations about a **Volume** with these charact
 #### Cluster Volume Source
 
 With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+log+dirs+total+and+usable+space+via+Kafka+API) in
-kafka 3.3 we can now obtain the total and usable (available) bytes per log dir as part of the DescribeLogDirsResponse.
+Kafka 3.3 we can now obtain the total and usable (available) bytes per log dir as part of the DescribeLogDirsResponse.
 
 Note: if a single disk contains multiple log dirs, it will be described multiple times through the Kafka APIs. This
 repetition is acceptable as our new limit types will be applied per-volume, so redundant volume descriptions don't
