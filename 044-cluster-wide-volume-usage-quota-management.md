@@ -10,7 +10,6 @@ Deprecate the current implementation that considers only aggregate local volume 
   - [Caveat - Kraft Disk Usage](#caveat---kraft-disk-usage)
   - [High Level Changes](#high-level-changes)
     - [Volume](#volume)
-    - [Volume Source](#volume-source)
     - [Quota Source](#quota-source)
     - [Throttle Factor](#throttle-factor)
     - [Throttle Factor Source](#throttle-factor-source)
@@ -68,9 +67,8 @@ in unpredictable ways (corrupted segment logs) which could impede the interventi
 
 ## Proposal
 
-1. Extend the kafka-quotas-plugin so that we can choose to observe the disk usage 
-of all brokers in the cluster.
-2. [Deprecate](#compatibility) the existing local disk observations.
+1. Extend the kafka-quotas-plugin so that we observe the disk usage of all brokers in the cluster.
+2. [Remove](#compatibility) the existing local disk observations, configuration and metrics.
 3. Add new [limit types](#limit-type-configuration), so that it is explicit what is being limited and better support heterogeneous disks
    1. throttle if available bytes less than threshold on any volume
    2. throttle if available ratio less than threshold on any volume
@@ -139,19 +137,6 @@ The storage quotas operate on observations about a **Volume** with these charact
 5. `usedBytes` (totalBytes - availableBytes)
 6. `availableRatio` (availableBytes/totalBytes)
 
-#### Volume Source
-
-The quota plugin operates on observations about Volumes, the **Volume Source** determines where
-we obtain those observations. Values are:
-1. `local`: we inspect this brokers local log dirs to discover the state of their Volume
-2. `cluster`: we ask Kafka for the state of all log dirs for all currently active nodes
-
-the source will be configurable with a property like:
-
-1. `client.quota.callback.static.storage.volume.source=cluster`
-
-Local will be the default if the property isn't provided but is deprecated from the beginning.
-
 #### Cluster Volume Source
 
 With the introduction of [KIP-827](https://cwiki.apache.org/confluence/display/KAFKA/KIP-827%3A+Expose+log+dirs+total+and+usable+space+via+Kafka+API) in
@@ -162,18 +147,15 @@ repetition is acceptable as our new limit types will be applied per-volume, so r
 impact the outcome.
 
 The Cluster Volume Source will use this API to discover volume information for the whole cluster. We intend to continue
-using `client.quota.callback.static.storage.check-interval` to configure the millisecond interval between polling the
-cluster state (default is 0 - disabled). The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
+using `client.quota.callback.static.storage.check.interval` to configure the interval between polling the
+cluster state (default is 1 minute). The performance cost of this API was [discussed](https://lists.apache.org/thread/11zyqqnyg1wgf4jdo6pvn7hn51g3vf8r) 
 upstream as part of the KIP, which should be low cost.
-
-Setting `client.quota.callback.static.storage.hard` or `client.quota.callback.static.storage.soft` would be incompatible
-with the cluster sourced volumes and fail configuration of the plugin.
 
 ##### Admin Client Configuration
 
 To obtain log dir descriptions through the Admin API we need to construct an admin client.
 
-If using cluster sourced volumes we require the admin client bootstrap to be configured using `client.quota.callback.static.kafka.admin.bootstrap.servers`
+We require the admin client bootstrap to be configured using `client.quota.callback.static.kafka.admin.bootstrap.servers`
 
 Additional admin client configuration can be passed using the form `client.quota.callback.static.kafka.admin.${configuration}`.
 For example: `client.quota.callback.static.kafka.admin.security.protocol=SSL`
@@ -183,9 +165,9 @@ replication listener of the broker.
 
 ##### Limit Type Configuration
 
-When operating with cluster sourced volume data the existing limit types applied to the aggregate
-used bytes of all volumes would be meaningless. Nodes enter and exit the active set as part of normal operation.
-So we propose that the existing limiting method should be incompatible with cluster sourced volumes.
+The existing limit types applied to the aggregate used bytes of all volumes will be meaningless now that we are
+working with a description of all volumes in the cluster. Nodes enter and exit the active set as part of normal operation
+and so the aggregate used bytes will vary.
 
 Instead, we propose introducing new limit types applied on a per-volume basis. Meaning that there is a single value
 for each limit which we test against each volume. i.e. we do not support limiting based on a specific volume. When
@@ -197,7 +179,7 @@ linearly. Then at the hard limit message production is stopped. We decided this 
 failing is not a core feature of this plugin. We expect users to have their own disk usage monitoring to prompt
 intervention before this plugin shuts down all message production.
 
-If the plugin is configured to use a cluster volume source, we also require one limit to be configured.
+We require one limit to be configured.
 
 Defining multiple limit types would be an invalid state.
 
@@ -257,20 +239,19 @@ For example if validity duration is 2 minutes and throttle factor fallback is 0.
 
 ## Configuration Summary
 
-|                                                                | type   | default | valid values      |                                                                                                                                  |
-|----------------------------------------------------------------|--------|---------|-------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| client.quota.callback.static.storage.volume.source             | string | local   | local, cluster    | set to cluster to obtain volume descriptions from cluster, see [VolumeSource](#volume-source)                                    |
-| client.quota.callback.static.storage.check-interval            | long   | 0       | (0, ...)          | 0 means disabled, otherwise this is the milliseconds between polling to describe the cluster (this is an existing configuration) |
-| client.quota.callback.static.kafka.admin.bootstrap.servers     | string | null    |                   | required if volume source is cluster, bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data |
-| client.quota.callback.static.kafka.admin.*                     | ?      |         |                   | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration)                    |
-| client.quota.callback.static.throttle.factor.fallback          | double | 1.0     | (0.0, 1.0)        | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                                   |
-| client.quota.callback.static.throttle.factor.validity.duration | string | PT5M    | ISO8601 durations | sets the [Throttle Factor Validity Duration](#throttle-factor-validity-duration)                                                 |
+|                                                                | type   | default | valid values     |                                                                                                               |
+|----------------------------------------------------------------|--------|---------|------------------|---------------------------------------------------------------------------------------------------------------|
+| client.quota.callback.static.storage.check.interval            | string | PT1M    | ISO8601 duration | the interval between checking the storage usage an recalculating the quota, set to PT0S to disable the plugin |
+| client.quota.callback.static.kafka.admin.bootstrap.servers     | string |         |                  | required bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data           |
+| client.quota.callback.static.kafka.admin.*                     | ?      |         |                  | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration) |
+| client.quota.callback.static.throttle.factor.fallback          | double | 1.0     | (0.0, 1.0)       | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                |
+| client.quota.callback.static.throttle.factor.validity.duration | string | PT5M    | ISO8601 duration | sets the [Throttle Factor Validity Duration](#throttle-factor-validity-duration)                              |
 
 ### Limit Configuration
-When using cluster sourced volumes the user must configure a single [limit type](#limit-type-configuration), all are incompatible with `local` volume source
+The user must configure a single [limit type](#limit-type-configuration)
 
-|                                                                         | type   | default | valid values |                                                         |
-|-------------------------------------------------------------------------|--------|---------|--------------|---------------------------------------------------------|
+|                                                                           | type   | default | valid values |                                                         |
+|---------------------------------------------------------------------------|--------|---------|--------------|---------------------------------------------------------|
 | client.quota.callback.static.storage.per.volume.limit.min.available.bytes | long   | null    | (0, ...)     | stop message production if availableBytes <= this value |
 | client.quota.callback.static.storage.per.volume.limit.min.available.ratio | double | null    | (0.0, 1.0)   | stop message production if availableRatio <= this value |
 
@@ -332,21 +313,18 @@ require the ability for the plugin to resolve the required pairs.
 
 ## Compatibility
 
-Backwards compatibility would be maintained while Kafka 3.2 is a supported version. We want to support users of older 
-Kafka brokers as the local volume source can protect users in some scenarios (homogeneous disks with well-balanced data).
+We will break backwards compatibility with Kafka brokers older than 3.3.0, likely Strimzi will have dropped support for
+3.2.x before this proposal is implemented, so we will not support brokers without KIP-827 implemented.
 
-Attempting to use a `cluster` volume source with a Kafka older than 3.3.0 will prevent the broker from starting up
-and emit some sane log indicating the broker version is incompatible.
+We will remove the existing features which use local volume information, as well as existing soft/hard limits that are
+applied to the aggregate used bytes across all volumes.
 
-Users would have to opt in to this new volume source by setting `client.quota.callback.static.storage.volume.source`
-to `cluster`.
-
-Configuration preserved for backwards compatability:
+We will remove these properties:
 - `client.quota.callback.static.storage.hard`
 - `client.quota.callback.static.storage.soft`
-Controlling the number of aggregate used bytes **above** which throttling is applied. Compatible only with local volume source.
+- `client.quota.callback.static.storage.check-interval`
 
-The existing metrics would also be deprecated but continue to be emitted if the plugin is using locally sourced volumes:
+We will remove these metrics:
 - `io.strimzi.kafka.quotas:type=StorageChecker,name=TotalStorageUsedBytes`
 - `io.strimzi.kafka.quotas:type=StorageChecker,name=SoftLimitBytes`
 - `io.strimzi.kafka.quotas:type=StorageChecker,name=HardLimitBytes`
