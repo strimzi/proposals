@@ -13,7 +13,7 @@ These are the current probes used in Strimzi when ZooKeeper is present:
 | ZooKeeper | "imok" from 127.0.0.1:12181 | "imok" from 127.0.0.1:12181 |
 | ZK-based broker | if (ready) { listening on 9091 } else { have ZK session } | if (ready) { return true } |
 
-The "ready" check in both cases is based on the existence of the file `../kafka-ready` which is 
+The "ready" check in both the liveness and readiness checks for a Zk-based broker is based on the existence of the file `../kafka-ready` which is 
 created by the KafkaAgent when the broker state metric has value 3 (RUNNING).
 
 ## Background
@@ -21,12 +21,14 @@ created by the KafkaAgent when the broker state metric has value 3 (RUNNING).
 This section contains some background information about the ports and metrics we could use for checks.
 
 ### Ports
+
 In KRaft mode there are two different ports that the node could be listening on.
 If it has a controller process it should be listening on the port defined as the `controller.listener.names` which in Strimzi is hard-coded to 9090.
 If it has a broker process it should be listening on the replication port specified as the `inter.broker.listener.name` which is hard-coded to 9091.
 If the node is running as a combined mode, it should be listening on both ports
 
 ### BrokerState
+
 The expected [BrokerState](https://github.com/apache/kafka/blob/trunk/metadata/src/main/java/org/apache/kafka/metadata/BrokerState.java) transitions in the "happy path" during a normal broker lifecycle are:
 
 NOT_RUNNING (0) -> STARTING (1) -> RECOVERY (2) -> RUNNING (3) -> PENDING_CONTROLLED_SHUTDOWN (6) -> SHUTTING_DOWN (7)
@@ -88,12 +90,17 @@ means the nodes will be able to communicate even if they are currently marked as
 
 ### Impact on the KafkaRoller
 
-The existing KafkaRoller checks whether a pod is marked as ready to determine whether it needs to be rolled. 
+The existing KafkaRoller checks whether a pod is marked as ready to determine whether it needs to be rolled.
 This relies on the fact that currently the pod being ready implies that the BrokerState is >= RUNNING.
-Additionally, it does not take into account the state of other broker pods.
-The move to KRaft mode introduces some new requirements in terms of when a pod should or should not be rolled.
-This combined with the varying readiness checks means we need to change the way the KafkaRoller works:
+This means any change to the readiness probes also impacts the KafkaRoller.
+In future it would be better for the KafkaRoller to do its own checks, rather than relying on the readiness probes implementation.
 
+The details for how the KafkaRoller should work going forwards should be discussed in a separate proposal.
+This section describes some ideas for how the KafkaRoller should work in KRaft mode based on investigations done while writing this proposal.
+It can be used as a starting point for the KafkaRoller in KRaft mode proposal.
+The key requirement for this proposal to be fully implemented is that the KafkaRoller takes into account the state of controller pods when deciding whether to roll broker pods.
+
+Based on investigations as part of writing this proposal, in KRaft mode:
 * The KafkaRoller should observe the BrokerState metric and any other metrics it needs directly, rather than inferring the state based on readiness.
 * If more than one controller pod has not become ready, KafkaRoller should try to roll the controllers that aren't the current active controller first.
 * If a broker pod has not become ready, KafkaRoller should check the controller quorum is formed before rolling the pod.
@@ -131,10 +138,7 @@ This will be used for the broker only and combined readiness checks later and wi
 * Broker only pods are marked as both alive and ready if listening on port 9091.
 * Combined mode pods are marked as both alive and ready when the pod is listening on 9090 (no change from phase 1).
 
-### Phase 3 - KafkaRoller is updated
-* KafkaRoller is updated to take the existence of controller pods and status of controller quorum into account when deciding whether to roll pods.
-
-### Phase 4
+### Phase 3 - KafkaRoller is updated to take the existence of controller pods and status of controller quorum into account when deciding whether to roll pods
 * Broker only readiness probe fully implemented to match this proposal.
 * Combined mode readiness probe fully implemented to match this proposal.
 
