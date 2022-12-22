@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 44  | [StrimziPodSets graduation](./044-StrimziPodSets-graduation.md) |
 | 43  | [Deprecate and remove JMX Trans](./043-deprecate-and-remove-jmxtrans.md) |
 | 42  | [Remove AMQP 1.0 support from the Strimzi bridge](./042-remove-bridge-amqp-support.md) |
 | 41  | [User Operator: Configurable exclusion of labels](./041-user-operator-configurable-exclusion-of-labels.md) |
