@@ -63,14 +63,14 @@ The following statements describe the intent of the proposed probes:
 
 The proposed probes are:
 
-* Liveness: controller is listening on the port of the first address in `controller.listener.names` (9090)
-* Readiness: controller is listening on the port of the first address in `controller.listener.names` (9090)
+* Liveness: the Java process in the container is running
+* Readiness: controller is listening on the port 9090 which is configured in `controller.listener.names`
 
 ### Broker only mode
 
 The proposed probes are:
 
-* Liveness: broker is listening on the port of the address of `inter.broker.listener.name` (9091)
+* Liveness: broker is listening on the port 9091 which is configured in `inter.broker.listener.name`
 * Readiness: the BrokerState metric >=3 && != 127
 
 **Note:** This means the brokers will not become ready until a majority of the controllers 
@@ -81,12 +81,30 @@ This is similar to the current behaviour of brokers when ZooKeeper is not ready.
 
 The proposed probes are:
 
-* Liveness: node is listening on the port of the first address in `controller.listener.names` (9090)
+* Liveness: the Java process in the container is running
 * Readiness: the BrokerState metric >=3 && != 127
 
 **Note:** This means the nodes will not become ready until a majority of the other controllers are up and running.
 This is acceptable because the Strimzi headless services use "publishNotReadyAddresses", which 
 means the nodes will be able to communicate even if they are currently marked as not ready.
+
+### Implementation of the checks
+
+To check that the Java process is running we will execute a command in the container. The proposed command is:
+```shell
+for proc in $(ls -1 /proc/ | grep [0-9]); do echo "$(ls -lh /proc/$proc/exe 2>/dev/null || true)" | grep -q java; done
+```
+This is preferable over using a tool like `ps` (`ps aux | grep -v grep | grep java`) since it does not require a change to the tools added to the container image.
+In future this could be replaced with a call to an endpoint, since other proposals discuss adding endpoints for example to expose metrics.
+
+To check that the server is listening on a particular port we will use `netstat`, e.g.:
+```shell
+netstat -lnt | grep -Eq 'tcp6?[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+[^ ]+:9091.*LISTEN[[:space:]]*'
+```
+
+To check that the BrokerState metric has the correct value we will use the existing mechanism of checking for the existence of 
+a file on disk that is created by the KafkaAgent.
+In future this could be replaced with a call to an endpoint, since other proposals discuss adding an endpoint that returns this metric.
 
 ### Impact on the KafkaRoller
 
@@ -125,18 +143,20 @@ However, if the pods are started initially with affinity constraints so they are
 
 ## Proposed order of tasks to complete this proposal
 
-Since changes to the KafkaRoller and support for non-combined mode is needed to fully implement this proposal, the following phases of development are proposed:
+The KRaft liveness and readiness probes can be implemented in 3 different phases.
+Phases 1 and 2 can be implemented solely based on this proposal.
+Phase 3 can be implemented only after additional improvements of the `KafkaRoller` which will be covered by a separate proposal.
 
 ### Phase 1 - Strimzi only supports combined mode
-* Combined mode pods are marked as both alive and ready when the pod is listening on 9090. 
-This is an improvement on the current state where the pod is marked as alive and ready as soon as it starts up.
+* Combined mode pods are marked as both alive and ready when there is a Java process running. 
+This is an improvement on the current state where the pod is marked as alive and ready as soon as the container starts up, regardless of whether the Java process started.
 * Update the KafkaAgent to check for a broker state of >= 3 && != 127.
 This will be used for the broker only and combined readiness checks later and will improve the existing ZooKeeper based broker check.
 
 ### Phase 2 - Strimzi adds support for broker only and controller only modes
 * Controller only pod liveness and readiness checks are fully implemented to match this proposal.
 * Broker only pods are marked as both alive and ready if listening on port 9091.
-* Combined mode pods are marked as both alive and ready when the pod is listening on 9090 (no change from phase 1).
+* Combined mode pods are marked as both alive and ready when there is a Java process running (no change from phase 1).
 
 ### Phase 3 - KafkaRoller is updated to take the existence of controller pods and status of controller quorum into account when deciding whether to roll pods
 * Broker only readiness probe fully implemented to match this proposal.
