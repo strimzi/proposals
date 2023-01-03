@@ -1,4 +1,4 @@
-# Analyse broker metrics before rolling kafka
+# Analyse broker metrics before rolling Kafka
 
 This proposal describes a solution for KafkaRoller's shortcoming with brokers in log recovery.
 
