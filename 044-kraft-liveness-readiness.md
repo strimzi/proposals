@@ -13,7 +13,7 @@ These are the current probes used in Strimzi when ZooKeeper is present:
 | ZooKeeper | "imok" from 127.0.0.1:12181 | "imok" from 127.0.0.1:12181 |
 | ZK-based broker | if (ready) { listening on 9091 } else { have ZK session } | if (ready) { return true } |
 
-The "ready" check in both the liveness and readiness checks for a Zk-based broker is based on the existence of the file `../kafka-ready` which is 
+The "ready" check in both the liveness and readiness checks for a ZK-based broker is based on the existence of the file `../kafka-ready` which is 
 created by the KafkaAgent when the broker state metric has value 3 (RUNNING).
 
 ## Background
@@ -95,7 +95,7 @@ To check that the Java process is running we will execute a command in the conta
 for proc in $(ls -1 /proc/ | grep [0-9]); do echo "$(ls -lh /proc/$proc/exe 2>/dev/null || true)" | grep -q java; done
 ```
 This is preferable over using a tool like `ps` (`ps aux | grep -v grep | grep java`) since it does not require a change to the tools added to the container image.
-In future this could be replaced with a call to an endpoint, since other proposals discuss adding endpoints for example to expose metrics.
+In future this could be replaced with a call to an endpoint, since other proposals discuss adding endpoints, for example, to expose metrics.
 
 To check that the server is listening on a particular port we will use `netstat`, e.g.:
 ```shell
@@ -134,12 +134,14 @@ For example in combined mode during normal startup the following would happen:
 * The broker processes start up and start talking to the controller quorum so the controller unfences them and they move to RUNNING and are marked as ready
 * All pods are now ready
 
-However, if the pods are started initially with affinity constraints so they are all in pending, then the constraint is removed, the following would happen:
+However, if the pods are started with affinity constraints they are all put into a pending state by Kubernetes, since they cannot be scheduled. Then, if the constraint is removed or new nodes added that meet the requirements, the following happens:
 
 * The first pod is scheduled
 * The controller process starts up but cannot form a quorum because the other controllers are missing
 * The broker process starts up but since there is no controller quorum it does not move to RUNNING, it stays in STARTING. This means the pod is not marked as ready
-* Because this pod doesn't become ready the other pods aren't scheduled, so the pod just sits in crash loop backoff
+* Because this pod doesn't become ready, the KafkaRoller will not try to schedule the other pods, even though there are nodes available for them to be scheduled on
+
+The result is that even though the cluster should be able to come up, one pod is in crash loop backoff and the other pods remain as pending, so the cluster never starts.
 
 ## Proposed order of tasks to complete this proposal
 
@@ -148,17 +150,20 @@ Phases 1 and 2 can be implemented solely based on this proposal.
 Phase 3 can be implemented only after additional improvements of the `KafkaRoller` which will be covered by a separate proposal.
 
 ### Phase 1 - Strimzi only supports combined mode
+
 * Combined mode pods are marked as both alive and ready when there is a Java process running. 
 This is an improvement on the current state where the pod is marked as alive and ready as soon as the container starts up, regardless of whether the Java process started.
 * Update the KafkaAgent to check for a broker state of >= 3 && != 127.
 This will be used for the broker only and combined readiness checks later and will improve the existing ZooKeeper based broker check.
 
 ### Phase 2 - Strimzi adds support for broker only and controller only modes
+
 * Controller only pod liveness and readiness checks are fully implemented to match this proposal.
 * Broker only pods are marked as both alive and ready if listening on port 9091.
 * Combined mode pods are marked as both alive and ready when there is a Java process running (no change from phase 1).
 
 ### Phase 3 - KafkaRoller is updated to take the existence of controller pods and status of controller quorum into account when deciding whether to roll pods
+
 * Broker only readiness probe fully implemented to match this proposal.
 * Combined mode readiness probe fully implemented to match this proposal.
 
@@ -179,6 +184,7 @@ updated to continue running once the broker is "ready".
 ## Rejected alternatives
 
 ### Use the current-state metric for controller readiness
+
 The [current-state](https://kafka.apache.org/documentation/#kraft_quorum_monitoring) metric indicates the current state of the quorum.
 Previous versions of this proposal discussed whether we could check if this metric had a state of either follower or leader and use that to infer that the controller quorum had been formed and the controller should be marked as ready.
 This approach had a couple of problems:
