@@ -26,7 +26,7 @@ The objective of this proposal is to introduce a REST API endpoint on the KafkaA
     - Configure Jetty server to only accept SSL connections on port 8443.
     - It will reuse the broker's own certificate, which will already be in the container.
     - Expose an endpoint `/broker-state`.
-    - Add a servlet to handle a `GET` request and return an integer value of `BrokerState` metric.
+    - Add a servlet to handle a `GET` request and return an integer value of the `BrokerState` metric.
 2. Update KafkaRoller to query the broker state from the KafkaAgent API
     - Use the Pod DNS name to query the KafkaAgent API.
     - Instead of checking the broker's readiness through `isReady()` function, utilise the new RESTful endpoint to determine if the broker is ready.
