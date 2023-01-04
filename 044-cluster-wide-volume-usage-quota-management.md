@@ -47,7 +47,7 @@ client publication leading to out of disk conditions through replication. As rep
 terms of `TopicPartitions` the quota plug-in would need a mechanism to translate a logDir into the set of
 TopicPartitions replicated to that directory. Assuming it generated the appropriate throttle configuration this could
 lead to unpredictable latency spikes for producers configured with `acks = 1` or `acks = all` as the replication from
-partition leader to follower maybe delayed due to the throttle.
+partition leader to follower may be delayed due to the throttle.
 
 Currently, the kafka-quotas-plugin considers the total quantity of storage attached to a single broker and how much of
 that is used ( see [issue#2](https://github.com/strimzi/kafka-quotas-plugin/issues/2)) when considering whether to apply
@@ -239,7 +239,7 @@ For example if validity duration is 2 minutes and throttle factor fallback is 0.
 
 |                                                                | type   | default | valid values     |                                                                                                               |
 |----------------------------------------------------------------|--------|---------|------------------|---------------------------------------------------------------------------------------------------------------|
-| client.quota.callback.static.storage.check.interval            | string | PT1M    | ISO8601 duration | the interval between checking the storage usage an recalculating the quota, set to PT0S to disable the plugin |
+| client.quota.callback.static.storage.check.interval            | string | PT1M    | ISO8601 duration | the interval between checking the storage usage and recalculating the quota, set to PT0S to disable the plugin |
 | client.quota.callback.static.kafka.admin.bootstrap.servers     | string |         |                  | required bootstrap.servers for [admin client](#admin-client-configuration) used to get cluster data           |
 | client.quota.callback.static.kafka.admin.*                     | ?      |         |                  | optionally users can configure arbitrary properties of the [admin client config](#admin-client-configuration) |
 | client.quota.callback.static.throttle.factor.fallback          | double | 1.0     | (0.0, 1.0)       | sets the [Throttle Factor Fallback](#throttle-factor-fallback)                                                |
