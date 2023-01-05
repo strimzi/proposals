@@ -105,7 +105,7 @@ plugin instead and block metadata-generating operations.
 
 To better support alternative sources for managing quotas and how they interact with volume usage this proposal
 separates some existing concepts and separates their responsibilities. We envisage the architecture looking like
-this ![Component interactions](images/044-quota-plugin-interactions.png)
+this ![Component interactions](images/047-quota-plugin-interactions.png)
 
 #### Quota Source
 
