@@ -9,7 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-| 47  | [Cluster Wide Volume Usage Quota Management](./047-cluster-wide-volume-usage-quota-managemnet.md) |
+| 47  | [Cluster Wide Volume Usage Quota Management](./047-cluster-wide-volume-usage-quota-management.md) |
 | 46  | [KRaft liveness and readiness probs](./046-kraft-liveness-readiness.md) |
 | 45  | [Stable identities for Kafka Connect worker nodes](./045-Stable-identities-for-Kafka-Connect-worker-nodes.md) |
 | 44  | [StrimziPodSets graduation](./044-StrimziPodSets-graduation.md) |
