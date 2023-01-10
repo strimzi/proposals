@@ -24,8 +24,8 @@ This proposal suggest how we can add the check to detect if the broker still con
 
 A new utility class named `PreventBrokerScaleDownUtils` will be added to the assembly package of cluster operator module
 
-The reason for having this class is to keep all the utilities for checking broker partition replicas seperate such that we don't create a mess in the `KafkaReconciler` class by adding multiple large methods.
-Also it will hep us to test the changes easily.
+The reason for having this class is to keep all the utilities for checking the broker partition replicas separate such that we don't create a mess in the `KafkaReconciler` class by adding multiple large methods.
+Also, it will help us to test the changes easily.
 
 This class will have utility methods like `canScaleDownBrokers`, `canScaleDownBrokerCheck` and `brokerHasAnyReplicas` methods to check the if broker contains any partition replicas or not.
 
