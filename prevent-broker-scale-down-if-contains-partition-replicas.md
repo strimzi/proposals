@@ -20,18 +20,7 @@ This proposal suggest how we can add the check to detect if the broker still con
 
 ## Implementation
 
-### Class
-
-A new utility class named `PreventBrokerScaleDownUtils` will be added to the assembly package of cluster operator module
-
-The reason for having this class is to keep all the utilities for checking the broker partition replicas separate such that we don't create a mess in the `KafkaReconciler` class by adding multiple large methods.
-Also, it will help us to test the changes easily.
-
-This class will have utility methods like `canScaleDownBrokers`, `canScaleDownBrokerCheck` and `brokerHasAnyReplicas` methods to check the if broker contains any partition replicas or not.
-
-This class will also contain methods like `topicNames`, `describeTopics` to query the topic metadata.
-
-#### Process:
+### Process:
 
 - When the broker count is changed in the Kafka resource, the `reconcile` method of the `KafkaReconciler` will be triggered to reconcile the Kafka brokers.
 - The `canScaleDownBrokers()` utility method will be present at the top of the compose chain in the `reconcile()` method of the `KafkaReconciler`.
@@ -41,11 +30,12 @@ This class will also contain methods like `topicNames`, `describeTopics` to quer
 - Then we can use this information to check if the broker contains any partition replicas or not.
 - The scale down is done after we make sure that the brokers that are going to be removed doesn't contain any partition replicas. By doing this we avoid any partial scale down.
 
-#### What to do if a broker contains partitions?
+### What to do if a broker contains partitions?
 
 #### Flow:
 
-- If partition replicas are found out on the broker we will revert back the kafka replicas to the previous count by changing the replica count directly in the kafka object and update the status with a warning stating that the scale down is not done and the replica count is changed back to previous one in the memory.
+- If partition replicas are found out on the broker we will revert back the kafka replicas to the previous count by changing the `spec.replicas` in the STS/SPS and the rest of the reconciliation will be done normally.
+- We will also generate a new condition which will be added to Kafka resource status depicting that the scale down is not done. It will also contain the `spec.replicas` count(which is being currently being used) in the condition message.
 - During the check, if the admin client is not able to connect to the cluster (not able to get the topic details) or if the partition replicas are assigned to the brokers that are going to be removed, we will update the status of the Kafka CR with the respective warning and revert back the replica count.
 - Later on the user can check the status and decide to either change the `spec.replicas` back to the previous count or reassign the partition replicas to other brokers, we can move the process accordingly.
   
