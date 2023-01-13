@@ -36,6 +36,19 @@ This proposal suggest how we can add the check to detect if the broker still con
 
 - If partition replicas are found out on the broker we will revert back the kafka replicas to the previous count by changing the `spec.replicas` in the STS/SPS and the rest of the reconciliation will be done normally.
 - We will also generate a new condition which will be added to Kafka resource status depicting that the scale down is not done. It will also contain the `spec.replicas` count(which is being currently being used) in the condition message.
+```yaml
+Status:
+  Cluster Id:  WQvEjYUMS1aiIKtMTvkMIw
+  Conditions:
+    Last Transition Time:  2023-01-13T13:30:18.880555172Z
+    Message:               Can't Scale down since broker contains partition replicas. Ignoring `replicas` setting in Kafka custom resource: my-cluster-kafka. Current `spec.replicas` value is 3
+    Reason:                ScaleDownException
+    Status:                True
+    Type:                  Warning
+    Last Transition Time:  2023-01-13T13:30:20.844245196Z
+    Status:                True
+    Type:                  Ready
+```
 - During the check, if the admin client is not able to connect to the cluster (not able to get the topic details) or if the partition replicas are assigned to the brokers that are going to be removed, we will update the status of the Kafka CR with the respective warning and revert back the replica count.
 - Later on the user can check the status and decide to either change the `spec.replicas` back to the previous count or reassign the partition replicas to other brokers, we can move the process accordingly.
   
