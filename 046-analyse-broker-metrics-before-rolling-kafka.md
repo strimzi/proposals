@@ -8,11 +8,14 @@ The current logic in KafkaRoller:
 - Take a list of Kafka pods and reorder them based on the readiness.
 - Roll unready pods first without considering why it could be unready.
 - Before restarting a Kafka pod, consider if it is a controller or if it has an impact on the availability.
-- If a Kafka pod does not become ready within the operational timeout (300000ms by default) after restarting, then force restart it without considering why it's taking a long time.
+- If a Kafka pod does not become ready within the operational timeout (300000ms by default) after restarting, then it may force restart it without considering why it's taking a long time.
 
-A Kafka broker can take a long time to become ready while performing log recovery. In this case, KafkaRoller ends up force restarting the broker and this can continue indefinitely, because of the log recovery on the broker startup again. KafkaRoller currently does not have a way to know what state a broker is in before making a decision to force restart it.
- 
-KafkaAgent currently collects the `kafka.server:type=KafkaServer,name=BrokerState` metric and creates a `kafka-ready` file on disk if the broker state value is `3`(`RUNNING`). The Kafka readiness check passes if it finds the file on disk.
+The current flow of KafkaRoller
+![The current flow of KafkaRoller](images/046-kafka-roller-current-flow.png)
+
+A Kafka broker can take a long time to become ready while performing log recovery. In this case, KafkaRoller could end up force restarting the broker and this can continue indefinitely, because of the log recovery on the broker startup again. KafkaRoller currently does not have a way to know what state a broker is in before making a decision to force restart it.
+
+KafkaAgent currently collects the `kafka.server:type=KafkaServer,name=BrokerState` metric and creates a `kafka-ready` file on disk if the broker state value is greater than `3`(`RUNNING`) and not `127` (`UNKNOWN`). The Kafka readiness check passes if it finds the file on disk.
 
 ## Motivation
 
@@ -20,49 +23,53 @@ To address the issues with restarts and log recovery, KafkaRoller needs to be aw
 
 ## Proposal
  
-The objective of this proposal is to introduce a REST API endpoint within KafkaAgent, which exposes metrics from a Kafka broker. Furthermore, KafkaRoller would be modified so that it can query this endpoint to determine the current state of a broker, thus preventing unnecessary restarts. Additionally, KafkaRoller would also display the remaining logs and segments to recover, allowing a human operator to observe the recovery process and determine if it is making progress or is stuck.
+The objective of this proposal is to introduce a REST API endpoint within KafkaAgent, which exposes metrics from a Kafka broker. Furthermore, KafkaRoller would be modified so that it can query this endpoint to determine the current state of a broker, thus preventing unnecessary restarts. Additionally, KafkaRoller would allow a human operator to observe whether the log recovery process is making progress or is stuck.
+
+The following implementation details will describe behaviour of the new API in KafkaAgent and how KafkaRoller would interact with it and handle a broker that is in log recovery.
 
 ### Implementation details
 
-*KafkaAgent*:
+**KafkaAgent**:
+
 - Add a web server to accept SSL connections on port 8443.
 - Use Jetty for the web server since Kafka already uses it therefore avoids an additional dependency.
 - Reuse the broker's own certificate that would be in the container for TLS authentication. 
 - Configure the server to require TLS client authentication. 
-- Expose an endpoint `v1/brokermetrics` that includes the API version in the URI path.
+- Expose an endpoint `v1/recovery-state` that includes the API version in the URI path.
 - Extend KafkaAgent to collect `kafka.log:type=LogManager,name=remainingLogsToRecover` and `kafka.log:type=LogManager,name=remainingSegmentsToRecover` metrics.
-- Take the metric name as a parameter in the request query e.g `v1/brokermetrics?name=BrokerState`. Use the value of the MBean's `name` field for the request  e.g. `BrokerState` and  `remainingLogsToRecover`.
-- Use Jetty's native ServerHandler API to handle a `GET` request and return 
-    - an integer value for `BrokerState`.
-    - an integer value for  `remainingLogsToRecover`.
-    - an integer value for `remainingSegmentsToRecover`.
-- If no metric name was provided in the request or the requested metric name is not supported, return HTTP 404 (Not Found) to the client.
-
-*KafkaRoller*:
-- Use the Pod DNS name to query the KafkaAgent API.
-- Use the cluster operator's client certificate and keys to authenticate with the KafkaAgent API server.
-- Instead of checking the broker's readiness through `isReady()` function, utilise the new RESTful endpoint to determine if the broker is ready.
-- Include an additional field in the status section of the Kafka CR. This will hold data that will be utilised by KafkaRoller in case the reconciliation process is repeated while the log recovery process is still ongoing:
+- Use Jetty's native ServerHandler API to handle a `GET` request and return a JSON response that looks like this:
 ```
-status:
-    <kafka_pod_name>:
-      restartTimeStamp: 
-      logRecoveryExceededTimeout: <true|false>
+{
+  "brokerState": 2,
+  "remainingLogsToRecover": 123,
+  "remainingSegmentsToRecover": 456
+}
 ```
-- When KafkaRoller restarts a broker, write the creation timestamp to the new field, `restartTimeStamp`.
-- If a kafka pod does not become ready within the operational timeout, check the broker state by sending a request to the new endpoint:
-    - If log recovery is in progress, apply the new logic for handling log recovery.
-    - Otherwise, continue with the current behaviour.
+- Return HTTP 404 (Not Found) if a request is sent to an unknown version of the API e.g. `GET /v5/recovery-state` and `v5` does not exist.
 
-*Logic for handling log recovery*
-- Wait for log recovery to complete until the operation timeout (5 mins by default) reaches.
-- While waiting for log recovery to complete, check its progress by periodically sending a request to the new endpoint for `remainingLogsToRecover` and `remainingSegmentsToRecover` metrics and log them in an `INFO` message.
-- If the operation timeout is exceeded, check the value of `logRecoveryExceededTimeout` field in the CR:
-    - If false, log a `WARN` message, fail the reconciliation and set `logRecoveryExceededTimeout` to true.
-    - If true, fail the reconciliation.
-- If kafka pod becomes ready, check the value of `logRecoveryExceededTimeout`. If set to true:
-    - Calculate the time passed since the `restartTimeStamp` and log it in a WARN message. This would be helpful to figure out a more appropriate timeout value to avoid this in the future.
-    - Empty `restartTimeStamp` and `logRecoveryExceededTimeout` values.
+**KafkaRoller**:
+
+The proposed flow of KafkaRoller
+![The proposed flow of KafkaRoller](images/046-kafka-roller-new-flow.png)
+
+If a kafka pod does not become ready within the operational timeout (5 mins by default) take the following actions:
+1. Check if the maximum number of retries has been reached. If it has, fail the reconciliation.
+2. Ensure that the pod is not in a stuck state. The existing `isPodStuck()` can be used for this which returns true if the pod is in `CrashLoopBackOff`, `ImagePullBackOff`, `ContainerCreating` or `Pending` state. If the pod is stuck, continue with the current behaviour to retry rolling of the pod.
+3. Use the Pod DNS name to query the KafkaAgent API endpoint.
+4. If the API returns 503 (Service Unavailable), continue with the current behaviour to retry rolling of the pod.
+5. Use the cluster operator's client certificate and keys to authenticate with the KafkaAgent API server.
+6. Send `GET v1/recovery-state` request to the endpoint and check the value of `brokerState` from the response.
+7. If the `brokerState` value is `2` (`RECOVERY`), follow the new logic for handling log recovery.
+ 
+*Handling log recovery*
+
+8. Set `inLogRecovery` to true. (`inLogRecovery` is a new boolean that would be added to the `RestartContext`).
+9. Log the values of `remainingLogsToRecover` and `remainingSegmentsToRecover` from the request response in an `INFO` message.
+10. Continue with the current behaviour to retry rolling of the pod.
+11. On the next retry, check `inLogRecovery` inside the `restartIfNecessary()` function.
+12. When `inLogRecovery` is set to true, call `awaitReadiness()` which periodically checks and waits for readiness until the operational timeout reaches.
+13. If the operational timeout is reached, repeat from step 1.
+14. If failing the reconciliation on step 1, include log recovery in the reason for failure.
 
 ### For future consideration:
 
@@ -78,7 +85,7 @@ status:
 
 After the operator gets updated with the KafkaRoller change, it will expect the KafkaAgent endpoint to be present. However, the KafkaAgent may not have been updated yet.
 
-To maintain backwards compatibility, use the new logic that handles log recovery only if KafkaRoller is able to successfully connect to the KafkaAgent endpoint. If the KafkaAgent endpoint is not available yet or the agent is not running, the current logic of restarting the broker after a timeout period should be used. This ensures compatibility with previous versions. Additionally, in the case that the KafkaAgent API is available but the agent is stuck or not running for some reason, the current logic's force restart of the broker may help recover the agent.
+To maintain backwards compatibility, use the new logic that handles log recovery only if KafkaRoller is able to successfully connect to the KafkaAgent endpoint. If the KafkaAgent endpoint is not responsive, continue with the current behaviour. This ensures compatibility with previous versions. Additionally, in the case that the KafkaAgent API is present, but the agent is stuck or not running due to some reason, then continuing with the current behaviour which may force restart the broker after a timeout could help recovering the agent.
 
 ## Rejected alternatives
 
