@@ -12,7 +12,7 @@ The current logic in KafkaRoller:
 - If a Kafka pod does not become ready within the operational timeout (300000ms by default) after restarting, then it may force restart it without considering why it's taking a long time.
 
 The current flow of KafkaRoller
-![The current flow of KafkaRoller](images/046-kafka-roller-current-flow.png)
+![The current flow of KafkaRoller](images/048-kafka-roller-current-flow.png)
 
 A Kafka broker can take a long time to become ready while performing log recovery. In this case, KafkaRoller could end up force restarting the broker and this can continue indefinitely, because of the log recovery on the broker startup again. KafkaRoller currently does not have a way to know what state a broker is in before making a decision to force restart it.
 
@@ -60,7 +60,7 @@ The `recovery` field is optional and is only included if the `brokerState` is `2
 **KafkaRoller**:
 
 The proposed flow of KafkaRoller
-![The proposed flow of KafkaRoller](images/046-kafka-roller-new-flow.png)
+![The proposed flow of KafkaRoller](images/048-kafka-roller-new-flow.png)
 (The changes are highlighted in green.)
 
 Currently, if a Kafka pod does not become ready within the operational timeout, it checks how many times the pod has been retried to roll. If it hasn't reached the maximum number of attempts (6 by default and set to 10 by KafkaReconcilor), it reschedules the rolling of the pod by appending it to the list. Otherwise, reconciliation fails.
