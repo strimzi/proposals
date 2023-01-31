@@ -63,6 +63,15 @@ There are many dimensions in which you can do this:
 
 Assuming the differential observations feature proves to provide worthwhile information, we would proceed to also provide documented procedures recommending corrective actions based on the specific faults it reported.
 
+### Changes and removals
+
+* Logging mechanism will be changed to Log4j2, to have it consistent with other Strimzi components
+  * The log levels will have to be changed from `0, 1, 2` to `INFO, DEBUG, WARN, TRACE`.
+* `SARAMA_LOG_ENABLED` environment variable will be removed
+* `VERBOSITY_LOG_LEVEL` will be changed to `CANARY_LOG_LEVEL` and used inside the `log4j2.properties` file - default will be `INFO`
+* Implementation of dynamic watcher will be removed 
+  * For logging changes the dynamic reconfiguration will be implemented (similarly to operators repository)
+
 ## Affected/not affected projects
 
 This affects the Canary project only.
