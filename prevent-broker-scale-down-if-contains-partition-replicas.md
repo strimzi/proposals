@@ -23,13 +23,15 @@ This proposal suggest how we can add the check to detect if the broker still con
 ### Process:
 
 - When the broker count is changed in the Kafka resource, the `reconcile` method of the `KafkaReconciler` will be triggered to reconcile the Kafka brokers.
-- The `canScaleDownBrokers()` utility method will be present at the top of the compose chain in the `reconcile()` method of the `KafkaReconciler` to make sure that every other method after that which requires the replica count use the correct replica count based on the outcome of the check.
-- The `canScaleDownBrokers()` method will only run if we see the current kafka replicas (replicas before the kafka custom resource is modified) count gets lesser than the kafka replicas present in the kafka custom resource. We can get the kafka replica count by using `kafka.getReplicas()` where `kafka` is an object of `KafkaCluster` class .
+- The `canScaleDownBrokers()` utility method will be present at the top of the compose chain in the `reconcile()` method of the `KafkaReconciler` to make sure that every other method  which requires the replica count use the correct replica count based on the outcome of the check.
+- The `canScaleDownBrokers()` method will only run if we see the current kafka replicas (replicas before the kafka custom resource is modified) count gets greater than the kafka replicas present in the kafka custom resource.
+We can get the kafka replica count by using `kafka.getReplicas()` where `kafka` is an object of `KafkaCluster` class .
 - This method will check if the broker contains any partition replicas or not and will continue the process based on the outcome.
 - For doing so, the topic metadata will be queried to detect if the broker contains any partition replicas.
 - An Admin client instance will be used to connect with the cluster and get us the topic details(topic name and topic description)
 - Then we can use this information to check if the broker contains any partition replicas or not.
-- The scale down is done after we make sure that the brokers that are going to be removed doesn't contain any partition replicas. By doing this we avoid any partial scale down.
+- The scale down is done after we make sure that the brokers that are going to be removed doesn't contain any partition replicas.
+By doing this we avoid any partial scale down.
 
 ### What to do if a broker contains partitions?
 
