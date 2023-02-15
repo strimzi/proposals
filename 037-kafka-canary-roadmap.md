@@ -12,7 +12,7 @@ The implementation is in Golang and uses the [Sarama](https://github.com/Shopify
 ## Motivation
 
 We believe the Canary component could deliver significant value for Strimzi users. For example, Canary could be used as a basis for an SLI on cluster availability and health.
-However, these Canary improvements are held back by technical and non-technical issues:
+However, these Canary improvements are held back by the following technical and non-technical issues:
 
 * We've experienced [numerous bugs]((https://github.com/strimzi/strimzi-canary/issues?q=is%3Aissue+is%3Aclosed)) in the Kafka client library being used, and believe we're likely to see a long tail of further bugs.
 * The client library does not support all the features we want. Those features would be needed to realize the Canary's true potential.
