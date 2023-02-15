@@ -48,7 +48,7 @@ There are several client features we would like to be able use.
 
 By running multiple producers and consumers, Canary could more accurately indicate where problems lay. 
 
-For example, in a cluster with multiple listeners using different authentication mechanisms, if produce requests via a `SASL/OAUTHBEARER`-authenticated listener fail, but succeed via the `SASL/PLAIN`-authenticated listener you can infer that the problem is with the login mechanism. 
+For example, in a cluster with multiple listeners using different authentication mechanisms, if produce requests fail using an `SASL/OAUTHBEARER`-authenticated listener but succeed using an`SASL/PLAIN`-authenticated listener, you can infer that the problem is with the login mechanism. 
 
 There are many dimensions in which you can do this: 
 
