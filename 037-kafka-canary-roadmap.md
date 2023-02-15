@@ -34,7 +34,7 @@ Most existing Strimzi developers have more experience with Java than Golang.
 Some don't really know Golang at all.
 It's difficult to motivate people to use another language if they're using it only for one relatively small part of their job.
 Likewise, existing Golang developers are not going to be drawn to contributing to Strimzi on account of a single Golang component.
-So over all we expect our community would be better able to engage with the Canary component if it was implemented in Java.
+So overall we expect our community would be better able to engage with the Canary component if it was implemented in Java.
 
 ### Desirable features
 
