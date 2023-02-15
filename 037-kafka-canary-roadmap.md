@@ -1,6 +1,6 @@
 # Kafka Canary roadmap
 
-This proposal describes a possible future set of improvement and features for the [Strimzi Canary](https://github.com/strimzi/strimzi-canary)
+This proposal describes a possible future set of improvements and features for the [Strimzi Canary](https://github.com/strimzi/strimzi-canary) tool, which is used to check that Kafka clusters are operating correctly.  
 
 ## Current situation
 
