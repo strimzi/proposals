@@ -50,7 +50,7 @@ By running multiple producers and consumers, Canary could more accurately indica
 
 For example, in a cluster with multiple listeners using different authentication mechanisms, if produce requests fail using an `SASL/OAUTHBEARER`-authenticated listener but succeed using an`SASL/PLAIN`-authenticated listener, you can infer that the problem is with the login mechanism. 
 
-There are many dimensions in which you can do this: 
+There are many dimensions in which you can run multiple producers and consumers: 
 
 * DNS resolution
 * TLS (e.g. different versions or detecting imminent broker certificate expiry)
@@ -78,24 +78,24 @@ This affects the Canary project only.
 
 ## Compatibility
 
-The API of the existing canary comprises:
+The API of the existing Canary comprises the following:
 
 * The configuration env vars
 * Metrics (via the Prometheus scrape endpoint)
 * The status and health endpoints
 
 ### Configuration
-While we can strive to minimize incompatibilities, it seems of questionable value.
-The Java clients are normally configured via `.properties` files.
-Providing a compatibility mapping from env var to properties would be a lot of work, given that the canary hasn't seem very wide usage.
+Java clients are normally configured via `.properties` files.
+Providing a compatibility mapping from env var to properties would be a lot of work, given that the Canary hasn't seen very wide usage.
 Some options would become obselete (e.g. `KAFKA_VERSION`), others are incompatible with how the Java clients work (e.g. `KAFKA_BOOTSTRAP_BACKOFF_MAX_ATTEMPTS`).
+While we can strive to minimize incompatibilities, it seems of questionable value.
 So it seems better to provide a clean break.
 
 ### Metrics
 
 It seems likely that metric names and labels can be maintained, so in that respect we could be compatible. 
 Detailed assessment of whether the metric values were being measured in a compatible way is beyond the scope of this document.
-If measurements were incompatible it would require existing users to adjust thresholds used in any alerting they might have that was based on the old metrics.
+If measurements were incompatible, it would require existing users to adjust the thresholds used in any alerting they might have that was based on the old metrics.
 
 ### Status and Health endpoints
 
@@ -104,6 +104,6 @@ Providing compatibility for these should be trivial.
 ## Rejected alternatives
 
 The main alternative would be to stick with Golang and Sarama.
-Doing this means:
-* the feature improvements be blocked, waiting for support to be added for the missing features.
-* the non-technical issues described would remain unaddressed. 
+However, by not switching to a Java implementation the issues highlighted in this proposal are unresolved:
+* Feature improvements are blocked, waiting for support to be added for the missing features.
+* Non-technical issues remain unaddressed. 
