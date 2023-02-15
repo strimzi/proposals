@@ -44,6 +44,8 @@ There are several client features we would like to be able use.
 * Support for forcing leader elections. Sarama doesn't support this.
 * Support for transactional produce. Sarama doesn't seem to support this, at least not in a usable way. You can send the transaction-related requests, but there is no client library support akin to the `TransactionManager`, for ensuring the RPCs are sent correctly. 
 
+All of the desirable features will be implemented after Canary re-implementation.
+
 ### Differential observations
 
 By running multiple producers and consumers, Canary could more accurately indicate where problems lay. 
@@ -65,10 +67,10 @@ Assuming the differential observations feature proves to provide worthwhile info
 
 ### Changes and removals
 
-* Logging mechanism will be changed to Log4j2, to have it consistent with other Strimzi components
+* As logging mechanism will be used Log4j2
   * The log levels will have to be changed from `0, 1, 2` to `INFO, DEBUG, WARN, TRACE`.
+  * `VERBOSITY_LOG_LEVEL` will be changed to `CANARY_LOG_LEVEL` and used inside the `log4j2.properties` file - default will be `INFO`
 * `SARAMA_LOG_ENABLED` environment variable will be removed
-* `VERBOSITY_LOG_LEVEL` will be changed to `CANARY_LOG_LEVEL` and used inside the `log4j2.properties` file - default will be `INFO`
 * Implementation of dynamic watcher will be removed 
   * For logging changes the dynamic reconfiguration will be implemented (similarly to operators repository)
 
@@ -85,6 +87,7 @@ The API of the existing Canary comprises the following:
 * The status and health endpoints
 
 ### Configuration
+
 Java clients are normally configured via `.properties` files.
 Providing a compatibility mapping from env var to properties would be a lot of work, given that the Canary hasn't seen very wide usage.
 Some options would become obselete (e.g. `KAFKA_VERSION`), others are incompatible with how the Java clients work (e.g. `KAFKA_BOOTSTRAP_BACKOFF_MAX_ATTEMPTS`).
@@ -99,7 +102,7 @@ If measurements were incompatible, it would require existing users to adjust the
 
 ### Status and Health endpoints
 
-Providing compatibility for these should be trivial.
+Providing compatibility for [these](https://github.com/strimzi/strimzi-canary#endpoints) should be trivial.
 
 ## Rejected alternatives
 
