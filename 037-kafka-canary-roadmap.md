@@ -4,7 +4,7 @@ This proposal describes a possible future set of improvements and features for t
 
 ## Current situation
 
-The project [README.md](https://github.com/strimzi/strimzi-canary/blob/main/README.md) explains the current feature set.
+The Canary project [README.md](https://github.com/strimzi/strimzi-canary/blob/main/README.md) explains the current feature set.
 
 The Canary was added to Strimzi under [proposal 13](013-kafka-canary.md).
 The implementation is in Golang and uses the [Sarama](https://github.com/Shopify/sarama/) Kafka client.
