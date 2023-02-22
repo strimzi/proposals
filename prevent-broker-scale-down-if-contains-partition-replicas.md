@@ -24,8 +24,8 @@ This proposal suggest how we can add the check to detect if the broker still con
 
 - When the broker count is changed in the Kafka resource, the `reconcile` method of the `KafkaReconciler` will be triggered to reconcile the Kafka brokers.
 - The `canScaleDownBrokers()` utility method will be present at the top of the compose chain in the `reconcile()` method of the `KafkaReconciler` to make sure that every other method  which requires the replica count use the correct replica count based on the outcome of the check.
-- The `canScaleDownBrokers()` method will only run if we see the current kafka replicas (replicas before the kafka custom resource is modified) count gets greater than the kafka replicas present in the kafka custom resource.
-We can get the kafka replica count by using `kafka.getReplicas()` where `kafka` is an object of `KafkaCluster` class .
+- The `canScaleDownBrokers()` method will only run if we see the current Kafka replicas (replicas before the Kafka custom resource is modified) count gets greater than the Kafka replicas present in the Kafka custom resource.
+  We can get the desired Kafka replica count by using `kafka.getReplicas()` where `kafka` is an object of `KafkaCluster` class .
 - This method will check if the broker contains any partition replicas or not and will continue the process based on the outcome.
 - For doing so, the topic metadata will be queried to detect if the broker contains any partition replicas.
 - An Admin client instance will be used to connect with the cluster and get us the topic details(topic name and topic description)
@@ -37,30 +37,40 @@ By doing this we avoid any partial scale down.
 
 #### Flow:
 
-- If partition replicas are found out on the broker we will revert back the kafka replicas to the previous count by setting replicas directly in the `KafkaCluster` class using `setReplicas()` method. 
-Changing the kafka replica count directly in the Kafka Cluster would help us ensure that we keep same replicas everywhere like while generating certificates, services, ingresses, routes etc.
-- The broker certificates, services, ingresses, routes etc. will be generated based on the reverted kafka count and the rest of the reconciliation will be done normally.
-- We will also generate a new condition which will be added to Kafka resource status depicting that the scale down is not done. It will also contain the `spec.replicas` count(which is being currently being used) in the condition message.
-```yaml
-Status:
-  Cluster Id:  WQvEjYUMS1aiIKtMTvkMIw
-  Conditions:
-    Last Transition Time:  2023-01-13T13:30:18.880555172Z
-    Message:               Can't Scale down since broker contains partition replicas. Ignoring `spec.kafka.replicas` setting in Kafka custom resource: my-cluster. Current kafka replicas count is 3
-    Reason:                ScaleDownException
-    Status:                True
-    Type:                  Warning
-    Last Transition Time:  2023-01-13T13:30:20.844245196Z
-    Status:                True
-    Type:                  Ready
-```
+- If partition replicas are found out on the broker we will revert back the Kafka replicas to the previous count by setting replicas directly in the `KafkaCluster` class using `setReplicas()` method. 
+  Changing the Kafka replica count directly in the Kafka Cluster would help us ensure that we keep same replicas everywhere like while generating certificates, services, ingresses, routes etc.
+- The broker certificates, services, ingresses, routes etc. will be treated with the original number of nodes and the rest of the reconciliation will be done normally.
+- There is a small risk at this point since the KafkaCluster instance will already exist and the storage validation will be already done. This can cause forbidden storage changes which can lead to some problems since the validation was done with the new count of Kafka replicas but at the same time the likelihood of both illegal storage changes and scale-down happening at the same time is low. 
+- We also generate a new condition which will be added to Kafka resource status depicting that the scale down is not done. It will also contain the `spec.replicas` count(which is being currently being used) in the condition message.
+  ```yaml
+  status:
+    clusterId: DoRj5f84Sruq_7TJ31y7Zw
+    conditions:
+      - lastTransitionTime: "2023-02-22T10:18:56.578009768Z"
+        message: 'Can''t Scale down since broker contains partition replicas. Ignoring
+        `replicas` setting in Kafka custom resource: my-cluster. Current Kafka replicas
+        count is 4'
+        reason: ScaleDownException
+        status: "True"
+        type: Warning
+      - lastTransitionTime: "2023-02-22T10:18:57.664668863Z"
+        status: "True"
+        type: Ready
+  ```
+
+### How to bypass the broker scale down mechanism
+
+- To bypass the broker scale down mechanism you can use the annotation `strimzi.io/bypass-brokerScaleDownCheck: "true"` on the Kafka custom resource. For e.g.
+  ```sh
+  kubectl annotate Kafka my-cluster strimzi.io/bypass-brokerScaleDownCheck: "true"
+  ```
 
 ### Other Scenarios
 
-- During the check, if the admin client is not able to connect to the cluster (not able to get the topic details) or if the partition replicas are assigned to the brokers that are going to be removed, we will update the status of the Kafka CR with the respective warning and revert back the replica count. Later on the user can check the status and decide to either change the `spec.replicas` back to the previous count or reassign the partition replicas to other brokers, we can move the process accordingly.
-- If the kafka cluster is just initialized and the pods are not ready, the `canScaleDownBrokers()` utility method will not work. It will only work when the pods are up.
-- If the current kafka replicas/pods are 0 the mechanism will not work since we have also placed a condition in the `canScaleDownBrokers()` methods which take care of this particular scenario.
-  
+- During the check, if the admin client is not able to connect to the cluster (not able to get the topic details), we will update the status of the Kafka CR with the respective warning and revert back the replica count in the `KafkaCluster` class.
+- If the Kafka cluster is just initialized and the pods are not ready, the `canScaleDownBrokers()` utility method will not work because the current Kafka replicas (replicas before the Kafka custom resource is modified) count will be equal to 0 and the Kafka replicas present in the Kafka custom resource will also be 0. Hence, the mechanism will not run since the condition requires the current replica count to be greater than the Kafka replicas present in the Kafka custom resource
+- If the current Kafka replicas/pods are 0 the mechanism will not work since if there are zero brokers it will not be considered a scaledown.
+ 
 ## Affected/not affected projects
 
 This change will affect the Strimzi Cluster Operator Module and mostly the `KafkaReconciler` class.
