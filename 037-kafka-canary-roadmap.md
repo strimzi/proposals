@@ -72,7 +72,7 @@ Assuming the differential observations feature proves to provide worthwhile info
   * `VERBOSITY_LOG_LEVEL` will be changed to `CANARY_LOG_LEVEL` and used inside the `log4j2.properties` file - default will be `INFO`
 * `SARAMA_LOG_ENABLED` environment variable will be removed
 * Implementation of dynamic watcher will be removed 
-  * For logging changes the dynamic reconfiguration will be implemented (similarly to operators repository)
+  * For logging changes the dynamic reconfiguration will be used from Log4j2 (similarly to operators repository)
 
 ## Affected/not affected projects
 
@@ -96,7 +96,22 @@ So it seems better to provide a clean break.
 
 ### Metrics
 
-It seems likely that metric names and labels can be maintained, so in that respect we could be compatible. 
+It seems likely that most of the [metric names](https://github.com/strimzi/strimzi-canary#metrics-1) and labels can be maintained.
+
+There are metrics which will be deleted or changed:
+
+* Metrics that will be removed:
+  * `topic_alter_assignments_error_total` - Canary in Java will not have dynamic reassignment
+  * `consumer_timeout_join_group_total` - connected to Sarama client, Java clients don't have such error
+
+* Metrics that will be changed:
+  * `topic_describe_cluster_error_total` - will be changed to `describe_cluster_error_total`
+
+* Metrics that need to be re-evaluated:
+  * `producer_refresh_metadata_error_total` and `consumer_refresh_metadata_error_total`
+    * with Sarama, there is a possibility to manually refresh metadata of both producer and consumer
+    * there is no such possibility in Java
+
 Detailed assessment of whether the metric values were being measured in a compatible way is beyond the scope of this document.
 If measurements were incompatible, it would require existing users to adjust the thresholds used in any alerting they might have that was based on the old metrics.
 
