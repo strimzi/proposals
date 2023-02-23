@@ -54,7 +54,11 @@ By doing this we avoid any partial scale down.
         status: "True"
         type: Ready
   ```
-  Note :  By the time the replicas are reverted back, the storage validation will be already complete based on the replica count present in Kafka custom resource. This can can cause some issues if someone tries to make some forbidden changes (changes that might not be supported) to the storage during this time frame. To fix this problem, the user should revert back the `spec.kafka.replicas` in the Kafka custom resource back to the replica count currently being used by the `KafkaCluster` class and the next reconciliation will pick up those changes.
+  Note :  By the time the replicas are reverted back, the storage validation will be already complete based on the replica count present in Kafka custom resource.
+  This can can cause some issues if someone tries to make some forbidden changes (changes that might not be supported) to the storage during this time frame.
+  This is hard to prevent in the current code.
+  But the likelihood of this happening at the same time should be relatively small.
+  So this proposal suggests to ignore this risk.
 
 ### How to bypass the broker scale down mechanism
 
