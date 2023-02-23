@@ -40,16 +40,13 @@ By doing this we avoid any partial scale down.
 - If partition replicas are found out on the broker we will revert back the Kafka replicas to the previous count by setting replicas directly in the `KafkaCluster` class using `setReplicas()` method. 
   Changing the Kafka replica count directly in the Kafka Cluster would help us ensure that we keep same replicas everywhere like while generating certificates, services, ingresses, routes etc.
 - The broker certificates, services, ingresses, routes etc. will be treated with the original number of nodes and the rest of the reconciliation will be done normally.
-- There is a small risk at this point since the KafkaCluster instance will already exist and the storage validation will be already done. This can cause forbidden storage changes which can lead to some problems since the validation was done with the new count of Kafka replicas but at the same time the likelihood of both illegal storage changes and scale-down happening at the same time is low. 
 - We also generate a new condition which will be added to Kafka resource status depicting that the scale down is not done. It will also contain the `spec.replicas` count(which is being currently being used) in the condition message.
   ```yaml
   status:
     clusterId: DoRj5f84Sruq_7TJ31y7Zw
     conditions:
       - lastTransitionTime: "2023-02-22T10:18:56.578009768Z"
-        message: 'Can''t Scale down since broker contains partition replicas. Ignoring
-        `replicas` setting in Kafka custom resource: my-cluster. Current Kafka replicas
-        count is 4'
+        message: 'Cannot Scale down since broker contains partition replicas. The `spec.kafka.replicas` should be reverted back to 4 directly in the Kafka resource'.
         reason: ScaleDownException
         status: "True"
         type: Warning
@@ -57,12 +54,13 @@ By doing this we avoid any partial scale down.
         status: "True"
         type: Ready
   ```
+  Note :  By the time the replicas are reverted back, the storage validation will be already complete based on the replica count present in Kafka custom resource. This can can cause some issues if someone tries to make some forbidden changes (changes that might not be supported) to the storage during this time frame. To fix this problem, the user should revert back the `spec.kafka.replicas` in the Kafka custom resource back to the replica count currently being used by the `KafkaCluster` class and the next reconciliation will pick up those changes.
 
 ### How to bypass the broker scale down mechanism
 
-- To bypass the broker scale down mechanism you can use the annotation `strimzi.io/bypass-brokerScaleDownCheck: "true"` on the Kafka custom resource. For e.g.
+- To bypass the broker scale down mechanism you can use the annotation `strimzi.io/bypass-broker-scaledown-check: "true"` on the Kafka custom resource. For e.g.
   ```sh
-  kubectl annotate Kafka my-cluster strimzi.io/bypass-brokerScaleDownCheck: "true"
+  kubectl annotate Kafka my-cluster strimzi.io/bypass-broker-scaledown-check: "true"
   ```
 
 ### Other Scenarios
