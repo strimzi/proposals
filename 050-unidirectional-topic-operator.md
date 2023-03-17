@@ -1,6 +1,6 @@
 # A unidirectional topic operator
 
-Replace the existing bidriectional topic operator with a unidirectional operator.
+Replace the existing bidirectional topic operator with a unidirectional operator.
 
 ## Current situation
 
@@ -9,7 +9,7 @@ It deviates from the standard operator pattern by being bidirectional.
 That is, it will reconcile changes to a `KafkaTopic` resource both to _and from_ a Kafka cluster.
 The bidirectionality means applications and users can continue to use Kafka-native APIs (such as the `Admin` client) and tooling (e.g. the scripts provided by Apache Kafka) as required. The KafkaTopic's spec will be updated by the operator to reflect those changes.
 
-Usually in the Strimzi community often abbreviates the topic operator as TO, but in this document we will refer to the existing bidirectional topic operator as the BTO,
+Usually the Strimzi community often abbreviates the topic operator as TO, but in this document we will refer to the existing bidirectional topic operator as the BTO,
 and the proposed unidirectional topic operator as the UTO.
 
 The BTO makes use of ZooKeeper znode watches to know about changes to topic state within the Kafka cluster.
@@ -24,7 +24,7 @@ In order to continue to provide a kube-native API for managing Kafka topics we'v
 * Using a KRaft observer
 
 The polling approach, while simple, has significant drawbacks.
-It would scale poorly with the number of topics (in terms of CPU and memory), and would also suffer from increased latency between the time a change was made in Kafka and when it was refelected in Kubernetes.
+It would scale poorly with the number of topics (in terms of CPU and memory), and would also suffer from increased latency between the time a change was made in Kafka and when it was reflected in Kubernetes.
 The increased latency would widen the window for making conflicting changes.
 
 The observer approach could work, but comes with some serious drawbacks:
@@ -35,7 +35,7 @@ The observer approach could work, but comes with some serious drawbacks:
   For example if it were realized as single pod `Deployment` then the requirement for a persistent volume would tie it to a single AZ, meaning it would not be as highly available as the current operator.
   This could be worked around by having multiple observers with only a single elected leader actually in charge of making modifications at any one time.
 
-Overall, it is clear that the complexity of the operator would be significantly increased by persuing this direction.
+Overall, it is clear that the complexity of the operator would be significantly increased by pursuing this direction.
 
 It's also worth reviewing _why_ people want to use an operator for topics. 
 There are two broad use cases:
@@ -43,11 +43,11 @@ There are two broad use cases:
 1. Declarative deployments, for example in the form of gitops. 
 2. Using `KafkaTopics` operationally as the API through which to manage all topics.
 
-Based on opened issues and Slack conversations with uses, it seems that 1. is the most common reason people use the BTO.
+Based on opened issues and Slack conversations with users, it seems that 1. is the most common reason people use the BTO.
 However, the BTO doesn't do a great job at satisfying this use case.
 
 * It only supports a single namespace, which means BTO admins cannot easily follow a workspace-per-dev team model.
-  It also means that infrastruture-level topics (e.g. `__consumer_offsets` and `__transaction_state`) comingle with per-application topics. 
+  It also means that infrastructure-level topics (e.g. `__consumer_offsets` and `__transaction_state`) comingle with per-application topics. 
 * It doesn't *enforce* a single source of truth, allowing for changes done directly in Kafka to conflict with declarative deployments. 
 
 Moreover, the BTO doesn't do a good job with item 2. either:
@@ -243,7 +243,7 @@ The process will first describe the topic and its configs and then make alterati
 
 * Modification to topic config will be via `Admin.incrementalAlterConfigs()` using the `SET` operation.
 * Creation of partitions will be supported
-* Deletion of partitions is not supported by Kafka and will result in an suitable `status.condition` in the `KafkaTopic`. 
+* Deletion of partitions is not supported by Kafka and will result in a suitable `status.condition` in the `KafkaTopic`. 
     ```yaml
     status:
       conditions:
@@ -465,7 +465,7 @@ To help avoid collisions where two or more `KafkaTopics` are trying to manage th
 > Rules for legal policies:
 > 
 > * All `topicNamePrefixes` must be disjoint (i.e. not given prefix is a prefix of any other prefix).
-> * Not `topicNamePrefix` maybe be a prefix of of any listed `topicNames`.
+> * No given `topicNamePrefix` maybe be a prefix of of any listed `topicNames`.
 > * Only one namespace may have `otherTopics: True`
 >
 > These rules are sufficent to guarantee that any given topic maps unambiguously to a single namespace.
@@ -540,7 +540,7 @@ Alternatively: App could be written to wait for topic existency, or use an init 
 * The existing bidirectional Topic Operator would be deprecated and removed once ZooKeeper-based clusters are no longer supported.
 * A new unidirectional Topic Operator would be provided as a replacement, which users could migrate to before ZooKeeper-based clusters are no longer supported.
 * The schema of `KafkaTopic` would change
-* The schema of `Kafka` would also change, to support deployment of the new operator, but the details of that are not defined in thisproposal.
+* The schema of `Kafka` would also change, to support deployment of the new operator, but the details of that are not defined in this proposal.
 * The CRD changes would be relfected in the `api` module.
 
 ## Compatibility
@@ -645,6 +645,7 @@ Furthermore within the same structure:
 <tr><td>gauge		<td>strimzi.reconciliations.paused	<th>Unchanged
 <tr><td>counter		<td>strimzi.reconciliations.locked	<th>Unchanged
 <tr><td>gauge		<td>strimzi.resource.state		<th>Unchanged
+</table>
 
 ### Emitted Kube `Events`
 
@@ -664,7 +665,7 @@ Let's consider all the cases in which the BTO emits `Event` resources to the Kub
   For UTO this will be reported via the status only.
 * On detection of conflicting changes between Kube and Kafka
   For UTO such conflicts cannot happen.
-* On attempts to decreate the number of partitions.
+* On attempts to decrease the number of partitions.
   For UTO this will be reported via the status only.
 
 Thus, the UTO will emit no events.
