@@ -265,18 +265,26 @@ The process will first describe the topic and its configs and then make alterati
     ```
 
 > Note that both these `NotSupported` reasons can arise both from changes being made to the `KafkaTopic`, or changes made directly in Kafka.
-> For example, the UTO cannot tell whether the `spec.partitions` was decreased, or whether it was unchanges and the conflict arises because someone increases the number of partitions directly in Kafka so that it looks like the `KafkaTopic` is requesting a decrease. 
+> For example, the UTO cannot tell whether the `spec.partitions` was decreased, or whether it was unchanged and the conflict arises because someone increased the number of partitions directly in Kafka so that it looks like the `KafkaTopic` is requesting a decrease. 
 > In any case, when the user takes action to fix the problem the `KafkaTopic` will (eventually) get reconciled and the `status` will revert to `Ready`.
 
-Unlike the BTO the UTO will reconcile batches of the known topics spread over the reconciliation interval, in order to smooth CPU and heap usage, lowering overall resource requirements.
+Unlike the BTO, the UTO will reconcile batches of the known topics spread over the reconciliation interval, in order to smooth CPU and heap usage, lowering overall resource requirements.
 
 ### Topic deletion
 
 We will use a [Kube finalizer](https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/) for deletion.
 This means that deletion via the kube REST API will first mark the resource as scheduled for deletion, allowing the operator to handle the deletion and then update the `KafkaTopic` so that the resource is actually removed from `etcd`.
-Using a finalizer:
-* Avoids the operator needing to diff sets of existing topics to figure out `KafkaTopics` which have been deleted while the operator is not running.
-* Allows errors during deletion to be reported via the `KafkaTopic`'s `status`.
+
+Without a finalizer then the following would be posible:
+
+1. A topic in Kafka is managed by a `KafkaTopic`
+2. The operator stops (for any reason)
+3. The `KafkaTopic` is deleted
+4. Th operator starts
+
+The semantics of a managed topic being deleted should be that the topic in Kafka gets deleted, but that fails to happen in this case.
+
+A small extra benefit of using a finalizer is that any errors during deletion can be reported via the `KafkaTopic`'s `status`.
     ```yaml
     status:
       conditions:
@@ -287,7 +295,7 @@ Using a finalizer:
         lastTransitionTime: 20230301T103000Z
     ```
 
-The presence of this finalizer will be checked (and added if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set. 
+The presence of this finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set. 
 
 ---
 
@@ -649,6 +657,12 @@ To migrate, existing BTO users would have to:
 
 
 ### Disadvantages
+
+#### Use of finalizers
+
+Using finalizers on `KafkaTopics` means that the operator has to be running (to remove the finalizer) before the resources will actually be deleted.
+That can prevent other resources from being removed (for example the `Namespace` containing the `KafkaTopics`).
+In these cases it is possible to remove the finalizer manually (e.g. via `kubectl edit`), which will then allow the apiserver to remove any other resources.
 
 #### Compatibility with other tooling
 
