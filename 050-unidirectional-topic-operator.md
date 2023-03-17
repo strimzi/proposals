@@ -284,6 +284,7 @@ Without a finalizer then the following would be posible:
 4. Th operator starts
 
 The semantics of a managed topic being deleted should be that the topic in Kafka gets deleted, but that fails to happen in this case.
+The operator cannot use the existence of a topic in Kafka to infer that the `KafkaTopic` has been deleted because topics in Kafka can be unmanaged.
 
 A small extra benefit of using a finalizer is that any errors during deletion can be reported via the `KafkaTopic`'s `status`.
     ```yaml
