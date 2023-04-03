@@ -6,8 +6,7 @@ Strimzi currently allows to have one set of ZooKeeper nodes and one set of Kafka
 All nodes within the given set have very similar configuration and differ only in small details:
 
 * Each Pod might have a PVC using different storage class
-* The Kafka pods have (when using `StrimziPodSets`) each their own Config Map with their Kafka configuration.
-  The configurations differ between the different nodes in the advertised addresses.
+* The Kafka pods have (when using `StrimziPodSets`) each their own Config Map with their Kafka configuration, but their configurations differs between the different nodes only in the advertised addresses.
 
 ## Problem description
 
@@ -29,7 +28,7 @@ Kafka is slowly finishing the implementation of the KRaft mode.
 The KRaft mode removes the ZooKeeper dependency and replaces it with Kafka's own controller nodes based on the Raft protocol (_KRaft = Kafka + Raft_).
 In the KRaft mode, the Kafka cluster will consist only from Kafka nodes.
 But they will have different roles - they will be either controllers, or brokers, or will combine both of them.
-The controller role means the node is responsible for maintaining the cluster quorum, for the elections, discovery etc.
+The controller role means the node is responsible for maintaining the cluster quorum, for the elections, discovery and for handling the cluster metadata instead of ZooKeeper.
 The broker role means the node is responsible for handling messages as a regular broker in the old ZooKeeper based clusters.
 And finally, the combined role means the node is responsible for both at the same time.
 
@@ -86,7 +85,8 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaNodePool
 metadata:
   name: my-pool
-  # ...
+  labels:
+    strimzi.io/cluster: my-cluster
 spec:
   replicas: 3
   resources:
@@ -117,17 +117,16 @@ spec:
 
 The replicas and storage sections will be required in `KafkaNodePool`.
 The other fields will be optional.
-At the same time, the replicas and storage sections will be made optional in the `Kafka` resource since when using node pools, they will not be used in the `Kafka` custom resource anymore.
+At the same time, the replicas and storage sections will be made optional in the `Kafka` resource since when using node pools, and they will ignored if set.
 
 When the optional field is not present in `KafkaNodePool` and is present in `Kafka.spec.kafka`, it will default to the configured value from the `Kafka` CR.
-However, this will be applied only on the highest level.
-For example:
+However, this will be applied only on the highest level as shown in the example below:
 
 * If the `KafkaNodePool.spec.jvmOptions` does not exist but `Kafka.spec.kafka.jvmOptions` does exist, the values from `Kafka.spec.kafka.jvmOptions` will be used.
 * When `KafkaNodePool.spec.jvmOptions` exists and has `-Xmx: 1024m` and `Kafka.spec.kafka.jvmOptions` exists as well with `-Xms: 512m`, the operator will completely ignore the value from `Kafka.spec.kafka.jvmOptions` and use only the value from `KafkaNodePool.spec.jvmOptions`.
 * When `KafkaNodePool.spec.template` contains only the field `podSet.metadata.labels`, the operator will completely ignore the corresponding values from `Kafka.spec.kafka.template` (for example `podSet.metadata.annotations`, but also for example `pod.metadata.labels`).
 
-In the future, additional fields might be moved to the `KafkaNodePool` and its `.spec` section according to the needs.
+In the future, additional fields might be moved from the `Kafka` resource to the `KafkaNodePool` resource and its `.spec` section according to the needs.
 This proposal tries to minimize the effort and the scope and therefore picks up only some of the fields for the initial implementation.
 Since the existing fields in the `Kafka` CR will be used as the _defaults_, new fields can be added to `KafkaNodePool` resource in the future without any backwards compatibility concerns.
 
@@ -153,7 +152,7 @@ The `Kafka` and `KafkaNodePool` resources always have to be in the same namespac
 
 #### Example
 
-The following example shows how the `Kafka` and `KafkaNodePool` resources might combine:
+The following example shows how the `Kafka` and `KafkaNodePool` resources might combine to setup a Kafka cluster with 6 different brokers:
 
 ```yaml=
 apiVersion: kafka.strimzi.io/v1beta2
@@ -314,7 +313,7 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  role:
+  roles:
     - controller
     - broker
   replicas: 3
@@ -374,7 +373,7 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  role:
+  roles:
     - controller
   replicas: 3
   resources:
@@ -400,7 +399,7 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  role:
+  roles
     - broker
   replicas: 6
   resources:
@@ -521,13 +520,14 @@ This process should be also recommended to the users in the documentation.
 
 In the future, we should try to improve the Cruise Control support to make this process easier (maybe with a new rebalance mode `move-broker` or something similar).
 This is however not part of this proposal.
+Until this is implemented, the partition replicas can be moved also using the `kafka-reassign-partitions.sh` tool.
 
 Despite the risks and limitations, having the ability to be able to move the nodes between node pools is still desired and might be useful.
 So it should still be supported, even if it might not be part of the initial implementation.
 
 ### Deletion of the `KafkaNodePool` resource
 
-When the `KafkaNodePool` resource belonging to an existing Kafka cluster is deleted, all the resources belonging to it and managed by it will be deleted.
+When the `KafkaNodePool` resource belonging to an existing Kafka cluster is deleted, all the resources belonging to it and managed by it will be deleted as well.
 This will also include the Pods and other resources.
 The PVCs will be deleted only if the `deleteClaim` flag was set to `true` in the storage configuration.
 While it is possible that the user deleted the `KafkaNodePool` by mistake, once the resource is deleted, there is not much the operator can do about it.
@@ -678,6 +678,8 @@ We should try to find a new way how to indicate this.
 E.g. some `useNodePools: true` flag?
 If we use such flag, do we still need the feature gate?
 Maybe es, but we can graduate it more quickly.
+Do we even want to support this in the long term?
+Or do we want to force a migration to node pool resources? (Migration to KRaft would be a good option for that)
 
 ### Using it per-cluster
 
@@ -685,6 +687,12 @@ The feature gate is enabled / disabled per-operator.
 That means it is disabled or enabled for all Kafka clusters managed by given operator.
 That is not nice if it means converting all of the custom resources to enable it.
 Solving the migration issue described in previous section might solve this one as well.
+
+### Making the `Kafka.spec.kafka` fields optional
+
+The node pools take over the responsibility for configuring the replicas or storage which are today mandatory fields.
+Do we want to make them optional right away?
+Or only when the feature gate moves to the beta phase and is enabled by default?
 
 ## Risks
 
@@ -696,6 +704,10 @@ But their creation is not a single operation.
 It can therefore happen that the operator first sees only the `KafkaNodePool` resources but not the `Kafka` resource or the other way around.
 The basic situations can be handled by the operator code.
 But it is not completely clear how many problems and various race conditions this might be causing when updating the node pools for existing clusters etc.
+
+The eventual consistency also shows up in situations when you for example decide to scale two of your node pools.
+The scale events will be independent and will almost never be caught by the same reconciliation.
+So you will have one reconciliation to scale the first pool followed by the second to scale the second one.
 
 ## Not impacted
 
@@ -783,7 +795,7 @@ This would have some disadvantages:
 * Having a single resource is easier to work with as it has a clear consistency.
   Using multiple resources means you have to deal with Kubernetes's eventual consistency when updating multiple resources at the same time
 
-And of course also some disadvantages:
+And of course also some advantages:
 * It would not possible to support the `scale` sub-resource and support autoscaling in the future.
 * In the past, we had issues with the size of our CRDs.
   Bundling the node pools into the `Kafka` CRD would make it bigger.
