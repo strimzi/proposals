@@ -120,7 +120,8 @@ The other fields will be optional.
 At the same time, the replicas and storage sections will be made optional in the `Kafka` resource since when using node pools, and they will ignored if set.
 
 When the optional field is not present in `KafkaNodePool` and is present in `Kafka.spec.kafka`, it will default to the configured value from the `Kafka` CR.
-However, this will be applied only on the highest level as shown in the example below:
+So when `KafkaNodePool.spec.<field>` exists, `KafkaNodePool.spec.<field>` will be ignored.
+This will be applied only on the highest level as demonstrated in the example below:
 
 * If the `KafkaNodePool.spec.jvmOptions` does not exist but `Kafka.spec.kafka.jvmOptions` does exist, the values from `Kafka.spec.kafka.jvmOptions` will be used.
 * When `KafkaNodePool.spec.jvmOptions` exists and has `-Xmx: 1024m` and `Kafka.spec.kafka.jvmOptions` exists as well with `-Xms: 512m`, the operator will completely ignore the value from `Kafka.spec.kafka.jvmOptions` and use only the value from `KafkaNodePool.spec.jvmOptions`.
@@ -479,6 +480,8 @@ Similarly, setting an annotation `strimzi.io/remove-node-ids` will allow to conf
 This will support only an ordered list of nodes IDs without ranges.
 When the operator is adding or removing a node from the pool, it will look at these annotations and if they are set, it will use them to override the default mechanism for picking up the next node ID or the node to remove.
 These annotations will be ignored when scaling is not requested by changing `.spec.replicas`.
+If these annotations cannot be fulfilled (for example because the ID is already taken and already in use) they will be ignored and the next suitable ID will be picked up.
+The operator will raise a warning in its log in such case.
 
 The annotations will be used only when scaling up or down or moving nodes.
 The operator will validate them only in such situations and not during every reconciliation.
