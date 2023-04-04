@@ -117,10 +117,9 @@ spec:
 
 The replicas and storage sections will be required in `KafkaNodePool`.
 The other fields will be optional.
-At the same time, the replicas and storage sections will be made optional in the `Kafka` resource since when using node pools, and they will ignored if set.
 
 When the optional field is not present in `KafkaNodePool` and is present in `Kafka.spec.kafka`, it will default to the configured value from the `Kafka` CR.
-So when `KafkaNodePool.spec.<field>` exists, `KafkaNodePool.spec.<field>` will be ignored.
+So when `KafkaNodePool.spec.<field>` exists, `Kafka.spec.kafka.<field>` will be ignored.
 This will be applied only on the highest level as demonstrated in the example below:
 
 * If the `KafkaNodePool.spec.jvmOptions` does not exist but `Kafka.spec.kafka.jvmOptions` does exist, the values from `Kafka.spec.kafka.jvmOptions` will be used.
@@ -131,6 +130,16 @@ In the future, additional fields might be moved from the `Kafka` resource to the
 This proposal tries to minimize the effort and the scope and therefore picks up only some of the fields for the initial implementation.
 Since the existing fields in the `Kafka` CR will be used as the _defaults_, new fields can be added to `KafkaNodePool` resource in the future without any backwards compatibility concerns.
 
+### Impact on the `Kafka` custom resource
+
+In the Kafka custom resource, the `.spec.kafka.replicas` and `.spec.kafka.storage` are required today.
+In the future, these options will be defined in the `KafkaNodePool` resources and not in the `Kafka` resource.
+With the introduction of the `KafkaNodePool` resource, we will make them optional and deprecated.
+This will be done only after the `KafkaNodePool` feature gate moves to beta phase and will be enabled by default.
+
+Until then, the `.spec.kafka.replicas` and `.spec.kafka.storage` fields will remain required so that the regular users not using node pools have the proper validation of the custom resources at the Kubernetes level.
+Users who want to test the node pools in the alpha phase, will set dummy values in these fields.
+
 ### Resource naming
 
 Each node pool will be represented by its own `StrimziPodSet` and pods running the actual nodes.
@@ -138,10 +147,16 @@ The `StrimziPodSet` will be created automatically by the operator based on the `
 The `StrimziPodSet` will be named `<ClusterName>-<PoolName>` - e.g. `my-cluster-big-nodes`.
 The resulting pods will be named `<ClusterName>-<PoolName>-<ID>` - e.g. `my-cluster-big-nodes-5`.
 The naming of the related resources such as Services, Config Maps, or PVCs will follow the pod names.
+For example the services will be named `<ClusterName>-<PoolName>-<ListenerName>-<ID>` for per-broker and `<ClusterName>-<PoolName>-<ListenerName>-bootstrap` for the bootstrap service.
 
 That means that when a node moves from one pool to another, all the resources will be recreated including the per-node services or storage.
 It is not possible to re-use these things not just because of the naming concerns, but also because the different pools might have different configurations and the old resources might not be re-usable.
 So a node which moves will start from _zero_ with empty disk and will need to re-sync all the data.
+
+Combining the name of the `Kafka` custom resource and the `KafkaNodePool` resource creates a constraint on how long the names can be since the names of Kubernetes resources are limited to 63 characters and all the resource names derived from the `Kafka` and `KafkaNodePool` names have to fit into this limit.
+But following this pattern allows us to provide backwards compatibility (`Kafka` cluster `my-cluster` with `KafkaNodePool` named `kafka` will result in pods named `my-cluster-kafka-<ID>` which is the same name as used today).
+It also creates a consistency with the other already existing resources which are part of the Kafka cluster and which cannot be simply renamed (such as names of the existing services etc.).
+So we should stick with it despite the limitations.
 
 ### Matching the node pools to the Kafka cluster
 
@@ -240,7 +255,7 @@ spec:
 #### Protecting `KafkaNodePool` resources from being shared between multiple Kafka clusters
 
 The `strimzi.io/cluster` label should guarantee that the node pool will match only one Kafka cluster.
-Additional protection will be made against undesired moves between different Kafka clusters when the `strimzi.io/cluster` label is modified.)
+Additional protection will be made against undesired moves between different Kafka clusters when the `strimzi.io/cluster` label is modified.
 The `.status` section of the `KafkaNodePool` resource will contain the Kafka cluster ID of the cluster it belongs to.
 For example:
 
@@ -260,7 +275,7 @@ status:
 
 The cluster ID is already part of the `Kafka` CR `.status` section.
 The operator will check the cluster IDs in every reconciliation and if the cluster IDs don't match between the `Kafka` and `KafkaNodePool` CRs, it will expect that there is some kind of an misconfiguration.
-It will throw an `InvalidresourceException` and wait for the user to fix the issue.
+It will throw an `InvalidResourceException` and wait for the user to fix the issue.
 
 ### Scaling the node pools
 
@@ -486,7 +501,7 @@ The operator will raise a warning in its log in such case.
 The annotations will be used only when scaling up or down or moving nodes.
 The operator will validate them only in such situations and not during every reconciliation.
 It is expected that when using auto-scaling, the annotations will not be updated after every scale-up or scale-down event.
-So when the use specifies with annotation for example that new nodes should come from a range `[1000-1010]`, such annotation is considered valid even when some of the IDs from the range are already in use.
+So when the user specifies with annotation for example that new nodes should come from a range `[1000-1010]`, such annotation is considered valid even when some of the IDs from the range are already in use.
 This way, the node pool can auto-scale up and down within the range without changing the annotation.
 
 #### Moving nodes between node pools
@@ -532,7 +547,7 @@ So it should still be supported, even if it might not be part of the initial imp
 
 When the `KafkaNodePool` resource belonging to an existing Kafka cluster is deleted, all the resources belonging to it and managed by it will be deleted as well.
 This will also include the Pods and other resources.
-The PVCs will be deleted only if the `deleteClaim` flag was set to `true` in the storage configuration.
+The PVCs will be deleted only if the `deleteClaim` flag was set to `true` in the storage configuration (default value for `deleteClaim` is `false` - so it will not be deleted by default).
 While it is possible that the user deleted the `KafkaNodePool` by mistake, once the resource is deleted, there is not much the operator can do about it.
 This behavior does not differ from what happens if the `Kafka` custom resource is deleted, so it does not introduce any new behavior.
 Users can use other mechanisms such as RBAC or finalizers to prevent deleting the custom resources by mistake.
