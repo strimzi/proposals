@@ -166,6 +166,10 @@ The node pools will use the same mechanism to define to which cluster they belon
 For example, the label `strimzi.io/cluster: my-cluster` will mean that this node pool belongs to a Kafka cluster named `my-cluster`.
 The `Kafka` and `KafkaNodePool` resources always have to be in the same namespace.
 
+In order to use the `KafkaNodePool` resources users would also need to:
+* Make sure the feature gate is enabled
+* Add an annotation `strimzi.io/nodePools: enabled` to the `Kafka` custom resource
+
 #### Example
 
 The following example shows how the `Kafka` and `KafkaNodePool` resources might combine to setup a Kafka cluster with 6 different brokers:
@@ -176,6 +180,8 @@ kind: Kafka
 metadata:
   name: my-cluster
   namespace: my-namespace
+  annotations:
+    strimzi.io/nodePools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -299,6 +305,8 @@ kind: Kafka
 metadata:
   name: my-cluster
   namespace: my-namespace
+  annotations:
+    strimzi.io/nodePools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -359,6 +367,8 @@ kind: Kafka
 metadata:
   name: my-cluster
   namespace: my-namespace
+  annotations:
+    strimzi.io/nodePools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -435,6 +445,8 @@ spec:
       type: persistent-claim
       size: 1000Gi
 ```
+
+The KRaft mode will be supported only through the `KafkaNodePool` resources.
 
 ### Handling of node IDs
 
@@ -563,11 +575,16 @@ The following table shows the expected graduation of the `KafkaNodePools` featur
 | Phase | Strimzi versions       | Default state                                          |
 |:------|:-----------------------|:-------------------------------------------------------|
 | Alpha | 0.35 - 0.37            | Disabled by default                                    |
-| Beta  | 0.38 - 0.40            | Enabled by default                                     |
-| GA    | 0.41 and newer         | Enabled by default (without possibility to disable it) |
+| Beta  | 0.38 - 0.39            | Enabled by default                                     |
+| GA    | 0.40 and newer         | Enabled by default (without possibility to disable it) |
 
 The main purpose of the feature gate is in this case to protect users from a feature which is not mature enough and might be removed in future versions.
 Only small parts of the code will actually depend on the feature gate being enabled or disabled.
+
+The annotation `strimzi.io/nodePools: enabled` on the `Kafka` custom resource will be also required in order to use the `KafkaNodePool` resources on a given Kafka cluster.
+
+Since the KRaft mode will be supported only with `KafkaNodePool` resources, the `UseKRaft` feature gate will be configured as dependent on the `KafkaNodePools` feature gate.
+It will not be possible to enable `UseKRaft` feature gate without also having `KafkaNodePools` feature gate enabled.
 
 #### Virtual node pool
 
@@ -575,12 +592,25 @@ To avoid two parallel implementations in the Strimzi source code, the operator w
 It will internally (the _virtual_ node pool will not exist as a Kubernetes resource) create the a node pool based on the `Kafka` custom resource and create the resources through this node pool with the same names and configurations as before.
 This significantly simplifies the implementation and testing since the same code will be used all the time.
 
-### Backwards compatibility
+### Backwards compatibility and migration
 
-The node pools are not backwards compatible, but provide a simple migration path.
-When the feature gate is enabled, users have to use the `KafkaNodePool` resources.
-But they can easily convert the existing `Kafka` custom resource into a matching `Kafka` and `KafkaNodePool` resources.
-For example the following `Kafka` CR which can be used with the feature gate disabled:
+When the `KafkaNodePool` feature gate is enabled, users do not need to change anything right away.
+They can keep using their existing `Kafka` resources without any changes.
+The operator will continue to use the _virtual node pool_ as described in the previous section.
+
+When they decide to start using the actual `KafkaNodePool` resources, they can either:
+* Deploy a brand new Kafka cluster with one or more `KafkaNodePool` resources
+* Convert their existing Kafka cluster to use node pools
+
+#### Converting existing Apache Kafka clusters
+
+To convert an existing Kafka cluster to use node pools, the user has to do the following two steps:
+
+1. Create a new `KafkaNodePool` named `kafka` with the `.spec.replicas` and `.spec.storage` matching the configuration from their `Kafka` custom resource.
+2. Add an annotation `strimzi.io/nodePools: enabled` to the `Kafka` custom resource
+
+The following examples shows the important parts of the conversion.
+An initial `Kafka` custom resource like this:
 
 ```yaml=
 apiVersion: kafka.strimzi.io/v1beta2
@@ -607,13 +637,6 @@ spec:
       default.replication.factor: 3
       min.insync.replicas: 2
       inter.broker.protocol.version: "3.3"
-    resources:
-      requests:
-        memory: 64Gi
-        cpu: 8
-      limits:
-        memory: 64Gi
-        cpu: 12
     storage:
       type: jbod
       volumes:
@@ -624,18 +647,17 @@ spec:
   # ...
 ```
 
-Is equivalent to this combination of `Kafka` and `KafkaNodePool` resources:
+Is equivalent to the following combination of `Kafka` and `KafkaNodePool` resources:
 
 ```yaml=
 apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
 metadata:
   name: my-cluster
+  annotations:
+    strimzi.io/nodePools: enabled
 spec:
   kafka:
-    nodePoolSelector:
-      matchLabels:
-        cluster: my-cluster
     version: 3.3.1
     listeners:
       - name: plain
@@ -661,16 +683,9 @@ kind: KafkaNodePool
 metadata:
   name: kafka
   labels:
-    cluster: my-cluster
+    strimzi.io/cluster: my-cluster
 spec:
   replicas: 3
-  resources:
-    requests:
-      memory: 64Gi
-      cpu: 8
-    limits:
-      memory: 64Gi
-      cpu: 12
   storage:
     type: jbod
     volumes:
@@ -678,39 +693,20 @@ spec:
       type: persistent-claim
       size: 1000Gi
       class: fast-storage
+  # ...
 ```
 
 Because the `KafkaNodePool` is named `kafka`, all the resources created by this configuration will be exactly the same and have the same names as today.
+Once the initial migration is complete, users can continue to use the node pools without any limitation.
+For example add additional node pools or further modify the `kafka` node pool.
 
-## Open Points
+#### Migration to KRaft
 
-### Migration
-
-The backwards compatibility / migration story seems weak.
-The code already supports handling the original `Kafka` CR through the _virtual node pool_.
-Maybe we can use this and just find a way how to indicate if the user wants to use the `KafkaNodePool` resources or use the `Kafka` with the virtual node pool.
-That would allow to enable the feature gate without converting the custom resource and make it backwards compatible.
-Originally, the node pool selector in the `Kafka` CR was supposed to play this role.
-But that was abandoned for other reasons.
-We should try to find a new way how to indicate this.
-E.g. some `useNodePools: true` flag?
-If we use such flag, do we still need the feature gate?
-Maybe es, but we can graduate it more quickly.
-Do we even want to support this in the long term?
-Or do we want to force a migration to node pool resources? (Migration to KRaft would be a good option for that)
-
-### Using it per-cluster
-
-The feature gate is enabled / disabled per-operator.
-That means it is disabled or enabled for all Kafka clusters managed by given operator.
-That is not nice if it means converting all of the custom resources to enable it.
-Solving the migration issue described in previous section might solve this one as well.
-
-### Making the `Kafka.spec.kafka` fields optional
-
-The node pools take over the responsibility for configuring the replicas or storage which are today mandatory fields.
-Do we want to make them optional right away?
-Or only when the feature gate moves to the beta phase and is enabled by default?
+As mentioned earlier, KRaft will be supported only with the use of the `KafkaNodePool` resources. 
+_(The detailed description of the migration to KRaft is not part of this proposal.)_
+Thanks to that, latest when ZooKeeper support is removed from Strimzi and Apache Kafka, all users will have to migrate from using the _virtual node pool_ to the `KafkaNodePools`.
+So once the ZooKeeper support is removed from Strimzi, we will also remove the support for the _virtual node pool_ and the `strimzi.io/nodePools` annotation.
+And all Strimzi based Apache Kafka clusters will have to use the `KafkaNodePool` resources
 
 ## Risks
 
@@ -808,12 +804,12 @@ spec:
             size: 1000Gi
 ```
 
-This would have some disadvantages:
+This would have some advantages:
 
 * Having a single resource is easier to work with as it has a clear consistency.
   Using multiple resources means you have to deal with Kubernetes's eventual consistency when updating multiple resources at the same time
 
-And of course also some advantages:
+And of course also some disadvantages:
 * It would not possible to support the `scale` sub-resource and support autoscaling in the future.
 * In the past, we had issues with the size of our CRDs.
   Bundling the node pools into the `Kafka` CRD would make it bigger.
