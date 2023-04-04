@@ -168,7 +168,7 @@ The `Kafka` and `KafkaNodePool` resources always have to be in the same namespac
 
 In order to use the `KafkaNodePool` resources users would also need to:
 * Make sure the feature gate is enabled
-* Add an annotation `strimzi.io/nodePools: enabled` to the `Kafka` custom resource
+* Add an annotation `strimzi.io/node-pools: enabled` to the `Kafka` custom resource
 
 #### Example
 
@@ -181,7 +181,7 @@ metadata:
   name: my-cluster
   namespace: my-namespace
   annotations:
-    strimzi.io/nodePools: enabled
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -306,7 +306,7 @@ metadata:
   name: my-cluster
   namespace: my-namespace
   annotations:
-    strimzi.io/nodePools: enabled
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -368,7 +368,7 @@ metadata:
   name: my-cluster
   namespace: my-namespace
   annotations:
-    strimzi.io/nodePools: enabled
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: 3.4.0
@@ -581,7 +581,7 @@ The following table shows the expected graduation of the `KafkaNodePools` featur
 The main purpose of the feature gate is in this case to protect users from a feature which is not mature enough and might be removed in future versions.
 Only small parts of the code will actually depend on the feature gate being enabled or disabled.
 
-The annotation `strimzi.io/nodePools: enabled` on the `Kafka` custom resource will be also required in order to use the `KafkaNodePool` resources on a given Kafka cluster.
+The annotation `strimzi.io/node-pools: enabled` on the `Kafka` custom resource will be also required in order to use the `KafkaNodePool` resources on a given Kafka cluster.
 
 Since the KRaft mode will be supported only with `KafkaNodePool` resources, the `UseKRaft` feature gate will be configured as dependent on the `KafkaNodePools` feature gate.
 It will not be possible to enable `UseKRaft` feature gate without also having `KafkaNodePools` feature gate enabled.
@@ -607,7 +607,7 @@ When they decide to start using the actual `KafkaNodePool` resources, they can e
 To convert an existing Kafka cluster to use node pools, the user has to do the following two steps:
 
 1. Create a new `KafkaNodePool` named `kafka` with the `.spec.replicas` and `.spec.storage` matching the configuration from their `Kafka` custom resource.
-2. Add an annotation `strimzi.io/nodePools: enabled` to the `Kafka` custom resource
+2. Add an annotation `strimzi.io/node-pools: enabled` to the `Kafka` custom resource
 
 The following examples shows the important parts of the conversion.
 An initial `Kafka` custom resource like this:
@@ -655,7 +655,7 @@ kind: Kafka
 metadata:
   name: my-cluster
   annotations:
-    strimzi.io/nodePools: enabled
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: 3.3.1
@@ -705,7 +705,7 @@ For example add additional node pools or further modify the `kafka` node pool.
 As mentioned earlier, KRaft will be supported only with the use of the `KafkaNodePool` resources. 
 _(The detailed description of the migration to KRaft is not part of this proposal.)_
 Thanks to that, latest when ZooKeeper support is removed from Strimzi and Apache Kafka, all users will have to migrate from using the _virtual node pool_ to the `KafkaNodePools`.
-So once the ZooKeeper support is removed from Strimzi, we will also remove the support for the _virtual node pool_ and the `strimzi.io/nodePools` annotation.
+So once the ZooKeeper support is removed from Strimzi, we will also remove the support for the _virtual node pool_ and the `strimzi.io/node-pools` annotation.
 And all Strimzi based Apache Kafka clusters will have to use the `KafkaNodePool` resources
 
 ## Risks
