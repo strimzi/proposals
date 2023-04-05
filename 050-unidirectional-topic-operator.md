@@ -7,7 +7,7 @@ Replace the existing bidirectional topic operator with a unidirectional operator
 The Strimzi Topic Operator provides a Kubernetes API for viewing and modifying topics within a Kafka cluster.
 It deviates from the standard operator pattern by being bidirectional.
 That is, it will reconcile changes to a `KafkaTopic` resource both to _and from_ a Kafka cluster.
-The bidirectionality means applications and users can continue to use Kafka-native APIs (such as the `Admin` client) and tooling (e.g. the scripts provided by Apache Kafka) as required. The KafkaTopic's spec will be updated by the operator to reflect those changes.
+The bidirectionality means applications and users can continue to use Kafka-native APIs (such as the `Admin` client) and tooling (e.g. the scripts provided by Apache Kafka) as required. The KafkaTopic's `spec` will be updated by the operator to reflect those changes.
 
 Usually the Strimzi community often abbreviates the topic operator as TO, but in this document we will refer to the existing bidirectional topic operator as the BTO,
 and the proposed unidirectional topic operator as the UTO.
@@ -114,7 +114,7 @@ The fact that there are legal topic names (in Kafka) that are not legal resource
 As such it's not possible for the Kube apiserver to enforce the single resource principal because multiple `KafkaTopic` resource might refer to the same topic (i.e. the uniqueness constraint on `metadata.name` is insufficient).
 It is therefore left to the operator to detect if there are multiple `KafkaTopics` which point to the same topic in Kafka.
 
-To do this, the operator will keep an in-memory mapping of topic name to (namespace, name)-pairs.
+To do this, the operator will keep an in-memory mapping of _topic name_ to (`metadata.namespace`, `metadata.name`)-pairs (where _topic name_ is `spec.topicName`, defaulting to `metadata.name` as described above).
 This will allow us to detect the case where multiple resources are attempting to manage the same topic in Kafka.
 When this happens both resources' `Ready` status will change to `False` with suitable `reason`.
 
@@ -475,7 +475,7 @@ To help avoid collisions where two or more `KafkaTopics` are trying to manage th
 
 > This is different to the collision within a single namespace which is detected and notified using a `Ready=false` condition with `reason=ResourceConflict`, described above.
 > In the single namespace case the cause is likely a mistake by a team, who need to know about the each of the conflicting resources to resolve the problem.
-> Support for multiple namesapces is motivated by a kind of multitenancy use case, where namespaces are assigned a disjoint subset of the topic space and management of those topics is delegated to different teams with their own namespace (e.g. using Kube RBAC). 
+> Support for multiple namespaces is motivated by a kind of multitenancy use case, where namespaces are assigned a disjoint subset of the topic space and management of those topics is delegated to different teams with their own namespace (e.g. using Kube RBAC). 
 > We can't assume that either team involved in the conflict know about the existence of the other.
 > Therefore a different `reason` seems appropriate.
 
@@ -492,7 +492,7 @@ This WILL be supported by:
 
 #### Change the `metadata.namespace` 
 
-In the case of a UTO configured for multiple namesapces it will be possible to move the `KafkaTopic` for a topic in Kafka from one namespace to another by:
+In the case of a UTO configured for multiple namespaces it will be possible to move the `KafkaTopic` for a topic in Kafka from one namespace to another by:
 
   1. Unmanging the `KafkaTopic` in the old namespace (as described above)
   2. Deleting the `KafkaTopic` from the old namespace,
