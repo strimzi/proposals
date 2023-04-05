@@ -294,7 +294,7 @@ But the `scale` sub-resource would make it easier to develop such solutions in t
 
 ### KRaft support
 
-To support the Kafka KRaft mode, a new field `role` will be added to the `KafkaNodePool` as well.
+To support the Kafka KRaft mode, a new field `roles` will be added to the `KafkaNodePool` as well.
 It will contain a list of roles (`controller` or `broker`) which the nodes in given pool should have.
 This will allow to use different configurations.
 For example, for a small cluster with shared broker and controller responsibilities:
