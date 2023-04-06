@@ -642,6 +642,24 @@ Furthermore within the same structure:
 
 * `status.conditions` may have new values for the `reason`.
 
+The semantics of the CR API will also change:
+
+1. Unidirectional reconciliation
+2. The absence of fields will not imply that they take their default values, only that the value is not specified in this CR.
+
+> The reason for 2 is to leave the door open to a further refinement of the UTO in the future.
+> Consider the case where a Kafka cluster is centrally managed by an infrastruture team, and the multi-namespace support is being used to allow application teams some control over their topics. 
+> The infra team want to delegate control over only a subset of the possible topic configs. 
+> Configs such as `cleanup.policy` and `compression.type` can be delegated to the application teams.
+> But the infra team want to retain control over configs such as `follower.replication.throttled.replicas`, `min.cleanable.dirty.ratio` or `unclean.leader.election.enable`.
+> So long as these subsets are disjoint there is no possibility of conflict in allowing two KafkaTopics in different namespaces to manage the different aspects of a single topic in Kafka.
+> The disjointness could be enforced by a more sophistocated namespace policy which enumerated the configs.
+> The same logic also applies to `spec.partitions` and `spec.replicas`.
+> There would be the possibility of conflict around resource _existence_. 
+> That is, how should the operator behave if the application team delete their KafkaTopic while a KafkaTopic managing the same topic remains in the infra team's namespace?
+> This proposal doesn't attempt to answer that, since it's not proposed to implement it currently.
+> But in order to allow this possibility without introducing an incompatible change in the future we need to define the semantics of fields that are unspecified in the `spec` to mean "unspecified by this CR" rather than "takes the default value".
+
 ### Metrics
 
 The BTO exports the following metrics
@@ -716,10 +734,10 @@ Alternatively it might be possible to use a Kafka-aware proxy to redirect Kafka 
 
 This propsal aims to set the direction and define the semantics of the UTO.
 It is not intended, by itself, to define the complete post-BTO picture.
-Future work would include:
+Future work _could_ include:
 
-* Defining the `Kafka` schema changed need for the CO to deploy the UTO.
-* Possibly providing tooling to conveniently create `KafkaTopics` for existing topics in Kafka. 
+* Providing tooling to conveniently create `KafkaTopics` for existing topics in Kafka.
+* Adopting the config partitioning idea to allow multiple `KafkaTopics` to manage disjoint subsets of topics' configurations.
 
 ## Rejected alternatives
 
