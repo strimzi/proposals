@@ -540,6 +540,58 @@ The operator will emit a `WARN` level log on startup if autocreation is enabled.
 
 Alternatively: App could be written to wait for topic existency, or use an init container to do the same.
 
+## Summary of modes
+
+This proposal has described a number of different configurations of a KafkaTopic and how the operator will handle them.
+The following diagram and subsections summarise the operator's behaviour on transitions between these states.
+
+![States and their transitions](050-states.png)
+
+Although not shown to avoid making the diagram overly complicated, the states within the dashed box are pairwise bidirectionally connected.
+
+### Unselected
+
+* The operator's label selector (`STRIMZI_RESOURCE_LABELS`) doesn't match the `KafkaTopic`'s `metadata.labels`.
+* The operator completely ignores the resource (it might be intended for a different instance of the UTO)
+* On transition from start: The `metadata.finalizer` is not added.
+* On transition from any state in the dashed box, the `metadata.finalizer` is not changed (if it were then changing the `metadata.labels` to unmatch operator instance A and match operator instance B would result in a race on A removing the finalizer and B adding it).
+* On deletion any finalizer is not removed, therefore this edge case might result in a zombie `KafkaTopic`.
+
+### Unmanaged
+
+* This is `spec.managed=false`
+* The operator doesn't propagate changes to Kafka. 
+* The presence of the finalizer will be checked-for on each reconciliation of the resource.
+* Deletion does not result in deletion of any topics in Kafka (which is why it's not connected to the Deletable 1 state).
+* On transition to Deletable 2: The operator will remove the finalizer.
+* On transition to any of the other states in the dashed box: The state of the topic in Kafka will be changed to match the `spec`.
+
+### Managed not conflicting
+
+* This is the normal case where changes are propagated to Kafka.
+* On transition to Deletable 1: The topic is deleted from Kafka, and then the finalizer is removed.
+* Transitions to Unmanaged if `spec.managed` is changed to `false`.
+* Transitions to "Managed Conflicting First" if another `KafkaTopic` is created for the same topic in Kafka.
+* Transitions to "Managed Conflicting Rest" is a race case, rare in practice, where a second `KafkaTopic` is created for the same topic in Kafka with the same `metadata.creationTimestamp`.
+
+### Managed conflicting first
+
+* This is the case where there are multiple `KafkaTopics` for the same topic in Kafka, and this one has the unique oldest `metadata.creationTimestamp`.
+* It behaves the same as the "Managed not conflicting" case except with respect to deletion. 
+* Since other `KafkaTopics` exist for the same topic deletion of this `KafkaTopic` does not result in deletion from Kafka.
+
+### Managed conflicting rest
+
+* This is the case where there are multiple `KafkaTopics` for the same topic in Kafka, and this one does not have the unique oldest `metadata.creationTimestamp`.
+* There may, or may not, be another `KafkaTopic` for the same topic in Kafka in state "Managed conflicting first".
+* Changes in this state, including deletions, are not propagated to Kafka.
+
+### PolicyViolation
+
+* This is the where a `KafkaTopic` is created in a namespace which is not allowed by the policy. 
+* The finalizer is never added, and is not removed. 
+* KafkaTopics in this state cannot transition to other state unless the policy is changed, in which case the effect is as-if they'd been created from scratch.
+
 ## Affected/not affected projects
 
 * The existing bidirectional Topic Operator would be deprecated and removed once ZooKeeper-based clusters are no longer supported.
