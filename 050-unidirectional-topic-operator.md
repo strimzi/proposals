@@ -7,10 +7,10 @@ Replace the existing bidirectional topic operator with a unidirectional operator
 The Strimzi Topic Operator provides a Kubernetes API for viewing and modifying topics within a Kafka cluster.
 It deviates from the standard operator pattern by being bidirectional.
 That is, it will reconcile changes to a `KafkaTopic` resource both to _and from_ a Kafka cluster.
-The bidirectionality means applications and users can continue to use Kafka-native APIs (such as the `Admin` client) and tooling (e.g. the scripts provided by Apache Kafka) as required. The KafkaTopic's `spec` will be updated by the operator to reflect those changes.
+The bidirectionality means applications and users can continue to use Kafka-native APIs (such as the `Admin` client) and tooling (e.g. the scripts provided by Apache Kafka) as required.
+The KafkaTopic's `spec` will be updated by the operator to reflect those changes.
 
-Usually the Strimzi community often abbreviates the topic operator as TO, but in this document we will refer to the existing bidirectional topic operator as the BTO,
-and the proposed unidirectional topic operator as the UTO.
+The Strimzi community often abbreviates the topic operator as TO, but to avoid ambiguity in this document we will refer to the existing bidirectional topic operator as the BTO, and the proposed unidirectional topic operator as the UTO.
 
 The BTO makes use of ZooKeeper znode watches to know about changes to topic state within the Kafka cluster.
 
@@ -70,8 +70,8 @@ For these reasons we are proposing the UTO.
 
 ### CR API
 
-We would remain compatible with the existing `KafkaTopic` resource at the API level. 
-This means that all existing resources could be handled by the new operator and all existing fields of the `status` would still be present for applications that consume the status.
+We would remain schema-compatible with the existing `KafkaTopic` resource at the API level. 
+This means that all existing `spec` section could be handled by the new operator and all existing fields of the `status` would still be present for applications that consume the status.
 However, the semantics of a `KafkaTopic` would change incompatibly: The `spec` would no longer be updated when Kafka-side configuration changed.
 Instead if Kafka-side configuration was changed out-of-band (e.g. by using the `Admin` client, or Kafka shell scripts) those changes would eventually (depending on the timed reconciliation interval) be reverted.
 
@@ -98,11 +98,16 @@ status:
 ```
 
 Where: 
-  * `spec.topicName` is optional and needs only be used for topic names which are not legal as kube resources. 
+  * `spec.topicName` is optional and needs only be used for topic names which are not legal kube resource names. 
     When this field is absent the name of the topic is Kafka is taken from the `metadata.name`.
-  * `status.topicName` is used to detect a change to the `spec.topicName`, which results in an error
+    In the example above of a `KafkaTopic` managing the `__consumer_offsets` topic, the `metadata.name` cannot be
+    `__consumer_offets` because that's not allowed as resource name in Kube, so the `metadata.name` must be something else and  `spec.topicName` is required.
+  * `status.topicName` is used to detect a change to the `spec.topicName`, which results in the topic having a `Ready` condition with `status = False` (i.e. is an error).
   * `metadata.generation == status.observedGeneration` implies that the operator has reconciled the latest change to the `spec`.
+    When `metadata.generation > status.observedGeneration` it means the resource has been changed, but the operator has not
+    yet reacted to the change.
     Whether that reconciliation was successful is indicated by the `Ready` condition having status `True`.
+    
 
 Some new fields will be introduced in the following text.
 
@@ -116,7 +121,7 @@ It is therefore left to the operator to detect if there are multiple `KafkaTopic
 
 To do this, the operator will keep an in-memory mapping of _topic name_ to (`metadata.namespace`, `metadata.name`)-pairs (where _topic name_ is `spec.topicName`, defaulting to `metadata.name` as described above).
 This will allow us to detect the case where multiple resources are attempting to manage the same topic in Kafka.
-When this happens both resources' `Ready` status will change to `False` with suitable `reason`.
+When this happens the unique oldest (as determined by the `metadata.creationTimestamp`) `KafkaTopic` will be considered to manage the topic, and the other `KafkaTopics` will be updated: their `Ready` status will change to `False` with suitable `reason`.
 
 ```yaml=
 kind: KafkaTopic
@@ -124,14 +129,13 @@ metadata:
   generation: 123
   namespace: some-namespace
   name: foo
+  creationTimestamp: 20230301T103000Z
 status:
   topicName: __consumer_offsets
   observedGeneration: 123
   conditions:
   - type: Ready
-    status: False
-    reason: ResourceConflict
-    message: Managed by multiple KafkaTopic resources: some-namespace/bar, some-namespace/foo
+    status: True
     lastTransitionTime: 20230301T103000Z
 ---
 kind: KafkaTopic
@@ -139,6 +143,7 @@ metadata:
   generation: 456
   namespace: some-namespace
   name: bar
+  creationTimestamp: 20230420T103000Z
 status:
   topicName: __consumer_offsets
   observedGeneration: 456
@@ -146,8 +151,8 @@ status:
   - type: Ready
     status: False
     reason: ResourceConflict
-    message: Managed by multiple KafkaTopic resources: some-namespace/bar, some-namespace/foo
-    lastTransitionTime: 20230301T103000Z
+    message: Managed by some-namespace/foo
+    lastTransitionTime: 20230420T103000Z
 ```
 
 ### Unidirectionality
@@ -254,7 +259,7 @@ The process will first describe the topic and its configs and then make alterati
         lastTransitionTime: 20230301T103000Z
     ```
     The user will then need to decide how to proceed, but typically they might just revert the `spec.partitions`.
-* Changes to `spec.replicas` will be supported via CC, but not in the first phase of development.
+* Changes to `spec.replicas` could be supported via CC, but that is not part of _this_ proposal.
     ```yaml
     status:
       conditions:
@@ -269,19 +274,17 @@ The process will first describe the topic and its configs and then make alterati
 > For example, the UTO cannot tell whether the `spec.partitions` was decreased, or whether it was unchanged and the conflict arises because someone increased the number of partitions directly in Kafka so that it looks like the `KafkaTopic` is requesting a decrease. 
 > In any case, when the user takes action to fix the problem the `KafkaTopic` will (eventually) get reconciled and the `status` will revert to `Ready`.
 
-Unlike the BTO, the UTO will reconcile batches of the known topics spread over the reconciliation interval, in order to smooth CPU and heap usage, lowering overall resource requirements.
-
 ### Topic deletion
 
 We will use a [Kube finalizer](https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/) for deletion.
-This means that deletion via the kube REST API will first mark the resource as scheduled for deletion, allowing the operator to handle the deletion and then update the `KafkaTopic` so that the resource is actually removed from `etcd`.
+This means that deletion via the kube REST API will first mark the resource as scheduled for deletion by setting the `metadata.delectionTimestamp`, allowing the operator to handle the deletion and then update the `KafkaTopic`, removing its `metadata.finalizer` so that the resource is actually removed from `etcd`.
 
 Without a finalizer then the following would be posible:
 
 1. A topic in Kafka is managed by a `KafkaTopic`
 2. The operator stops (for any reason)
 3. The `KafkaTopic` is deleted
-4. Th operator starts
+4. The operator starts
 
 The semantics of a managed topic being deleted should be that the topic in Kafka gets deleted, but that fails to happen in this case.
 The operator cannot use the existence of a topic in Kafka to infer that the `KafkaTopic` has been deleted because topics in Kafka can be unmanaged.
@@ -428,44 +431,45 @@ Note that `spec.managed=False` means that a `KafkaTopic` can exist without there
 
 ### Multi-namespace support
 
-The operator will support multiple namespaces, subject to the _single resource principal_ [described above](#the-single-resource-principal).
+The UTO will support multiple namespaces, subject to the _single resource principal_ [described above](#the-single-resource-principal).
 
-To help avoid collisions where two or more `KafkaTopics` are trying to manage the same topic in Kafka the operator will enforce a policy for which namespaces can manage which topics. 
+In order to avoid collisions where two or more `KafkaTopics` are trying to manage the same topic in Kafka the operator will enforce a policy for which namespaces can manage which topics. 
 
 ---
 
 #### Example
 
-> Conceptually (i.e. this might not be configured via YAML):
+> Conceptually (i.e. this may or may not be configured via YAML):
 > 
 > ```yaml=
->     policy:
->     - namespace: team.a
->       topicNamePrefixes: 
->       - foo-app.
->       - bar-app-
->       topicNames:
->       - config-foo
->     - namespace: team.b
->       topicNamePrefixes
->       - quux-app.
->       topicNames:
->       - config-quux
->     - namespace: kafka.cluster.admins
->       otherTopics: True
+> policy:
+> - namespace: team.a
+>   topicNames:
+>   - config-foo
+>   topicNamePrefixes: 
+>   - foo-app.
+>   - bar-app-
+> - namespace: team.b
+>   topicNames:
+>   - config-quux
+>   topicNamePrefixes:
+>   - quux-app.
+> - namespace: kafka.cluster.admins
+>   otherTopics: True
 > ```
 > 
 > Thus:
 > 
-> - Topics `foo-app.x` and `foo-app.y` can only be managed by `KafkaTopics `in namespace `team.a` (due to the `foo-app.` prefix), likewise `bar-app-x` and `bar-app-y` (due to the `bar-app-` prefix). Additionally `config-foo` can be only managed from this namespace (due to the `topicNames` list).
-> - Topics `quux-app.x` and `quux-app.y` can only be managed by `KafkaTopics `in namespace `team.b` (due to the `quux-app.` prefix).
-> Additionally `config-quux` can be only managed from this namespace (due to the `topicNames` list).
-> - Topics `config-gee`, `__consumer_offsets`, and `__transaction_state` could only be managed from the `kafka.cluster.admins` namespace.
+> - Topic `config-foo` can be only managed from namespace `team.a` (because it's explicitly listed the `topicNames` list for that namespace).
+> - Topic `config-quux` can be only managed from namespace `team.b` (because it's explicitly listed the `topicNames` list for that namespace).
+> - Topics `foo-app.x` and `foo-app.y` can only be managed by `KafkaTopics `in namespace `team.a` (because the `foo-app.` prefix is associated with this namespace), likewise `bar-app-x` and `bar-app-y` (because the `bar-app-` prefix is also associated with this namespace).
+> - Topics `quux-app.x` and `quux-app.y` can only be managed by `KafkaTopics `in namespace `team.b` (because the `quux-app.` prefix is associated with this namespace).
+> - Topics `config-gee`, `__consumer_offsets`, and `__transaction_state` could only be managed from the `kafka.cluster.admins` namespace (because it has `otherTopics=true`).
 >
 > Rules for legal policies:
 > 
-> * All `topicNamePrefixes` must be disjoint (i.e. not given prefix is a prefix of any other prefix).
-> * No given `topicNamePrefix` maybe be a prefix of of any listed `topicNames`.
+> * All `topicNamePrefixes` must be disjoint (i.e. no prefix given in a `topicNamePrefixes` is a prefix of any other prefix given in `topicNamePrefixes` over all of the namespaced in the policy).
+> * No `topicNamePrefix` maybe be a prefix of any listed `topicNames`.
 > * Only one namespace may have `otherTopics: True`
 >
 > These rules are sufficent to guarantee that any given topic maps unambiguously to a single namespace.
@@ -475,7 +479,8 @@ To help avoid collisions where two or more `KafkaTopics` are trying to manage th
 
 > This is different to the collision within a single namespace which is detected and notified using a `Ready=false` condition with `reason=ResourceConflict`, described above.
 > In the single namespace case the cause is likely a mistake by a team, who need to know about the each of the conflicting resources to resolve the problem.
-> Support for multiple namespaces is motivated by a kind of multitenancy use case, where namespaces are assigned a disjoint subset of the topic space and management of those topics is delegated to different teams with their own namespace (e.g. using Kube RBAC). 
+> Support for multiple namespaces is motivated by a kind of multitenancy use case, where the space of topics is partitioned and partitions are uniquely associated with Kube namespaces. 
+> This allows management of those topics to be delegated to different teams, each with their own namespace (e.g. using Kube RBAC). 
 > We can't assume that either team involved in the conflict know about the existence of the other.
 > Therefore a different `reason` seems appropriate.
 
@@ -593,7 +598,12 @@ Notes:
    Exactly one of `STRIMZI_NAMESPACE` or `STRIMZI_POLICY_YAML` must be provided.
 2. Although these are present in the BTO source code they have never actually been used.
 
+It is also anticiapted that during development we may want to add support for additional environment variables to configure non-functional aspects of the UTO (e.g. performance-related options like numbers of threads used for processing, etc).
+
 #### CO-managed case
+
+The Topic Operator is usually deployed using the `Kafka` CR (i.e. the Cluster Operator deploys the Topic Operator).
+Here is how the schema for the `Kafka` CR will be changed by this proposal:
 
 ```yaml
 kind: Kafka
@@ -624,7 +634,7 @@ spec:
 
 ### CR API
 
-The CR API is structurally unchanged except:
+The CR API is _structurally_ unchanged except:
 
 * `spec.managed` (described above), optional, is added
 
@@ -633,6 +643,8 @@ Furthermore within the same structure:
 * `status.conditions` may have new values for the `reason`.
 
 ### Metrics
+
+The BTO exports the following metrics
 
 <table>
 <tr><th>Metric type	<th>Metric name				<th>Status
@@ -675,7 +687,8 @@ Any software which consumed BTO events will not be compatible with UTO.
 
 To migrate, existing BTO users would have to:
 
-1. Review how they're using the BTO and whether they require birdirectionality
+1. Review how they're using the BTO and whether they require bidirectionality
+   1. If bidirectional support is required by their usage then the UTO cannot be used. 
 2. Undeploy the BTO (they can retain their existing `KafkaTopics`)
 3. Deploy the UTO (reconfiguring their `Kafka` CR, or raw `Deployment` in the standalone case). 
 4. Some reconfiguration of pod resources and JVM options may also be required. 
