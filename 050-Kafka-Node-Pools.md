@@ -40,7 +40,7 @@ The KRaft based Kafka clusters will be typically used in 3 different architectur
 
 In Strimzi, we want to support all of these architectures.
 But we also want to make it possible to transition between them.
-Since Apache Kafka plans to remove ZooKeeper support in its 4.0 release, supporting KRaft mode in its different form is not really an option for us but something we have to do.
+Since Apache Kafka plans to remove ZooKeeper support in its 4.0 release, supporting KRaft mode in all its different forms is a requirement for us.
 
 ### Stretch clusters
 
@@ -161,7 +161,7 @@ So we should stick with it despite the limitations.
 ### Matching the node pools to the Kafka cluster
 
 A particular `KafkaNodePool` resource can belong only to a single Kafka cluster.
-The node pools will use the same mechanism to define to which cluster they belong as we use today for `KafkaConnector`, `KafkaTopic` or `KafkaUSer` resources.
+The node pools will use the same mechanism to define to which cluster they belong as we use today for `KafkaConnector`, `KafkaTopic` or `KafkaUser` resources.
 `strimzi.io/cluster` label will be set on the `KafkaNodePool` and its value will be the name of the `Kafka` custom resource to which it belongs.
 For example, the label `strimzi.io/cluster: my-cluster` will mean that this node pool belongs to a Kafka cluster named `my-cluster`.
 The `Kafka` and `KafkaNodePool` resources always have to be in the same namespace.
