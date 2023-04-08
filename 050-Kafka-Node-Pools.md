@@ -140,6 +140,27 @@ This will be done only after the `KafkaNodePool` feature gate moves to beta phas
 Until then, the `.spec.kafka.replicas` and `.spec.kafka.storage` fields will remain required so that the regular users not using node pools have the proper validation of the custom resources at the Kubernetes level.
 Users who want to test the node pools in the alpha phase, will set dummy values in these fields.
 
+The `.status` section of the `Kafka` custom resource will also contain a list of node pools used by this cluster:
+
+```yaml=
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+  namespace: my-namespace
+  annotations:
+    strimzi.io/node-pools: enabled
+spec:
+  # ...
+status:
+  # ...
+  nodePools:
+    - name: <NodePool1Name>
+    - name: <NodePool2Name>
+```
+
+The format `name: <NodePoolName>` instead of a simple list of strings was chosen to make possible to extend it in the future if needed and add additional fields.
+
 ### Resource naming
 
 Each node pool will be represented by its own `StrimziPodSet` and pods running the actual nodes.
@@ -202,6 +223,11 @@ spec:
       min.insync.replicas: 2
       inter.broker.protocol.version: "3.3"
   # ...
+status:
+  # ...
+  nodePools:
+    - name: big-nodes
+    - name: small-nodes
 ---
 
 apiVersion: kafka.strimzi.io/v1beta2
@@ -327,6 +353,11 @@ spec:
       min.insync.replicas: 2
       inter.broker.protocol.version: "3.3"
   # ...
+status:
+  # ...
+  nodePools:
+    - name: controllers
+    - name: brokers
 ---
 
 apiVersion: kafka.strimzi.io/v1beta2
@@ -589,7 +620,9 @@ It will not be possible to enable `UseKRaft` feature gate without also having `K
 #### Virtual node pool
 
 To avoid two parallel implementations in the Strimzi source code, the operator will use _virtual node pool_ when the feature gate is disabled.
-It will internally (the _virtual_ node pool will not exist as a Kubernetes resource) create the a node pool based on the `Kafka` custom resource and create the resources through this node pool with the same names and configurations as before.
+It will internally (the _virtual node pool_ will not exist as a Kubernetes resource) create the a node pool based on the `Kafka` custom resource and create the resources through this node pool.
+The _virtual node pool_ will be named `kafka` which will result in the same names of the Kubernetes resources as we use today.
+And since it will copy the configuration from the `Kafka` custom resource, the configuration (e.g. resources, storage etc.) will be the same as before as well.
 This significantly simplifies the implementation and testing since the same code will be used all the time.
 
 ### Backwards compatibility and migration
