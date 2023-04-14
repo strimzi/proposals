@@ -1,5 +1,7 @@
 # Kafka Node Pools
 
+This proposal introduces a new custom resource called `KafkaNodePool` which would allow us to configure different _pools_ of Apache Kafka nodes with different configurations and properties.
+
 ## Current situation
 
 Strimzi currently allows only one set of ZooKeeper nodes and one set of Kafka nodes.
@@ -357,8 +359,7 @@ spec:
 status:
   # ...
   nodePools:
-    - name: controllers
-    - name: brokers
+    - name: mixed
 ---
 
 apiVersion: kafka.strimzi.io/v1beta2
@@ -421,6 +422,11 @@ spec:
       min.insync.replicas: 2
       inter.broker.protocol.version: "3.3"
   # ...
+status:
+  # ...
+  nodePools:
+    - name: controllers
+    - name: brokers
 ---
 
 apiVersion: kafka.strimzi.io/v1beta2
@@ -538,7 +544,7 @@ E.g. `[3]`, `[3, 4, 5]` or `[1000-1010]`.
 Similarly, setting an annotation `strimzi.io/remove-node-ids` will allow the user to configure the IDs nodes which should be removed.
 This will support only an ordered list of nodes IDs without ranges.
 When the operator is adding or removing a node from the pool, it will look at these annotations and if they are set, it will use them to override the default mechanism for picking up the next node ID or the node to remove.
-These annotations will be ignored when scaling is not requested by changing `.spec.replicas`.
+These annotations should be added before changing the replica count and will be ignored when scaling is not requested by changing `.spec.replicas`.
 If these annotations cannot be fulfilled (for example because the ID is already taken and already in use) they will be ignored and the next suitable ID will be picked up.
 The operator will raise a warning in its log in such case.
 
@@ -732,6 +738,7 @@ spec:
 ```
 
 Because the `KafkaNodePool` is named `kafka`, all the resources created by this configuration will be exactly the same and have the same names as today.
+Using a name different from `kafka` would cause a new Kafka nodes to be created instead of migrating the existing nodes.
 Once the initial migration is complete, users can continue to use the node pools without any limitation.
 For example add additional node pools or further modify the `kafka` node pool.
 
@@ -761,7 +768,9 @@ So you will have one reconciliation to scale the first pool followed by the seco
 ## Not impacted
 
 This proposal does not impact in any way how the ZooKeeper nodes, Kafka Exporter, Cruise Control or Entity Operator are configured.
-It also does not impact configuration of the `KafkaConnect`, `KafkaBridge` or other custom resources.
+It also does not impact configuration of the `KafkaConnect`, `KafkaBridge` or other custom resources used by Strimzi.
+The _node pool_ concept is plan to be introduced only for Kafka broker nodes.
+There are currently no plans to extend it further to Kafka Connect, Mirror Maker 2, or Bridge.
 
 ## Rejected alternatives
 
