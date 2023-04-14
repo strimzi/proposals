@@ -2,21 +2,21 @@
 
 ## Current situation
 
-Strimzi currently allows to have one set of ZooKeeper nodes and one set of Kafka nodes.
+Strimzi currently allows only one set of ZooKeeper nodes and one set of Kafka nodes.
 All nodes within the given set have very similar configuration and differ only in small details:
 
-* Each Pod might have a PVC using different storage class
-* The Kafka pods have (when using `StrimziPodSets`) each their own Config Map with their Kafka configuration, but their configurations differs between the different nodes only in the advertised addresses.
+* Each Pod might have a PVC using different storage class.
+* The Kafka pods each have their own Config Map  (when using `StrimziPodSets`) with their Kafka configuration, but the configuration differs between the nodes only in the advertised addresses.
 
 ## Problem description
 
-Strimzi does not support nodes with:
+Strimzi does not currently support nodes that have:
 
-* Different resources configuration
-* Different storage configuration (the nodes might have different storage class, but not storage size or a different number of disks)
-* Different scheduling rules (affinity, tolerations, ...)
-* Different Kafka configuration (regardless whether the option is configurable per-node or per-cluster in Kafka, we always manage it per-cluster)
-* Running in different Kubernetes clusters
+* Different resources configuration (such as CPU or memory capacity)
+* Different storage configuration (although nodes may have different storage classes, they should have the same storage size and number of disks)
+* Different scheduling rules (such as affinity or tolerations)
+* Different Kafka configuration (even if the option is configurable per-node or per-cluster in Kafka, Strimzi always manages it per-cluster)
+* Different Kubernetes clusters
 
 While from time to time these limitations were raised by the users, they were for a long time acceptable and not in general demand.
 However, lately there seems to be increased demand for various features which require different configurations for different nodes.
@@ -27,9 +27,9 @@ This proposal does not aim to solve all of these but rather to provide a basis f
 Kafka is slowly finishing the implementation of the KRaft mode.
 The KRaft mode removes the ZooKeeper dependency and replaces it with Kafka's own controller nodes based on the Raft protocol (_KRaft = Kafka + Raft_).
 In the KRaft mode, the Kafka cluster will consist only from Kafka nodes.
-But they will have different roles - they will be either controllers, or brokers, or will combine both of them.
+But they have different roles - either controllers, or brokers, or a combination of both.
 The controller role means the node is responsible for maintaining the cluster quorum, for the elections, discovery and for handling the cluster metadata instead of ZooKeeper.
-The broker role means the node is responsible for handling messages as a regular broker in the old ZooKeeper based clusters.
+The broker role means the node is responsible for handling messages, like a regular broker in the old ZooKeeper-based clusters.
 And finally, the combined role means the node is responsible for both at the same time.
 
 The KRaft based Kafka clusters will be typically used in 3 different architectures:
@@ -44,17 +44,17 @@ Since Apache Kafka plans to remove ZooKeeper support in its 4.0 release, support
 
 ### Stretch clusters
 
-There seems to be increased demand Kafka clusters stretched across multiple Kubernetes clusters.
+There seems to be increased demand for Kafka clusters stretched across multiple Kubernetes clusters.
 Apache Kafka itself has latency limitations and might not run well when stretched over distant clusters with big latency.
 But there are many use cases where stretched clusters might be useful.
 For example:
 
-* When running closely colocated Kubernetes clusters
-* When migrating from old Kubernetes cluster to new Kubernetes cluster
+* When running closely co-located Kubernetes clusters
+* When migrating from an old Kubernetes cluster to a new Kubernetes cluster
 
 ## Proposal
 
-This proposal suggests introduction of Kafka _node pools_.
+To resolve the issues inherent with the current implementation of Strimzi, this proposal suggests the introduction of Kafka _node pools_.
 _Node pools_ are groups of Kafka nodes which will have the same configuration.
 A Kafka cluster can consist of one or more pools.
 Each node pool can belong to only one Kafka cluster.
@@ -132,13 +132,13 @@ Since the existing fields in the `Kafka` CR will be used as the _defaults_, new 
 
 ### Impact on the `Kafka` custom resource
 
-In the Kafka custom resource, the `.spec.kafka.replicas` and `.spec.kafka.storage` are required today.
+In the Kafka custom resource, `.spec.kafka.replicas` and `.spec.kafka.storage` values are required today.
 In the future, these options will be defined in the `KafkaNodePool` resources and not in the `Kafka` resource.
-With the introduction of the `KafkaNodePool` resource, we will make them optional and deprecated.
-This will be done only after the `KafkaNodePool` feature gate moves to beta phase and will be enabled by default.
+With the introduction of the `KafkaNodePool` resource, we will make them optional and deprecated in the `Kafka` resource.
+This will be done only after the `KafkaNodePool` feature gate moves to beta phase and is enabled by default.
 
-Until then, the `.spec.kafka.replicas` and `.spec.kafka.storage` fields will remain required so that the regular users not using node pools have the proper validation of the custom resources at the Kubernetes level.
-Users who want to test the node pools in the alpha phase, will set dummy values in these fields.
+Until then, `.spec.kafka.replicas` and `.spec.kafka.storage` values will be required in the `Kafka` resource so that regular users not using node pools have the proper validation of the custom resources at the Kubernetes level.
+Users who want to test the node pools in the alpha phase can set dummy values in these fields.
 
 The `.status` section of the `Kafka` custom resource will also contain a list of node pools used by this cluster:
 
@@ -159,7 +159,8 @@ status:
     - name: <NodePool2Name>
 ```
 
-The format `name: <NodePoolName>` instead of a simple list of strings was chosen to make possible to extend it in the future if needed and add additional fields.
+The `name: <NodePoolName>` format was chosen instead of a simple list of strings to allow for easy extension in the future.
+By using this format, additional fields can be added as needed.
 
 ### Resource naming
 
@@ -313,15 +314,15 @@ It will throw an `InvalidResourceException` and wait for the user to fix the iss
 
 The `KafkaNodePool` resource will also support the `scale` sub-resource.
 Support for the `scale` sub-resource should allow integration with Kubernetes Horizontal Pod Autoscaler.
-That on its own doesn't really provide fully functional Kafka auto-scaling mechanism.
+That on its own doesn't really provide a fully functional Kafka auto-scaling mechanism.
 For example, if the load is coming from a single partition which is handling too many messages, adding more nodes will not help.
-So a proper auto-scaling mechanism would need to understand the configuration or topics and partitions and their load to properly scale the broker.
+So a proper auto-scaling mechanism would need to understand the configuration of topics and partitions and their load to properly scale the broker.
 But the `scale` sub-resource would make it easier to develop such solutions in the future.
 
 ### KRaft support
 
-To support the Kafka KRaft mode, a new field `roles` will be added to the `KafkaNodePool` as well.
-It will contain a list of roles (`controller` or `broker`) which the nodes in given pool should have.
+To support the Kafka KRaft mode, a new `roles` filed will be added to the `KafkaNodePool`.
+It will contain a list of roles (`controller` or `broker`) assigned to nodes in a given pool.
 This will allow to use different configurations.
 For example, for a small cluster with shared broker and controller responsibilities:
 
@@ -489,8 +490,8 @@ Node IDs will be assigned sequentially:
     * In most cases, the node ID will be assigned from 0 up: 0, 1, 2, 3.
     * If any gap will exist in the existing node IDs, it will be filled in.
       For example when the existing nodes have IDs 0, 1, 4, 5, 6; the next node will get ID 2.
-* By default, when scaling down a pool, a highest used node ID will be remove.
-    * For example in Kafka cluster with two pool, where the first pool has IDs 0, 1 and 2 and the second pool has IDs 3, 4 and 5 ... when you scale down the first pool, the node with ID 2 will be removed and when you scale down the second pool node 5 will be removed.
+* By default, when scaling down a pool, a highest used node ID will be removed.
+    * For example in Kafka cluster with two pools, where the first pool has IDs 0, 1 and 2 and the second pool has IDs 3, 4 and 5, when you scale down the first pool, the node with ID 2 will be removed and when you scale down the second pool node 5 will be removed.
 * The pods will reflect the node IDs in their name in the same way as they do today.
 
 The fact that the node IDs will not be assigned to the pools means the Pods will be mixed.
@@ -530,11 +531,11 @@ status:
     strimzi.io/cluster=my-cluster,strimzi.io/name=m-cluster-big-nodes,strimzi.io/kind=Kafka
 ```
 
-User will be able to use annotations to indicate to the operator what should be the next ID when scaling up or what should be the node ID which should be removed when scaling down through annotations.
+Users will be able to use annotations to indicate to the operator what should be the next ID when scaling up or what should be the node ID which should be removed when scaling down through annotations.
 Setting an annotation `strimzi.io/next-node-ids` will tell the operator what should be the next ID used in scale-up.
 The value might be a single number, list of numbers or one or more ranges.
 E.g. `[3]`, `[3, 4, 5]` or `[1000-1010]`.
-Similarly, setting an annotation `strimzi.io/remove-node-ids` will allow to configure IDs of node which should be removed.
+Similarly, setting an annotation `strimzi.io/remove-node-ids` will allow the user to configure the IDs nodes which should be removed.
 This will support only an ordered list of nodes IDs without ranges.
 When the operator is adding or removing a node from the pool, it will look at these annotations and if they are set, it will use them to override the default mechanism for picking up the next node ID or the node to remove.
 These annotations will be ignored when scaling is not requested by changing `.spec.replicas`.
@@ -551,20 +552,20 @@ This way, the node pool can auto-scale up and down within the range without chan
 
 In some situations, it might be good to be able to move a node between different node pools.
 The annotations can be used for that as well.
-The process to move node with ID 3 from pool named `small-nodes` to pool names `big-nodes` will be following:
+The process to move a node with ID 3 from a pool named `small-nodes` to a pool named `big-nodes` is as follows:
 1) Annotate `KafkaNodePool` named `small-nodes` with annotation `strimzi.io/remove-node-ids: [3]`
 2) Annotate `KafkaNodePool` named `big-nodes` with annotation `strimzi.io/next-node-ids: [3]`
 3) Scale `KafkaNodePool` named `small-nodes` down by changing its `.spec.replicas` field
 4) Scale `KafkaNodePool` named `big-nodes` up by changing its `.spec.replicas` field
 
-The operator will proceed and remove the node 3 from the `small-nodes` pool and create a new node with ID 3 in the `big-nodes` pool.
-The moved now in its new pod will start from zero and will have to replicate all the data from other nodes in the cluster.
+The operator will proceed and remove the node with ID 3 from the `small-nodes` pool and create a new node with ID 3 in the `big-nodes` pool.
+The moved node in its new pod will start from zero and will have to replicate all the data from other nodes in the cluster.
 
 This process has several risks:
 * The moved node starts from 0 with empty disk and will need to re-sync all data from other nodes.
   Kafka nodes might store in some environments TBs of data, so re-syncing the data might take a long time.
 * While the node is re-syncing, the replicas hosted by it are not in-sync.
-  So with typical configurations (such as replication factor set to 3 and minimal in-sync replicas 2) any problem with one of the other node would mean loss of availability and cause that producers will not be able to produce messages anymore.
+  So with typical configurations (such as replication factor set to 3 and minimal in-sync replicas 2) any problem with one of the other nodes would mean loss of availability and producers will not be able to produce messages.
 * Since the replica will not be in-sync, it would also mean that it might not be possible to proceed with rolling updates and other operations.
 
 Due to these risks and limitations, users should instead of moving a node consider moving the partition replicas.
@@ -620,7 +621,8 @@ It will not be possible to enable `UseKRaft` feature gate without also having `K
 #### Virtual node pool
 
 To avoid two parallel implementations in the Strimzi source code, the operator will use _virtual node pool_ when the feature gate is disabled.
-It will internally (the _virtual node pool_ will not exist as a Kubernetes resource) create the a node pool based on the `Kafka` custom resource and create the resources through this node pool.
+It will create a node pool internally based on the `Kafka` custom resource and create the resources through this node pool.
+The _virtual node pool_ will not exist as a Kubernetes resource.
 The _virtual node pool_ will be named `kafka` which will result in the same names of the Kubernetes resources as we use today.
 And since it will copy the configuration from the `Kafka` custom resource, the configuration (e.g. resources, storage etc.) will be the same as before as well.
 This significantly simplifies the implementation and testing since the same code will be used all the time.
@@ -637,7 +639,7 @@ When they decide to start using the actual `KafkaNodePool` resources, they can e
 
 #### Converting existing Apache Kafka clusters
 
-To convert an existing Kafka cluster to use node pools, the user has to do the following two steps:
+To convert an existing Kafka cluster to use node pools, the user has to do the following:
 
 1. Create a new `KafkaNodePool` named `kafka` with the `.spec.replicas` and `.spec.storage` matching the configuration from their `Kafka` custom resource.
 2. Add an annotation `strimzi.io/node-pools: enabled` to the `Kafka` custom resource
@@ -766,9 +768,9 @@ It also does not impact configuration of the `KafkaConnect`, `KafkaBridge` or ot
 ### KafkaNodePool selector in `.spec.kafka` section of the `Kafka` custom resource
 
 One of the options considered was to have a label selector in the `Kafka` custom resource in `.spec.kafka`.
-Using the `strimzi.io/cluster` label was chosen at the end as the preferred way.
+Using the `strimzi.io/cluster` label was preferred in the end.
 It makes it easier to match the `KafkaNodePool` resources to the `Kafka` cluster.
-This significantly simplifies the code - especially the watch which is triggered when 
+This significantly simplifies the code - especially the watch which is triggered when changes are made.
 It also helps to ensure that one node pool will always belong only to a single Kafka cluster since one node pool resource can have only one `strimzi.io/cluster` label.
 
 ### Configuring pools inside the `Kafka` custom resource
@@ -851,7 +853,7 @@ And of course also some disadvantages:
 
 ### Migration to KRaft / ZooKeeper-less Kafka
 
-While this proposal defines how the node pools will provide support for running Apache Kafka in the KRaft mode, they do not focus on the migration of ZooKeeper-based Kafka clusters to KRaft based Kafka clusters.
+While this proposal defines how the node pools will provide support for running Apache Kafka in the KRaft mode, it does not focus on the migration of ZooKeeper-based Kafka clusters to KRaft-based Kafka clusters.
 This should be part of a separate proposal.
 
 ### Future possibilities
