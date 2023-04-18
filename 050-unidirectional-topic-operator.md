@@ -14,7 +14,7 @@ The Strimzi community often abbreviates the topic operator as TO, but to avoid a
 
 The BTO makes use of ZooKeeper znode watches to know about changes to topic state within the Kafka cluster.
 
-The advent of KRaft means that the BTO won't work in KRaft-based Kafka clusters.
+But Apache Kafka is removing its ZooKeeper-dependence which means that the BTO won't work with Kafka clusters that use it's replacement, known as KRaft.
 
 ## Motivation
 
@@ -32,7 +32,7 @@ The observer approach could work, but comes with some serious drawbacks:
 * The Kafka project does not provide a publicly-supported API for running a KRaft observer, so we'd need to make use of internal APIs which could change between releases without warning. 
   This represents a potential maintenance burden to the project.
 * The operator would require persistent storage (for the replicated `__cluster_metadata` log), which would make the operator significantly more difficult to operate.
-  For example if it were realized as single pod `Deployment` then the requirement for a persistent volume would tie it to a single AZ, meaning it would not be as highly available as the current operator.
+  For example, if it were realized as a single pod `Deployment`, then the requirement for a persistent volume would tie it to a single AZ, meaning it would not be as highly available as the current operator.
   This could be worked around by having multiple observers with only a single elected leader actually in charge of making modifications at any one time.
 
 Overall, it is clear that the complexity of the operator would be significantly increased by pursuing this direction.
@@ -66,30 +66,30 @@ For these reasons we are proposing the UTO.
 
 ### Non-goals
 
-* Supporting RF change (this could be added later)
+* Supporting replication factor change (this could be added later)
 
-### CR API
+### Maintaining compatibility of the `KafkaTopic` custom resource
 
 We would remain schema-compatible with the existing `KafkaTopic` resource at the API level. 
-This means that all existing `spec` section could be handled by the new operator and all existing fields of the `status` would still be present for applications that consume the status.
+This means that all the existing `spec` sections could be handled by the new operator and all existing fields of the `status` section would still be present for applications that consume the status.
 However, the semantics of a `KafkaTopic` would change incompatibly: The `spec` would no longer be updated when Kafka-side configuration changed.
-Instead if Kafka-side configuration was changed out-of-band (e.g. by using the `Admin` client, or Kafka shell scripts) those changes would eventually (depending on the timed reconciliation interval) be reverted.
+Instead, if Kafka-side configuration was changed out-of-band (e.g. by using the `Admin` client, or Kafka shell scripts) those changes would eventually (depending on the timed reconciliation interval) be reverted.
 
-As context for the rest of this document, an example `KafkaTopic` looks like this:
+As context for the rest of this document, an example `KafkaTopic` currently looks like this:
 
 ```yaml=
 kind: KafkaTopic
 metadata:
   generation: 123
-  name: consumer.offsets
+  name: example.topic
 spec:
-  topicName: __consumer_offsets
+  topicName: example_topic
   replicas: 3
   partitions: 50
   config:
     retention.ms: 123456789
 status:
-  topicName: __consumer_offsets
+  topicName: example_topic
   observedGeneration: 123
   conditions:
   - type: Ready
@@ -100,8 +100,8 @@ status:
 Where: 
   * `spec.topicName` is optional and needs only be used for topic names which are not legal kube resource names. 
     When this field is absent the name of the topic is Kafka is taken from the `metadata.name`.
-    In the example above of a `KafkaTopic` managing the `__consumer_offsets` topic, the `metadata.name` cannot be
-    `__consumer_offets` because that's not allowed as resource name in Kube, so the `metadata.name` must be something else and  `spec.topicName` is required.
+    In the example above of a `KafkaTopic` managing the `example_topic` topic, the `metadata.name` cannot be
+    `example_topic` because that's not allowed as resource name in Kube, so the `metadata.name` must be something else and `spec.topicName` is required.
   * `status.topicName` is used to detect a change to the `spec.topicName`, which results in the topic having a `Ready` condition with `status = False` (i.e. is an error).
   * `metadata.generation == status.observedGeneration` implies that the operator has reconciled the latest change to the `spec`.
     When `metadata.generation > status.observedGeneration` it means the resource has been changed, but the operator has not
@@ -116,7 +116,7 @@ Some new fields will be introduced in the following text.
 To avoid ambiguity we will continue to require that a single `KafkaTopic` is used to manage a single topic in a single Kafka cluster.
 
 The fact that there are legal topic names (in Kafka) that are not legal resource names (in Kube) provided the motivation for supporting `spec.topicName`, so that a topic in Kafka could be managed by a `KafkaTopic` with a different `metadata.name`.
-As such it's not possible for the Kube apiserver to enforce the single resource principal because multiple `KafkaTopic` resource might refer to the same topic (i.e. the uniqueness constraint on `metadata.name` is insufficient).
+As such it's not possible for the Kube apiserver to enforce the single resource principal because multiple `KafkaTopic` resources might refer to the same topic (i.e. the uniqueness constraint on `metadata.name` is insufficient).
 It is therefore left to the operator to detect if there are multiple `KafkaTopics` which point to the same topic in Kafka.
 
 To do this, the operator will keep an in-memory mapping of _topic name_ to (`metadata.namespace`, `metadata.name`)-pairs (where _topic name_ is `spec.topicName`, defaulting to `metadata.name` as described above).
@@ -172,9 +172,13 @@ A topic which exists in a Kafka cluster without a matching `KafkaTopic` is an _u
 
 Naturally any topic created due to the creation of a `KafkaTopic` is managed from the outset.
 
+Because topics can be created directly in Kafka we need a mechanism for converting an unmanaged topic to a managed topic, aka "managing" the topic.
+This can easily be done by creating a matching `KafkaTopic`: The operator will attempt the `CreateTopics` request using the Kafka Admin client and if it receives a `TOPIC_ALREADY_EXISTS` error will proceed with reconciliation as it would for a `KafkaTopic` modification.
+That is, the configuration of the topic in Kafka will be changed to match the `KafkaTopic` (or fail for the same possible reasons and with the same error conditions in the `status` as can happy for any update).
+
 ---
 
-#### Example 1: `KafkaTopic` creation when topic does NOT exist in Kafka
+#### Example 1: `KafkaTopic` creation
 
 > 1. The user creates a `KafkaTopic`:
 > 
@@ -189,7 +193,7 @@ Naturally any topic created due to the creation of a `KafkaTopic` is managed fro
 > 
 > 2. The operator checks its in-memory map to see whether `foo` is already managed by some other resource.
 > 
->     1. If so, then both resources are updated with error conditions in their `status`.
+>     1. If so, then the `metadata.creationTimestamps` are compared and if this resource has a more recent timestamp then it is updated with an error condition in its `status`.
 >     ```yaml
 >     kind: KafkaTopic
 >     metadata:
@@ -202,42 +206,38 @@ Naturally any topic created due to the creation of a `KafkaTopic` is managed fro
 >       - type: Ready
 >         status: False
 >         reason: ResourceConflict
->         message: Managed by multiple KafkaTopic resources: some-namespace/bar, some-namespace/foo
+>         message: Managed by multiple KafkaTopic resources: some-namespace/bar
 >         lastTransitionTime: 20230301T103000Z
 >     ```
+>     The reconciliation ends
 >
->     2. If not, it creates the topic in Kafka and updates the `status`
+> 3. Otherwise the operator attempts to it create the topic in Kafka. 
+>
+> 4. If the `CreateTopics` request fails due to `TOPIC_ALREADY_EXISTS` then the operator updates the topic in Kafka to reflect the `spec` using `incrementalAlterConfigs()`, and/or `createPartitions()`
+>
+> 5.The `status` is updated to reflect the Admin client requests. In the happy path case it would look like this:
+> ```yaml=
+> metadata:
+>   generation: 1
+>   name: foo
+> spec:
+>   topicName: foo
+>   partitions: 12
+>   replicas: 50
+> status: 
+>   observedGeneration: 1
+>   topicName: foo
+>   conditions:
+>   - type: Ready
+>     status: True
+>     lastTransitionTime: 20230301T103000Z
+> ```
 > 
->     ```yaml=
->     metadata:
->       generation: 1
->       name: foo
->     spec:
->       topicName: foo
->       partitions: 12
->       replicas: 50
->     status: 
->       observedGeneration: 1
->       topicName: foo
->       conditions:
->       - type: Ready
->         status: True
->         lastTransitionTime: 20230301T103000Z
->     ```
-> 
 ---
 
-Because topics can be created directly in Kafka we need a mechanism for converting an unmanaged topic to a managed topic, aka "managing" the topic.
-This can easily be done by creating a matching `KafkaTopic`: The operator will attempt the `CreateTopics` request and if it receives a `TOPIC_ALREADY_EXISTS` will proceed with reconciliation as it would for a `KafkaTopic` modification.
-That is, the configuration of the topic in Kafka will be changed to match the `KafkaTopic` (or fail for the same possible reasons and with the same error conditions in the `status` as can happy for any update).
 
----
 
-#### Example 2: `KafkaTopic` creation when topic exists in Kafka
 
-This is exactly the same as Example 1.
-
----
 
 ### Modification to `KafkaTopics` and timed reconciliation
 
@@ -259,7 +259,7 @@ The process will first describe the topic and its configs and then make alterati
         lastTransitionTime: 20230301T103000Z
     ```
     The user will then need to decide how to proceed, but typically they might just revert the `spec.partitions`.
-* Changes to `spec.replicas` could be supported via CC, but that is not part of _this_ proposal.
+* Changes to `spec.replicas` could be supported via Cruise Control, but that is not part of _this_ proposal.
     ```yaml
     status:
       conditions:
@@ -290,15 +290,15 @@ The semantics of a managed topic being deleted should be that the topic in Kafka
 The operator cannot use the existence of a topic in Kafka to infer that the `KafkaTopic` has been deleted because topics in Kafka can be unmanaged.
 
 A small extra benefit of using a finalizer is that any errors during deletion can be reported via the `KafkaTopic`'s `status`.
-    ```yaml
-    status:
-      conditions:
-      - type: Ready
-        status: False
-        reason: KafkaError
-        message: Deletion failed: ${Error_Message}
-        lastTransitionTime: 20230301T103000Z
-    ```
+```yaml
+status:
+  conditions:
+  - type: Ready
+    status: False
+    reason: KafkaError
+    message: Deletion failed: ${Error_Message}
+    lastTransitionTime: 20230301T103000Z
+```
 
 The presence of this finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set. 
 
@@ -343,7 +343,7 @@ The presence of this finalizer will be checked (and added, if missing) on every 
 >       upon timed reconciliation the condition on the other `KafkaTopic` will be removed and reconciliation via that other `KafkaTopic` will proceed as normal.
 >    2. If deletion is disallowed via `delete.topic.enable=false` broker configuration then the operator will remove the finalizer and Kube will remove the resource. 
 >       The topic in Kafka will thus become unmanaged.
->    3. Otherwise, the operator attempts to deletes the topic from Kafka.
+>    3. Otherwise, the operator attempts to delete the topic from Kafka.
 >        1. If deletion succeeds the operator will remove `strimzi.io/topic-operator` from the `metadata.finalizer` and Kube will remove the resource.
 >        2. If deletion failed with `UNKNOWN_TOPIC_OR_PARTITION` (i.e. the topic didn't exist) the operator will continue to remove the finalizer. I.e. this case is not treated as an error.
 >        3. If deletion failed with any other error this is reported via a condition in the `status.conditions` and the finalizer is not removed.
@@ -424,7 +424,7 @@ This can be useful operationally, for example to change the `metadata.name` of a
 >     1. It removes `strimzi.io/topic-operator` from the `metadata.finalizer`.
 >     2. Kube proceeds to remove the resource.
 
-Note that `spec.managed=False` means that a `KafkaTopic` can exist without there being a corresponding topic in Kafka.
+Note that `spec.managed=False` also means that a `KafkaTopic` can exist without there being a corresponding topic in Kafka.
 
 ---
 
@@ -468,7 +468,7 @@ In order to avoid collisions where two or more `KafkaTopics` are trying to manag
 >
 > Rules for legal policies:
 > 
-> * All `topicNamePrefixes` must be disjoint (i.e. no prefix given in a `topicNamePrefixes` is a prefix of any other prefix given in `topicNamePrefixes` over all of the namespaced in the policy).
+> * All `topicNamePrefixes` must be disjoint (i.e. no prefix given in a `topicNamePrefixes` is a prefix of any other prefix given in `topicNamePrefixes` over all of the namespaces in the policy).
 > * No `topicNamePrefix` maybe be a prefix of any listed `topicNames`.
 > * Only one namespace may have `otherTopics: True`
 >
@@ -478,7 +478,7 @@ In order to avoid collisions where two or more `KafkaTopics` are trying to manag
 ---
 
 > This is different to the collision within a single namespace which is detected and notified using a `Ready=false` condition with `reason=ResourceConflict`, described above.
-> In the single namespace case the cause is likely a mistake by a team, who need to know about the each of the conflicting resources to resolve the problem.
+> In the single namespace case the cause is likely a mistake by a team, who need to know about each of the conflicting resources to resolve the problem.
 > Support for multiple namespaces is motivated by a kind of multitenancy use case, where the space of topics is partitioned and partitions are uniquely associated with Kube namespaces. 
 > This allows management of those topics to be delegated to different teams, each with their own namespace (e.g. using Kube RBAC). 
 > We can't assume that either team involved in the conflict know about the existence of the other.
@@ -499,7 +499,7 @@ This WILL be supported by:
 
 In the case of a UTO configured for multiple namespaces it will be possible to move the `KafkaTopic` for a topic in Kafka from one namespace to another by:
 
-  1. Unmanging the `KafkaTopic` in the old namespace (as described above)
+  1. Unmanaging the `KafkaTopic` in the old namespace (as described above)
   2. Deleting the `KafkaTopic` from the old namespace,
   3. Revising the policy (requiring a UTO restart)
   4. Creating a new `KafkaTopic` in the new namespace.
@@ -515,9 +515,9 @@ Changes thus detected will result in an error condition.
 This will NOT be supported, because it's not supported by Kafka.
 The user will either need to revert the `spec.partitions`, or recreate the topic in Kafka (which they can do via the `KafkaTopic` or not).
 
-#### Changing `spec.relicas`
+#### Changing `spec.replicas`
 
-This will NOT be supported using as part of this proposal.
+This will NOT be supported as part of this proposal.
 
 #### Recreating topics in the Kafka cluster
 
@@ -533,10 +533,10 @@ If the Kafka cluster is configured with `auto.create.topics.enable` there is a r
 
 **If the operator wins:** then auto-creation will not happen, and the user's intent is honoured.
 
-**If the application wins:** then the topics will be created using the default configuration for the cluster. The operator will later reconcile the `KafkaTopics` which will result in reconfiguration the default configuration for auto-created topics differs from the `KafkaTopic.spec`. That reconfiguration will either succeed, or fail (e.g. because a `KafkaTopic` has a lower `spec.partitions` than the auto-created topic).
+**If the application wins:** then the topics will be created using the default configuration for the cluster. The operator will later reconcile the `KafkaTopics` which will result in reconfiguration if the default configuration for auto-created topics differs from the `KafkaTopic.spec`. That reconfiguration will either succeed, or fail (e.g. because a `KafkaTopic` has a lower `spec.partitions` than the auto-created topic).
 
-To avoid this it is **recommended** that the Topic Operator not be used with cluster where `auto.create.topics.enable` is `true`. 
-The operator will emit a `WARN` level log on startup if autocreation is enabled. 
+To avoid this it is **recommended** that the UTO not be used with a cluster where `auto.create.topics.enable` is `true`. 
+The UTO will emit a `WARN` level log on startup if autocreation is enabled. 
 
 Alternatively: App could be written to wait for topic existency, or use an init container to do the same.
 
@@ -559,7 +559,7 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 
 ### Unmanaged
 
-* This is `spec.managed=false`
+* This is `spec.managed=false`.
 * The operator doesn't propagate changes to Kafka. 
 * The presence of the finalizer will be checked-for on each reconciliation of the resource.
 * Deletion does not result in deletion of any topics in Kafka (which is why it's not connected to the Deletable 1 state).
@@ -597,12 +597,10 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 * The existing bidirectional Topic Operator would be deprecated and removed once ZooKeeper-based clusters are no longer supported.
 * A new unidirectional Topic Operator would be provided as a replacement, which users could migrate to before ZooKeeper-based clusters are no longer supported.
 * The schema of `KafkaTopic` would change
-* The schema of `Kafka` would also change, to support deployment of the new operator, but the details of that are not defined in this proposal.
-* The CRD changes would be relfected in the `api` module.
+* The schema of `Kafka` would also change (see below).
+* The CRD changes would be reflected in the `api` module.
 
 ## Compatibility
-
-// Call out any future or backwards compatibility considerations this proposal has accounted for.
 
 Let's consider each of the public APIs of the BTO in turn and describe the compatiblity story.
 
@@ -610,38 +608,39 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 
 #### Standalone case
 
-<table>
-<tr><th>Env var						<th>Status
-<tr><td>STRIMZI_NAMESPACE				<td>Becomes optional, see note 1
-<tr><td>STRIMZI_POLICY_YAML				<td>Added, optional, see note 1
-<tr><td>STRIMZI_RESOURCE_LABELS				<td>Unchanged
-<tr><td>STRIMZI_KAFKA_BOOTSTRAP_SERVERS			<td>Unchanged
-<tr><td>STRIMZI_CLIENT_ID				<td>Unchanged
-<tr><td>STRIMZI_FULL_RECONCILIATION_INTERVAL_MS		<td>Unchanged
-<tr><td>STRIMZI_TLS_ENABLED				<td>Unchanged
-<tr><td>STRIMZI_TRUSTSTORE_LOCATION			<td>Unchanged
-<tr><td>STRIMZI_TRUSTSTORE_PASSWORD			<td>Unchanged
-<tr><td>STRIMZI_KEYSTORE_LOCATION			<td>Unchanged
-<tr><td>STRIMZI_KEYSTORE_PASSWORD			<td>Unchanged
-<tr><td>STRIMZI_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM	<td>Unchanged
-<tr><td>STRIMZI_SASL_ENABLED				<td>Unchanged
-<tr><td>STRIMZI_SASL_MECHANISM				<td>Unchanged
-<tr><td>STRIMZI_SASL_USERNAME				<td>Unchanged
-<tr><td>STRIMZI_SASL_PASSWORD				<td>Unchanged
-<tr><td>STRIMZI_SECURITY_PROTOCOL			<td>Unchanged
-<tr><td>STRIMZI_ZOOKEEPER_CONNECT			<td>Dropped
-<tr><td>STRIMZI_ZOOKEEPER_SESSION_TIMEOUT_MS		<td>Dropped
-<tr><td>TC_ZK_CONNECTION_TIMEOUT_MS			<td>Dropped
-<tr><td>STRIMZI_REASSIGN_THROTTLE			<td>Dropped, see note 2
-<tr><td>STRIMZI_REASSIGN_VERIFY_INTERVAL_MS		<td>Dropped, see note 2
-<tr><td>STRIMZI_TOPIC_METADATA_MAX_ATTEMPTS		<td>Dropped
-<tr><td>STRIMZI_TOPICS_PATH				<td>Dropped
-<tr><td>STRIMZI_STORE_TOPIC				<td>Dropped
-<tr><td>STRIMZI_STORE_NAME				<td>Dropped
-<tr><td>STRIMZI_APPLICATION_ID				<td>Dropped
-<tr><td>STRIMZI_STALE_RESULT_TIMEOUT_MS			<td>Dropped
-<tr><td>STRIMZI_USE_ZOOKEEPER_TOPIC_STORE		<td>Dropped
-</table>
+
+| Env var						| Status                        |
+|-------------------------------------------------------|-------------------------------|
+| `STRIMZI_NAMESPACE`					| Becomes optional, see note 1  |
+| `STRIMZI_POLICY_YAML`					| Added, optional, see note 1	|
+| `STRIMZI_RESOURCE_LABELS`				| Unchanged			|
+| `STRIMZI_KAFKA_BOOTSTRAP_SERVERS`			| Unchanged			|
+| `STRIMZI_CLIENT_ID`					| Unchanged			|
+| `STRIMZI_FULL_RECONCILIATION_INTERVAL_MS`		| Unchanged			|
+| `STRIMZI_TLS_ENABLED`					| Unchanged			|
+| `STRIMZI_TRUSTSTORE_LOCATION`				| Unchanged			|
+| `STRIMZI_TRUSTSTORE_PASSWORD`				| Unchanged			|
+| `STRIMZI_KEYSTORE_LOCATION`				| Unchanged			|
+| `STRIMZI_KEYSTORE_PASSWORD`				| Unchanged			|
+| `STRIMZI_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM`	| Unchanged			|
+| `STRIMZI_SASL_ENABLED`				| Unchanged			|
+| `STRIMZI_SASL_MECHANISM`				| Unchanged			|
+| `STRIMZI_SASL_USERNAME`				| Unchanged			|
+| `STRIMZI_SASL_PASSWORD`				| Unchanged			|
+| `STRIMZI_SECURITY_PROTOCOL				| Unchanged			|
+| `STRIMZI_ZOOKEEPER_CONNECT				| Dropped			|
+| `STRIMZI_ZOOKEEPER_SESSION_TIMEOUT_MS			| Dropped			|
+| `TC_ZK_CONNECTION_TIMEOUT_MS				| Dropped			|
+| `STRIMZI_REASSIGN_THROTTLE				| Dropped, see note 2		|
+| `STRIMZI_REASSIGN_VERIFY_INTERVAL_MS			| Dropped, see note 2		|
+| `STRIMZI_TOPIC_METADATA_MAX_ATTEMPTS			| Dropped			|
+| `STRIMZI_TOPICS_PATH					| Dropped			|
+| `STRIMZI_STORE_TOPIC					| Dropped			|
+| `STRIMZI_STORE_NAME					| Dropped			|
+| `STRIMZI_APPLICATION_ID				| Dropped			|
+| `STRIMZI_STALE_RESULT_TIMEOUT_MS			| Dropped			|
+| `STRIMZI_USE_ZOOKEEPER_TOPIC_STORE			| Dropped			|
+
 
 Notes:
 
@@ -667,7 +666,7 @@ spec:
     topicMetadataMaxAttempts: 
     zookeeperSessionTimeoutSeconds:
   
-    # Options with same schema, but which may beed to be reconfigured
+    # Options with same schema, but which may need to be reconfigured
     livenessProbe: # probe values may need to be changed
     readinessProbe: # probe values may need to be changed
     startupProbe: # probe values may need to be changed
@@ -677,14 +676,14 @@ spec:
 
     # Unchanged options
     image: 
-    watchedNamespace: # becomes optional
+    watchedNamespace:
     reconciliationIntervalSeconds:
 
     # New options
     policy: # optional namespace policy
 ```
 
-### CR API
+### Changes to the KafkaTopic custom resource API
 
 The CR API is _structurally_ unchanged except:
 
@@ -694,7 +693,7 @@ Furthermore within the same structure:
 
 * `status.conditions` may have new values for the `reason`.
 
-The semantics of the CR API will also change:
+The semantics of the `KafkaTopic` custom resource API will also change:
 
 1. Unidirectional reconciliation
 2. The absence of fields will not imply that they take their default values, only that the value is not specified in this CR.
@@ -716,18 +715,19 @@ The semantics of the CR API will also change:
 
 The BTO exports the following metrics
 
-<table>
-<tr><th>Metric type	<th>Metric name				<th>Status
-<tr><td>counter		<td>strimzi.reconciliations.periodical	<th>Unchanged
-<tr><td>counter		<td>strimzi.reconciliations		<th>Unchanged
-<tr><td>counter		<td>strimzi.reconciliations.failed	<th>Unchanged
-<tr><td>counter		<td>strimzi.reconciliations.successful	<th>Unchanged
-<tr><td>gauge		<td>strimzi.resources			<th>Unchanged
-<tr><td>timer		<td>strimzi.reconciliations.duration	<th>Unchanged
-<tr><td>gauge		<td>strimzi.reconciliations.paused	<th>Unchanged
-<tr><td>counter		<td>strimzi.reconciliations.locked	<th>Unchanged
-<tr><td>gauge		<td>strimzi.resource.state		<th>Unchanged
-</table>
+
+| Metric type	| Metric name				| Status 	|
+|---------------|---------------------------------------|---------------|
+| counter	| strimzi.reconciliations.periodical	| Unchanged	|
+| counter	| strimzi.reconciliations		| Unchanged	|
+| counter	| strimzi.reconciliations.failed	| Unchanged	|
+| counter	| strimzi.reconciliations.successful	| Unchanged	|
+| gauge		| strimzi.resources			| Unchanged	|
+| timer		| strimzi.reconciliations.duration	| Unchanged	|
+| gauge		| strimzi.reconciliations.paused	| Unchanged	|
+| counter	| strimzi.reconciliations.locked	| Unchanged	|
+| gauge		| strimzi.resource.state		| Unchanged	|
+
 
 ### Emitted Kube `Events`
 
@@ -738,14 +738,14 @@ Let's consider all the cases in which the BTO emits `Event` resources to the Kub
 * For errors when creating partitions. 
   For UTO ApiExceptions from the Admin client will be reported via `Ready` condition.
   For other errors application logging and metrics are considered sufficient.
-* For errors when changing the configuration of topics in Kafka
+* For errors when changing the configuration of topics in Kafka.
   For UTO ApiExceptions from the Admin client will be reported via `Ready` condition.
   For other errors application logging and metrics are considered sufficient.
 * For errors when processing a ZooKeeper znode watch.
   UTO doesn't use znode watches, so this cannot happen.
 * On attempts to change a `KafkaTopic`'s `spec.topicName`.
   For UTO this will be reported via the status only.
-* On detection of conflicting changes between Kube and Kafka
+* On detection of conflicting changes between Kube and Kafka.
   For UTO such conflicts cannot happen.
 * On attempts to decrease the number of partitions.
   For UTO this will be reported via the status only.
@@ -758,7 +758,7 @@ Any software which consumed BTO events will not be compatible with UTO.
 To migrate, existing BTO users would have to:
 
 1. Review how they're using the BTO and whether they require bidirectionality
-   1. If bidirectional support is required by their usage then the UTO cannot be used. 
+   1. If bidirectional support is required by their usage then the UTO cannot be used and the user will have no way of managing topics using `KafkaTopic` resources once ZooKeeper support is removed by Apache Kafka and/or Strimzi.
 2. Undeploy the BTO (they can retain their existing `KafkaTopics`)
 3. Deploy the UTO (reconfiguring their `Kafka` CR, or raw `Deployment` in the standalone case). 
 4. Some reconfiguration of pod resources and JVM options may also be required. 
