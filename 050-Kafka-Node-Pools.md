@@ -323,7 +323,7 @@ But the `scale` sub-resource would make it easier to develop such solutions in t
 
 ### KRaft support
 
-To support the Kafka KRaft mode, a new `roles` filed will be added to the `KafkaNodePool`.
+To support the Kafka KRaft mode, a new `roles` field will be added to the `KafkaNodePool`.
 It will contain a list of roles (`controller` or `broker`) assigned to nodes in a given pool.
 This will allow to use different configurations.
 For example, for a small cluster with shared broker and controller responsibilities:
@@ -537,7 +537,7 @@ status:
     strimzi.io/cluster=my-cluster,strimzi.io/name=m-cluster-big-nodes,strimzi.io/kind=Kafka
 ```
 
-Users will be able to use annotations to indicate to the operator what should be the next ID when scaling up or what should be the node ID which should be removed when scaling down through annotations.
+Users will be able to use annotations on the `KafkaNodePool` custom resources to indicate to the operator what should be the next ID when scaling up or what should be the node ID which should be removed when scaling down through annotations.
 Setting an annotation `strimzi.io/next-node-ids` will tell the operator what should be the next ID used in scale-up.
 The value might be a single number, list of numbers or one or more ranges.
 E.g. `[3]`, `[3, 4, 5]` or `[1000-1010]`.
@@ -764,6 +764,8 @@ But it is not completely clear how many problems and various race conditions thi
 The eventual consistency also shows up in situations when you for example decide to scale two of your node pools.
 The scale events will be independent and will almost never be caught by the same reconciliation.
 So you will have one reconciliation to scale the first pool followed by the second to scale the second one.
+The users would be responsible for taking this into account.
+This will be also covered by the documentation.
 
 ## Not impacted
 
@@ -854,7 +856,7 @@ This would have some advantages:
   Using multiple resources means you have to deal with Kubernetes's eventual consistency when updating multiple resources at the same time
 
 And of course also some disadvantages:
-* It would not possible to support the `scale` sub-resource and support autoscaling in the future.
+* It would not be possible to support the `scale` sub-resource and support autoscaling in the future.
 * In the past, we had issues with the size of our CRDs.
   Bundling the node pools into the `Kafka` CRD would make it bigger.
 
