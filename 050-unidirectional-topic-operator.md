@@ -352,11 +352,11 @@ While the behaviour described above will be the _default_ it will be possible to
 >        3. If deletion failed with any other error this is reported via a condition in the `status.conditions` and the finalizer is not removed.
 ---
 
-Similarly to how it is possible to "manage" an existing unmanaged topic in Kafka, we will also provide a mechanism for "unmanaging" a managed topic, via a `spec.managed` flag.
+Similarly to how it is possible to "manage" an existing unmanaged topic in Kafka, we will also provide a mechanism for "unmanaging" a managed topic, via a `strimzi.io/managed=false` annotation.
 This will allow a `KafkaTopic` to be deleted **without** the topic in Kafka being deleted.
 This can be useful operationally, for example to change the `metadata.name` of a `KafkaTopic`.
 
-> An alternative to `spec.managed` would be "explicit deletion" via a `spec.delete` flag.
+> An alternative to `strimzi.io/managed=false` would be "explicit deletion" via a `spec.delete` flag.
 > This alternative was rejected because it's incompatible with gitops.
 
 ---
@@ -377,7 +377,7 @@ This can be useful operationally, for example to change the `metadata.name` of a
 >       observedGeneration: 123 # == generation => it is Kube-managed
 >     ```
 > 
-> 2. The user changes the new `spec.managed` field to `False` so that the topic is no longer Kube-managed.
+> 2. The user changes the `strimzi.io/managed=false` annotation to `false` so that the topic is no longer Kube-managed.
 > 
 >     ```yaml=
 >     metadata:
@@ -385,27 +385,16 @@ This can be useful operationally, for example to change the `metadata.name` of a
 >       name: foo
 >       finalizer: 
 >       - strimzi.io/topic-operator
+>       annotations:
+>       - strimzi.io/managed: false # do not synchronize to Kafka
 >     spec:
->       managed: False # do not synchronize to Kafka
+>       # ...
 >     status:
 >       observedGeneration: 123 # != generation => it is Kube-managed
 >     ```
 > 
-> 3. The user waits until the operator has observed that change, indicated by the `status.observedGeneration` matching the `metadata.generation`:
 > 
->     ```yaml=
->     metadata:
->       generation: 124
->       name: foo
->       finalizer: 
->       - strimzi.io/topic-operator
->     spec:
->       managed: False # do not synchronize to Kafka
->     status:
->       observedGeneration: 124 # == generation => it is now Kube-managed
->     ```
-> 
-> 4. The user can then delete the resource.
+> 3. The user can then delete the resource.
 >     Because of the presence of a `metadata.finalizer` the resource is not actually deleted.
 >     Instead Kube adds the `metadata.deletionTimestamp` field.
 > 
@@ -415,19 +404,22 @@ This can be useful operationally, for example to change the `metadata.name` of a
 >       name: foo
 >       finalizer: 
 >       - strimzi.io/topic-operator
+>       annotations:
+>       - strimzi.io/managed: false # do not synchronize to Kafka
 >       deletionTimestamp: 20230301T000000.000
+
 >     spec:
->       managed: False # do not synchronize to Kafka
+>       # ...
 >     status:
 >       observedGeneration: 124 # == generation => it is not syncrhonized
 >     ```
 > 
-> 5. The operator notices the `metadata.deletionTimestamp` field.
+> 4. The operator notices the `metadata.deletionTimestamp` field.
 >     Since the `spec.magnaged` is `False` it does **not** attempt topic deletion.
 >     1. It removes `strimzi.io/topic-operator` from the `metadata.finalizer`.
 >     2. Kube proceeds to remove the resource.
 
-Note that `spec.managed=False` also means that a `KafkaTopic` can exist without there being a corresponding topic in Kafka.
+Note that `strimzi.io/managed: false` also means that a `KafkaTopic` can exist without there being a corresponding topic in Kafka.
 
 ---
 
@@ -496,7 +488,7 @@ In order to avoid collisions where two or more `KafkaTopics` are trying to manag
 
 This WILL be supported by:
 
-1. unmanaging the topic (`spec.managed=false`).
+1. unmanaging the topic (`strimzi.io/managed: false`).
 2. deleting the `KafkaTopic`.
 3. recreating the `KafkaTopic` with a new name.
 
@@ -564,7 +556,7 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 
 ### Unmanaged
 
-* This is `spec.managed=false`.
+* This is `strimzi.io/managed: false`.
 * The operator doesn't propagate changes to Kafka. 
 * The presence of the finalizer will be checked-for on each reconciliation of the resource.
 * Deletion does not result in deletion of any topics in Kafka (which is why it's not connected to the Deletable 1 state).
@@ -575,7 +567,7 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 
 * This is the normal case where changes are propagated to Kafka.
 * On transition to Deletable 1: The topic is deleted from Kafka, and then the finalizer is removed.
-* Transitions to Unmanaged if `spec.managed` is changed to `false`.
+* Transitions to Unmanaged if `strimzi.io/managed` is changed to `false`.
 * Transitions to "Managed Conflicting First" if another `KafkaTopic` is created for the same topic in Kafka.
 * Transitions to "Managed Conflicting Rest" is a race case, rare in practice, where a second `KafkaTopic` is created for the same topic in Kafka with the same `metadata.creationTimestamp`.
 
