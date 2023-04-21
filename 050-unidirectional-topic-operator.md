@@ -62,7 +62,6 @@ For these reasons we are proposing the UTO.
 ### Goals
 
 * A unidirectional topic operator which is KRaft compatible
-<!-- * Support for multiple namespaces -->
 
 ### Non-goals
 
@@ -174,7 +173,7 @@ Naturally any topic created due to the creation of a `KafkaTopic` is managed fro
 
 Because topics can be created directly in Kafka we need a mechanism for converting an unmanaged topic to a managed topic, aka "managing" the topic.
 This can easily be done by creating a matching `KafkaTopic`: The operator will attempt the `CreateTopics` request using the Kafka Admin client and if it receives a `TOPIC_ALREADY_EXISTS` error will proceed with reconciliation as it would for a `KafkaTopic` modification.
-That is, the configuration of the topic in Kafka will be changed to match the `KafkaTopic` (or fail for the same possible reasons and with the same error conditions in the `status` as can happy for any update).
+That is, the configuration of the topic in Kafka will be changed to match the `KafkaTopic` (or fail for the same possible reasons and with the same error conditions in the `status` as can happen for any update).
 
 ---
 
@@ -215,7 +214,7 @@ That is, the configuration of the topic in Kafka will be changed to match the `K
 >
 > 4. If the `CreateTopics` request fails due to `TOPIC_ALREADY_EXISTS` then the operator updates the topic in Kafka to reflect the `spec` using `incrementalAlterConfigs()`, and/or `createPartitions()`
 >
-> 5.The `status` is updated to reflect the Admin client requests. In the happy path case it would look like this:
+> 5.The `status` is updated to reflect the Admin client requests. In the path case it would look like this:
 > ```yaml=
 > metadata:
 >   generation: 1
@@ -423,64 +422,6 @@ Note that `strimzi.io/managed: false` also means that a `KafkaTopic` can exist w
 
 ---
 
-<!--
-
-### Multi-namespace support
-
-The UTO will support multiple namespaces, subject to the _single resource principal_ [described above](#the-single-resource-principal).
-
-In order to avoid collisions where two or more `KafkaTopics` are trying to manage the same topic in Kafka the operator will enforce a policy for which namespaces can manage which topics. 
-
----
-
-#### Example
-
-> Conceptually (i.e. this may or may not be configured via YAML):
-> 
-> ```yaml=
-> policy:
-> - namespace: team.a
->   topicNames:
->   - config-foo
->   topicNamePrefixes: 
->   - foo-app.
->   - bar-app-
-> - namespace: team.b
->   topicNames:
->   - config-quux
->   topicNamePrefixes:
->   - quux-app.
-> - namespace: kafka.cluster.admins
->   otherTopics: True
-> ```
-> 
-> Thus:
-> 
-> - Topic `config-foo` can be only managed from namespace `team.a` (because it's explicitly listed the `topicNames` list for that namespace).
-> - Topic `config-quux` can be only managed from namespace `team.b` (because it's explicitly listed the `topicNames` list for that namespace).
-> - Topics `foo-app.x` and `foo-app.y` can only be managed by `KafkaTopics `in namespace `team.a` (because the `foo-app.` prefix is associated with this namespace), likewise `bar-app-x` and `bar-app-y` (because the `bar-app-` prefix is also associated with this namespace).
-> - Topics `quux-app.x` and `quux-app.y` can only be managed by `KafkaTopics `in namespace `team.b` (because the `quux-app.` prefix is associated with this namespace).
-> - Topics `config-gee`, `__consumer_offsets`, and `__transaction_state` could only be managed from the `kafka.cluster.admins` namespace (because it has `otherTopics=true`).
->
-> Rules for legal policies:
-> 
-> * All `topicNamePrefixes` must be disjoint (i.e. no prefix given in a `topicNamePrefixes` is a prefix of any other prefix given in `topicNamePrefixes` over all of the namespaces in the policy).
-> * No `topicNamePrefix` maybe be a prefix of any listed `topicNames`.
-> * Only one namespace may have `otherTopics: True`
->
-> These rules are sufficent to guarantee that any given topic maps unambiguously to a single namespace.
-> If a `KafkaTopic` is created that violates these rules the operator will update the `Ready` condition with a suitable error explaining the policy violation.
-> If two `KafkaTopics` are created, only one of which violates these rules then only that one will get the `Ready=false` policy violation condition and the `KafkaTopic` which conforms to the policy will be reconciled normally.
----
-
-> This is different to the collision within a single namespace which is detected and notified using a `Ready=false` condition with `reason=ResourceConflict`, described above.
-> In the single namespace case the cause is likely a mistake by a team, who need to know about each of the conflicting resources to resolve the problem.
-> Support for multiple namespaces is motivated by a kind of multitenancy use case, where the space of topics is partitioned and partitions are uniquely associated with Kube namespaces. 
-> This allows management of those topics to be delegated to different teams, each with their own namespace (e.g. using Kube RBAC). 
-> We can't assume that either team involved in the conflict know about the existence of the other.
-> Therefore a different `reason` seems appropriate.
-
--->
 
 ### Operational considerations
 
@@ -583,13 +524,6 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 * There may, or may not, be another `KafkaTopic` for the same topic in Kafka in state "Managed conflicting first".
 * Changes in this state, including deletions, are not propagated to Kafka.
 
-<!-- 
-### PolicyViolation
-
-* This is the where a `KafkaTopic` is created in a namespace which is not allowed by the policy. 
-* The finalizer is never added, and is not removed. 
-* KafkaTopics in this state cannot transition to other state unless the policy is changed, in which case the effect is as-if they'd been created from scratch.
--->
 
 ## Affected/not affected projects
 
@@ -654,6 +588,8 @@ Here is how the schema for the `Kafka` CR will be changed by this proposal:
 
 ```yaml
 kind: Kafka
+metadata:
+  name: my-cluster
 spec:
   # ...
   topicOperator:
@@ -797,7 +733,6 @@ Future work _could_ include:
 
 * Providing tooling to conveniently create `KafkaTopics` for existing topics in Kafka.
 * Providing tooling to conveniently remove finalizers from `KafkaTopics`
-<!-- * Adopting the config partitioning idea to allow multiple `KafkaTopics` to manage disjoint subsets of topics' configurations. -->
 
 ## Rejected alternatives
 
