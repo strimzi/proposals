@@ -627,19 +627,19 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 | `STRIMZI_SASL_MECHANISM`				| Unchanged			|
 | `STRIMZI_SASL_USERNAME`				| Unchanged			|
 | `STRIMZI_SASL_PASSWORD`				| Unchanged			|
-| `STRIMZI_SECURITY_PROTOCOL				| Unchanged			|
-| `STRIMZI_ZOOKEEPER_CONNECT				| Dropped			|
-| `STRIMZI_ZOOKEEPER_SESSION_TIMEOUT_MS			| Dropped			|
-| `TC_ZK_CONNECTION_TIMEOUT_MS				| Dropped			|
-| `STRIMZI_REASSIGN_THROTTLE				| Dropped, see note 2		|
-| `STRIMZI_REASSIGN_VERIFY_INTERVAL_MS			| Dropped, see note 2		|
-| `STRIMZI_TOPIC_METADATA_MAX_ATTEMPTS			| Dropped			|
-| `STRIMZI_TOPICS_PATH					| Dropped			|
-| `STRIMZI_STORE_TOPIC					| Dropped			|
-| `STRIMZI_STORE_NAME					| Dropped			|
-| `STRIMZI_APPLICATION_ID				| Dropped			|
-| `STRIMZI_STALE_RESULT_TIMEOUT_MS			| Dropped			|
-| `STRIMZI_USE_ZOOKEEPER_TOPIC_STORE			| Dropped			|
+| `STRIMZI_SECURITY_PROTOCOL`				| Unchanged			|
+| `STRIMZI_ZOOKEEPER_CONNECT`				| Dropped			|
+| `STRIMZI_ZOOKEEPER_SESSION_TIMEOUT_S`			| Dropped			|
+| `TC_ZK_CONNECTION_TIMEOUT_MS`				| Dropped			|
+| `STRIMZI_REASSIGN_THROTTLE`				| Dropped, see note 2		|
+| `STRIMZI_REASSIGN_VERIFY_INTERVAL_MS`			| Dropped, see note 2		|
+| `STRIMZI_TOPIC_METADATA_MAX_ATTEMPTS`			| Dropped			|
+| `STRIMZI_TOPICS_PATH`					| Dropped			|
+| `STRIMZI_STORE_TOPIC`					| Dropped			|
+| `STRIMZI_STORE_NAME`					| Dropped			|
+| `STRIMZI_APPLICATION_ID`				| Dropped			|
+| `STRIMZI_STALE_RESULT_TIMEOUT_MS`			| Dropped			|
+| `STRIMZI_USE_ZOOKEEPER_TOPIC_STORE`			| Dropped			|
 
 
 Notes:
@@ -755,13 +755,27 @@ Any software which consumed BTO events will not be compatible with UTO.
 
 ## Migration
 
-To migrate, existing BTO users would have to:
+### Standalone case
+
+Existing users of the standalone BTO would have to:
 
 1. Review how they're using the BTO and whether they require bidirectionality
-   1. If bidirectional support is required by their usage then the UTO cannot be used and the user will have no way of managing topics using `KafkaTopic` resources once ZooKeeper support is removed by Apache Kafka and/or Strimzi.
+   1. If bidirectional support is required by their usage then the UTO cannot be used. The user will have no way of managing topics using `KafkaTopic` resources once ZooKeeper support is removed by Apache Kafka and/or Strimzi.
 2. Undeploy the BTO (they can retain their existing `KafkaTopics`)
 3. Deploy the UTO (reconfiguring their `Kafka` CR, or raw `Deployment` in the standalone case). 
 4. Some reconfiguration of pod resources and JVM options may also be required. 
+
+### CO-Managed case
+
+A new feature gate will be introduced to allow users to adopt the UTO at their own pace.
+The new Feature gate will be named `UnidirectionalTopicOperator`.
+The following table shows the expected graduation of the `UnidirectionalTopicOperator` feature gate:
+
+| Phase | Strimzi versions       | Default state                                          |
+|:------|:-----------------------|:-------------------------------------------------------|
+| Alpha | 0.35 - 0.37            | Disabled by default                                    |
+| Beta  | 0.38 - 0.39            | Enabled by default                                     |
+| GA    | 0.40 and newer         | Enabled by default (without possibility to disable it) |
 
 ### Disadvantages
 
