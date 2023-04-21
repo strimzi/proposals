@@ -788,13 +788,13 @@ In these cases it is possible to remove the finalizer manually (e.g. via `kubect
 
 #### Compatibility with other tooling
 
-This approach is not easily compatible with other topic management tooling. This includes things like the `kafka-configs.sh` and other Apache Kafka scripts as well as any other tooling which uses the `Admin` client, including applications themselves.
+This approach is not easily compatible with other topic management tooling.
+This includes things like the `kafka-configs.sh` and other Apache Kafka scripts as well as any other tooling which uses the `Admin` client, including Kafka applications themselves.
 
-<!--Even using the "scheduled auto creation" option, changes done via the admin server would be reverted by the next timed reconciliation. -->
+In the particular case of a hypthetical "Admin server" that was providing CLI or UI functionality in a Strimzi-aware way, it _might_ be possible to use wrap `Admin` (decorator pattern), or write it using some abstraction over `Admin` which could also support operations on `KafkaTopics` for those interactions which would otherwise result in conflicting sources of truth.
 
-In the particular case of an "Admin server", to provide CLI or UI functionality in a Strimzi-aware way it _might_ be possible to use wrap `Admin` (decorator pattern), or write it using some abstraction over `Admin` which could also support operations on `KafkaTopics` for those interactions which would otherwise result in conflicting sources of truth.
-
-Alternatively it might be possible to use a Kafka-aware proxy to redirect Kafka protocol messages which changed topic state to the Kube API, along with a Topic Operator which had a priviliged connection that was not proxied in this way. This would result in Kube being the effective source of truth for topic state.
+Alternatively it might be possible to use a Kafka-aware proxy to redirect Kafka protocol messages which changed topic state to the Kube API, along with a Topic Operator which had a priviliged connection that was not proxied in this way.
+This would result in Kube being the effective source of truth for topic state.
 
 
 ## Future work
