@@ -62,7 +62,7 @@ For these reasons we are proposing the UTO.
 ### Goals
 
 * A unidirectional topic operator which is KRaft compatible
-* Support for multiple namespaces
+<!-- * Support for multiple namespaces -->
 
 ### Non-goals
 
@@ -428,6 +428,7 @@ Note that `spec.managed=False` also means that a `KafkaTopic` can exist without 
 
 ---
 
+<!--
 
 ### Multi-namespace support
 
@@ -484,6 +485,7 @@ In order to avoid collisions where two or more `KafkaTopics` are trying to manag
 > We can't assume that either team involved in the conflict know about the existence of the other.
 > Therefore a different `reason` seems appropriate.
 
+-->
 
 ### Operational considerations
 
@@ -586,11 +588,13 @@ Although not shown to avoid making the diagram overly complicated, the states wi
 * There may, or may not, be another `KafkaTopic` for the same topic in Kafka in state "Managed conflicting first".
 * Changes in this state, including deletions, are not propagated to Kafka.
 
+<!-- 
 ### PolicyViolation
 
 * This is the where a `KafkaTopic` is created in a namespace which is not allowed by the policy. 
 * The finalizer is never added, and is not removed. 
 * KafkaTopics in this state cannot transition to other state unless the policy is changed, in which case the effect is as-if they'd been created from scratch.
+-->
 
 ## Affected/not affected projects
 
@@ -611,8 +615,7 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 
 | Env var						| Status                        |
 |-------------------------------------------------------|-------------------------------|
-| `STRIMZI_NAMESPACE`					| Becomes optional, see note 1  |
-| `STRIMZI_POLICY_YAML`					| Added, optional, see note 1	|
+| `STRIMZI_NAMESPACE`					|				|
 | `STRIMZI_RESOURCE_LABELS`				| Unchanged			|
 | `STRIMZI_KAFKA_BOOTSTRAP_SERVERS`			| Unchanged			|
 | `STRIMZI_CLIENT_ID`					| Unchanged			|
@@ -631,8 +634,8 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 | `STRIMZI_ZOOKEEPER_CONNECT`				| Dropped			|
 | `STRIMZI_ZOOKEEPER_SESSION_TIMEOUT_S`			| Dropped			|
 | `TC_ZK_CONNECTION_TIMEOUT_MS`				| Dropped			|
-| `STRIMZI_REASSIGN_THROTTLE`				| Dropped, see note 2		|
-| `STRIMZI_REASSIGN_VERIFY_INTERVAL_MS`			| Dropped, see note 2		|
+| `STRIMZI_REASSIGN_THROTTLE`				| Dropped, see note 1		|
+| `STRIMZI_REASSIGN_VERIFY_INTERVAL_MS`			| Dropped, see note 1		|
 | `STRIMZI_TOPIC_METADATA_MAX_ATTEMPTS`			| Dropped			|
 | `STRIMZI_TOPICS_PATH`					| Dropped			|
 | `STRIMZI_STORE_TOPIC`					| Dropped			|
@@ -644,10 +647,7 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 
 Notes:
 
-1. `STRIMZI_NAMESPACE` is retained for backwards compatibility and configures the operator with a policy allowing all topics in the given namespace.
-   `STRIMZI_POLICY_JSON` configures a policy as JSON string.
-   Exactly one of `STRIMZI_NAMESPACE` or `STRIMZI_POLICY_YAML` must be provided.
-2. Although these are present in the BTO source code they have never actually been used.
+1. Although these are present in the BTO source code they have never actually been used.
 
 It is also anticiapted that during development we may want to add support for additional environment variables to configure non-functional aspects of the UTO (e.g. performance-related options like numbers of threads used for processing, etc).
 
@@ -678,9 +678,6 @@ spec:
     image: 
     watchedNamespace:
     reconciliationIntervalSeconds:
-
-    # New options
-    policy: # optional namespace policy
 ```
 
 ### Changes to the KafkaTopic custom resource API
@@ -699,7 +696,7 @@ The semantics of the `KafkaTopic` custom resource API will also change:
 2. The absence of fields will not imply that they take their default values, only that the value is not specified in this CR.
 
 > The reason for 2 is to leave the door open to a further refinement of the UTO in the future.
-> Consider the case where a Kafka cluster is centrally managed by an infrastruture team, and the multi-namespace support is being used to allow application teams some control over their topics. 
+> Consider the case where a Kafka cluster is centrally managed by an infrastruture team. 
 > The infra team want to delegate control over only a subset of the possible topic configs. 
 > Configs such as `cleanup.policy` and `compression.type` can be delegated to the application teams.
 > But the infra team want to retain control over configs such as `follower.replication.throttled.replicas`, `min.cleanable.dirty.ratio` or `unclean.leader.election.enable`.
@@ -803,7 +800,8 @@ It is not intended, by itself, to define the complete post-BTO picture.
 Future work _could_ include:
 
 * Providing tooling to conveniently create `KafkaTopics` for existing topics in Kafka.
-* Adopting the config partitioning idea to allow multiple `KafkaTopics` to manage disjoint subsets of topics' configurations.
+* Providing tooling to conveniently remove finalizers from `KafkaTopics`
+<!-- * Adopting the config partitioning idea to allow multiple `KafkaTopics` to manage disjoint subsets of topics' configurations. -->
 
 ## Rejected alternatives
 
