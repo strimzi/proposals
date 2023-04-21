@@ -276,7 +276,7 @@ The process will first describe the topic and its configs and then make alterati
 
 ### Topic deletion
 
-We will use a [Kube finalizer](https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/) for deletion.
+By default we will use a [Kube finalizer](https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/) for deletion.
 This means that deletion via the kube REST API will first mark the resource as scheduled for deletion by setting the `metadata.delectionTimestamp`, allowing the operator to handle the deletion and then update the `KafkaTopic`, removing its `metadata.finalizer` so that the resource is actually removed from `etcd`.
 
 Without a finalizer then the following would be posible:
@@ -300,7 +300,10 @@ status:
     lastTransitionTime: 20230301T103000Z
 ```
 
-The presence of this finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set. 
+While the behaviour described above will be the _default_ it will be possible to opt out of this using the UTO's new `STRIMZI_ADD_FINALIZER` config parameter. 
+
+* `STRIMZI_USE_FINALIZER=true`: The presence the `strimzi.io/topic-operator` finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set, including unmanaged topics. The operator will not add or remove the finalizer on `KafkaTopics` which do not match its label selector.
+* `STRIMZI_USE_FINALIZER=false`: The operator will remove the `strimzi.io/topic-operator` finalizer if present. 
 
 ---
 
@@ -643,6 +646,7 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 | `STRIMZI_APPLICATION_ID`				| Dropped			|
 | `STRIMZI_STALE_RESULT_TIMEOUT_MS`			| Dropped			|
 | `STRIMZI_USE_ZOOKEEPER_TOPIC_STORE`			| Dropped			|
+| `STRIMZI_USE_FINALIZER`				| Added				|
 
 
 Notes:
