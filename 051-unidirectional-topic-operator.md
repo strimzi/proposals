@@ -234,10 +234,6 @@ That is, the configuration of the topic in Kafka will be changed to match the `K
 > 
 ---
 
-
-
-
-
 ### Modification to `KafkaTopics` and timed reconciliation
 
 Via a Kube watch, and also based on a timer, the operator will
@@ -433,15 +429,6 @@ This WILL be supported by:
 2. deleting the `KafkaTopic`.
 3. recreating the `KafkaTopic` with a new `metadata.name`, but with `spec.topicName` referring to the same topic as the original `KafkaTopic`.
 
-<!--#### Change the `metadata.namespace` 
-
-In the case of a UTO configured for multiple namespaces it will be possible to move the `KafkaTopic` for a topic in Kafka from one namespace to another by:
-
-  1. Unmanaging the `KafkaTopic` in the old namespace (as described above)
-  2. Deleting the `KafkaTopic` from the old namespace,
-  3. Revising the policy (requiring a UTO restart)
-  4. Creating a new `KafkaTopic` in the new namespace.-->
-
 #### Changing `spec.topicName`
 
 This will NOT be supported.
@@ -456,10 +443,6 @@ The user will either need to revert the `spec.partitions`, or recreate the topic
 #### Changing `spec.replicas`
 
 This will NOT be supported as part of this proposal.
-
-<!--#### Recreating topics in the Kafka cluster
-
-This WILL be supported.-->
 
 #### Deployment of application with `KafkaTopics`
 
@@ -615,8 +598,6 @@ spec:
 ### Changes to the KafkaTopic custom resource API
 
 The CR API is _structurally_ unchanged.
-
-
 
 Furthermore within the same structure:
 
