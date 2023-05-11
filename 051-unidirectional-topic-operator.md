@@ -14,7 +14,7 @@ The Strimzi community often abbreviates the topic operator as TO, but to avoid a
 
 The BTO makes use of ZooKeeper znode watches to know about changes to topic state within the Kafka cluster.
 
-But Apache Kafka is removing its ZooKeeper-dependence which means that the BTO won't work with Kafka clusters that use it's replacement, known as KRaft.
+But Apache Kafka is removing its ZooKeeper-dependence which means that the BTO won't work with Kafka clusters that use its replacement, known as KRaft.
 
 ## Motivation
 
@@ -71,7 +71,7 @@ For these reasons we are proposing the UTO.
 
 We would remain schema-compatible with the existing `KafkaTopic` resource at the API level. 
 This means that all the existing `spec` sections could be handled by the new operator and all existing fields of the `status` section would still be present for applications that consume the status.
-However, the semantics of a `KafkaTopic` would change incompatibly: The `spec` would no longer be updated when Kafka-side configuration changed.
+However the `spec` would no longer be updated when Kafka-side configuration changed.
 Instead, if Kafka-side configuration was changed out-of-band (e.g. by using the `Admin` client, or Kafka shell scripts) those changes would eventually (depending on the timed reconciliation interval) be reverted.
 
 As context for the rest of this document, an example `KafkaTopic` currently looks like this:
@@ -278,7 +278,7 @@ The process will first describe the topic and its configs and then make alterati
 By default we will use a [Kube finalizer](https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/) for deletion.
 This means that deletion via the kube REST API will first mark the resource as scheduled for deletion by setting the `metadata.delectionTimestamp`, allowing the operator to handle the deletion and then update the `KafkaTopic`, removing its `metadata.finalizer` so that the resource is actually removed from `etcd`.
 
-Without a finalizer then the following would be posible:
+Without a finalizer then the following would be possible:
 
 1. A topic in Kafka is managed by a `KafkaTopic`
 2. The operator stops (for any reason)
@@ -301,12 +301,12 @@ status:
 
 While the behaviour described above will be the _default_ it will be possible to opt out of this using the UTO's new `STRIMZI_ADD_FINALIZER` config parameter. 
 
-* `STRIMZI_USE_FINALIZER=true`: The presence the `strimzi.io/topic-operator` finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set, including unmanaged topics. The operator will not add or remove the finalizer on `KafkaTopics` which do not match its label selector.
+* `STRIMZI_USE_FINALIZER=true`: The presence of the `strimzi.io/topic-operator` finalizer will be checked (and added, if missing) on every reconciliation where the `metadata.deletionTimestamp` isn't set, including unmanaged topics. The operator will not add or remove the finalizer on `KafkaTopics` which do not match its label selector.
 * `STRIMZI_USE_FINALIZER=false`: The operator will remove the `strimzi.io/topic-operator` finalizer if present. 
 
 ---
 
-#### Example 3: `KafkaTopic` deletion propagates to Kafka
+#### Example 2: `KafkaTopic` deletion propagates to Kafka
 
 > 1. The topic is currently Kube-managed
 > 
@@ -414,7 +414,7 @@ This can be useful operationally, for example to change the `metadata.name` of a
 >     ```
 > 
 > 4. The operator notices the `metadata.deletionTimestamp` field.
->     Since the `spec.magnaged` is `False` it does **not** attempt topic deletion.
+>     Since the `spec.magnaged` is `false` it does **not** attempt topic deletion.
 >     1. It removes `strimzi.io/topic-operator` from the `metadata.finalizer`.
 >     2. Kube proceeds to remove the resource.
 
@@ -431,16 +431,16 @@ This WILL be supported by:
 
 1. unmanaging the topic (`strimzi.io/managed: false`).
 2. deleting the `KafkaTopic`.
-3. recreating the `KafkaTopic` with a new name.
+3. recreating the `KafkaTopic` with a new `metadata.name`, but with `spec.topicName` referring to the same topic as the original `KafkaTopic`.
 
-#### Change the `metadata.namespace` 
+<!--#### Change the `metadata.namespace` 
 
 In the case of a UTO configured for multiple namespaces it will be possible to move the `KafkaTopic` for a topic in Kafka from one namespace to another by:
 
   1. Unmanaging the `KafkaTopic` in the old namespace (as described above)
   2. Deleting the `KafkaTopic` from the old namespace,
   3. Revising the policy (requiring a UTO restart)
-  4. Creating a new `KafkaTopic` in the new namespace.
+  4. Creating a new `KafkaTopic` in the new namespace.-->
 
 #### Changing `spec.topicName`
 
@@ -457,9 +457,9 @@ The user will either need to revert the `spec.partitions`, or recreate the topic
 
 This will NOT be supported as part of this proposal.
 
-#### Recreating topics in the Kafka cluster
+<!--#### Recreating topics in the Kafka cluster
 
-This WILL be supported.
+This WILL be supported.-->
 
 #### Deployment of application with `KafkaTopics`
 
@@ -483,7 +483,7 @@ Alternatively: App could be written to wait for topic existency, or use an init 
 This proposal has described a number of different configurations of a KafkaTopic and how the operator will handle them.
 The following diagram and subsections summarise the operator's behaviour on transitions between these states.
 
-![States and their transitions](050-states.png)
+![States and their transitions](051-states.png)
 
 Although not shown to avoid making the diagram overly complicated, the states within the dashed box are pairwise bidirectionally connected.
 
@@ -544,7 +544,7 @@ Let's consider each of the public APIs of the BTO in turn and describe the compa
 
 | Env var						| Status                        |
 |-------------------------------------------------------|-------------------------------|
-| `STRIMZI_NAMESPACE`					|				|
+| `STRIMZI_NAMESPACE`					| Unchanged			|
 | `STRIMZI_RESOURCE_LABELS`				| Unchanged			|
 | `STRIMZI_KAFKA_BOOTSTRAP_SERVERS`			| Unchanged			|
 | `STRIMZI_CLIENT_ID`					| Unchanged			|
@@ -614,9 +614,9 @@ spec:
 
 ### Changes to the KafkaTopic custom resource API
 
-The CR API is _structurally_ unchanged except:
+The CR API is _structurally_ unchanged.
 
-* `spec.managed` (described above), optional, is added
+
 
 Furthermore within the same structure:
 
@@ -628,7 +628,7 @@ The semantics of the `KafkaTopic` custom resource API will also change:
 2. The absence of fields will not imply that they take their default values, only that the value is not specified in this CR.
 
 > The reason for 2 is to leave the door open to a further refinement of the UTO in the future.
-> Consider the case where a Kafka cluster is centrally managed by an infrastruture team. 
+> Consider the case where a Kafka cluster is centrally managed by an infrastructure team. 
 > The infra team want to delegate control over only a subset of the possible topic configs. 
 > Configs such as `cleanup.policy` and `compression.type` can be delegated to the application teams.
 > But the infra team want to retain control over configs such as `follower.replication.throttled.replicas`, `min.cleanable.dirty.ratio` or `unclean.leader.election.enable`.
@@ -691,7 +691,7 @@ Existing users of the standalone BTO would have to:
 1. Review how they're using the BTO and whether they require bidirectionality
    1. If bidirectional support is required by their usage then the UTO cannot be used. The user will have no way of managing topics using `KafkaTopic` resources once ZooKeeper support is removed by Apache Kafka and/or Strimzi.
 2. Undeploy the BTO (they can retain their existing `KafkaTopics`)
-3. Deploy the UTO (reconfiguring their `Kafka` CR, or raw `Deployment` in the standalone case). 
+3. Deploy the UTO (reconfiguring their `Deployment`). 
 4. Some reconfiguration of pod resources and JVM options may also be required. 
 
 ### CO-Managed case
@@ -719,15 +719,15 @@ In these cases it is possible to remove the finalizer manually (e.g. via `kubect
 This approach is not easily compatible with other topic management tooling.
 This includes things like the `kafka-configs.sh` and other Apache Kafka scripts as well as any other tooling which uses the `Admin` client, including Kafka applications themselves.
 
-In the particular case of a hypthetical "Admin server" that was providing CLI or UI functionality in a Strimzi-aware way, it _might_ be possible to use wrap `Admin` (decorator pattern), or write it using some abstraction over `Admin` which could also support operations on `KafkaTopics` for those interactions which would otherwise result in conflicting sources of truth.
+In the particular case of a hypothetical "Admin server" that was providing CLI or UI functionality in a Strimzi-aware way, it _might_ be possible to use wrap `Admin` (decorator pattern), or write it using some abstraction over `Admin` which could also support operations on `KafkaTopics` for those interactions which would otherwise result in conflicting sources of truth.
 
-Alternatively it might be possible to use a Kafka-aware proxy to redirect Kafka protocol messages which changed topic state to the Kube API, along with a Topic Operator which had a priviliged connection that was not proxied in this way.
+Alternatively it might be possible to develop a Kafka-aware proxy to redirect Kafka protocol messages which changed topic state to the Kube API, along with a Topic Operator which had a priviliged connection that was not proxied in this way.
 This would result in Kube being the effective source of truth for topic state.
 
 
 ## Future work
 
-This propsal aims to set the direction and define the semantics of the UTO.
+This proposal aims to set the direction and define the semantics of the UTO.
 It is not intended, by itself, to define the complete post-BTO picture.
 Future work _could_ include:
 
@@ -742,3 +742,7 @@ This has been investigated, at length, as described above.
 While it would be possible, technically to support bidirectionality, it's not clear that many users require it in practice.
 There is very significant complexity in supporting bidirectionality, which would manifest as a long term supportability burden for the Strimzi project. 
 Adopting the UTO allows us to better support the common use case (gitops), and add long sought-after features (support for multiple namespaces).
+
+### Polling
+
+This has been discounted for the reasons described in the motivation section.
