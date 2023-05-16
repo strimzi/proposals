@@ -466,7 +466,7 @@ Alternatively: App could be written to wait for topic existency, or use an init 
 This proposal has described a number of different configurations of a KafkaTopic and how the operator will handle them.
 The following diagram and subsections summarise the operator's behaviour on transitions between these states.
 
-![States and their transitions](051-states.png)
+![States and their transitions](images/051-states.png)
 
 Although not shown to avoid making the diagram overly complicated, the states within the dashed box are pairwise bidirectionally connected.
 
