@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 51  | [Unidirectional Topic Operator](./051-unidirectional-topic-operator.md) |
 | 50  | [Kafka Node Pools](./050-Kafka-Node-Pools.md) |
 | 49  | [Prevent broker scale down if it contains partition replicas](./049-prevent-broker-scale-down-if-it-contains-partition-replicas.md) |
 | 48  | [Avoid broker restart when in log recovery state](./048-avoid-broker-restarts-when-in-recovery.md) |
