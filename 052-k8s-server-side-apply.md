@@ -58,7 +58,11 @@ According to the [package being used](https://github.com/fabric8io/kubernetes-cl
 NOTE: The version of fabric8io being used is [6.5.1](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/pom.xml#L106) which [contains Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
 It is likely that other parts of the codebase will need modifying in terms of label/annotation discovery so that they only check labels/annotations that are owned by themselves.
-Unfortunately, as the person raising this proposal I am unaware of Java and precisely how the codebase works and seek input from others.
+
+The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) will need to filter only the parts of the resource that Strimzi owns as to not trigger a reconcile loop for externally owned resource paths.
+This will allow the removal of `ignorableFields` throughout the codebase as paths are being selected now, rather than filtering out fields.
+
+It appears [this is a place](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ServiceOperator.java#L123) that the `desired` state imports existing external annotations, this would need to change to not include existing external annotations within the `desired` state as then Kubernetes would create an ownership conflict with Server Side Apply.
 
 ### Three-way diff
 
