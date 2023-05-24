@@ -1,5 +1,5 @@
 # Avoid broker restart when in log recovery state
-> Note: This proposal has been updated since the time it was merged.
+> Note: This proposal has been updated since its initial merge.
 
 This proposal describes a solution for KafkaRoller's shortcoming with brokers in log recovery.
 
@@ -8,12 +8,12 @@ This proposal describes a solution for KafkaRoller's shortcoming with brokers in
 The following list outlines the high-level logic currently implemented in `KafkaRoller` for rolling pods:
 - Take a list of Kafka pods and reorder them based on the readiness.
 - If the pod is the controller, roll it last.
-- If pod is not ready before rolling, wait for it to become ready until the operation timeout reaches.
-- If pod is in a stuck state e.g CrashLoopBackOff, force restart the pod.
+- If pod is not ready before rolling, wait for it to become ready until the operation timeout is reached.
+- If pod is in a stuck state e.g `CrashLoopBackOff`, force restart the pod.
 - If pod is unschedulable, fail the reconcilation. 
 - If the AdminClient connection to pod failed, force restart the pod. 
 - Check if rolling the pod would have an impact on the availability such as causing under replicated partitions.
-- If rolling the pod does affect the availibility, then restart the pod and wait for pod readiness.
+- If rolling the pod does not affect the availibility, then restart the pod and wait for pod readiness. Otherwise consider other pods for rolling first.
 - If pod does not became ready within the operation timeout (300000ms by default) after restarting, then retry until the maximum attempt is reached. 
 
 The current flow of KafkaRoller
