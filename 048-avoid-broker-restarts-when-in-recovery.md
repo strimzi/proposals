@@ -80,7 +80,7 @@ The following list outlines the high-level logic that will be implemented in `Ka
 7. If the `brokerState` value is `2` (`RECOVERY`):
      - Log the values of `remainingLogsToRecover` and `remainingSegmentsToRecover` from the JSON response in an `INFO` message.
      - Return an exception to repeat from step 1 until the maximum number of attempts is reached.
-     - If the maximum number of attempts has been reached then wait the reconciliation including log recovery in the reason for failure.
+     - If the maximum number of attempts has been reached then fail the reconciliation including log recovery in the reason for failure.
 8. If the `brokerState` value is not `2` (`RECOVERY`), continue with the current behaviour that may force restart the pod.
 
 ### For future consideration:
