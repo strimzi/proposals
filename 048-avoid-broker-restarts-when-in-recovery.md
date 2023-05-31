@@ -1,20 +1,25 @@
 # Avoid broker restart when in log recovery state
+> Note: This proposal has been updated since its initial merge.
 
 This proposal describes a solution for KafkaRoller's shortcoming with brokers in log recovery.
 
 ## Current situation
 
-The current logic in KafkaRoller:
+The following list outlines the high-level logic currently implemented in `KafkaRoller` for rolling pods:
 - Take a list of Kafka pods and reorder them based on the readiness.
-- Roll unready pods first without considering why it could be unready.
 - If the pod is the controller, roll it last.
-- Do not roll the pod, if it has an impact on the availability such as causing under replicated partitions.
-- If a Kafka pod does not become ready within the operational timeout (300000ms by default) after restarting, then it may force restart it without considering why it's taking a long time.
+- If pod is not ready before rolling, wait for it to become ready until the operation timeout is reached.
+- If pod is in a stuck state e.g `CrashLoopBackOff`, force restart the pod.
+- If pod is unschedulable, fail the reconcilation. 
+- If the AdminClient connection to pod failed, force restart the pod. 
+- Check if rolling the pod would have an impact on the availability such as causing under replicated partitions.
+- If rolling the pod does not affect the availibility, then restart the pod and wait for pod readiness. Otherwise consider other pods for rolling first.
+- If pod does not became ready within the operation timeout (300000ms by default) after restarting, then retry until the maximum attempt is reached. 
 
 The current flow of KafkaRoller
 ![The current flow of KafkaRoller](images/048-kafka-roller-current-flow.png)
 
-A Kafka broker can take a long time to become ready while performing log recovery. In this case, KafkaRoller could end up force restarting the broker and this can continue indefinitely, because of the log recovery on the broker startup again. KafkaRoller currently does not have a way to know what state a broker is in before making a decision to force restart it.
+A Kafka broker can take a long time to become ready while performing log recovery. While the broker is in log recovery, AdminClient connection cannot be made to the broker. In this case, KafkaRoller force restarts the broker and this can continue indefinitely, because of the log recovery on the broker startup again. KafkaRoller currently does not have a way to know what state a broker is in before making a decision to force restart it.
 
 KafkaAgent currently collects the `kafka.server:type=KafkaServer,name=BrokerState` metric and creates a `kafka-ready` file on disk if the broker state value is greater than `3`(`RUNNING`) and not `127` (`UNKNOWN`). The Kafka readiness check passes if it finds the file on disk.
 
@@ -63,26 +68,20 @@ The proposed flow of KafkaRoller
 ![The proposed flow of KafkaRoller](images/048-kafka-roller-new-flow.png)
 (The changes are highlighted in green.)
 
-Currently, if a Kafka pod does not become ready within the operational timeout, it checks how many times the pod has been retried to roll. If it hasn't reached the maximum number of attempts (6 by default and set to 10 by KafkaReconcilor), it reschedules the rolling of the pod by appending it to the list. Otherwise, reconciliation fails.
+Currently, it waits for the pod to become ready if it's not already in ready state before checking if it can be rolled. If the pod does not become ready within the operation timeout, it logs a warning message and carries on. Instead of carrying on, KafkaRoller will now check the broker state and return an exception if it's in recovery state. The pod then would be retried until the maximum attempt reached.
 
-As described in the graph above, the following steps are added before the retry step:
-
-1. Ensure that the Kafka pod is not in a stuck state. The existing `isPodStuck()` can be used for this. If the pod is stuck, continue with the current behaviour to retry rolling of the pod.
-2. Use the Pod DNS name to connect to the KafkaAgent API endpoint. If it cannot connect to the endpoint, continue with the current behaviour to retry rolling of the pod. (The connection might timeout or refused because KafkaAgent is stuck or running older version).
-3. Use the cluster operator's client certificate and keys for mTLS authentication.
-4. Send `GET v1/broker-state` request to the endpoint.
-5. If the HTTP return code is not 200, continue with the current behaviour to retry rolling of the pod.
-6. If the `brokerState` value is `2` (`RECOVERY`), follow the new logic for handling log recovery. Otherwise continue with the current behaviour to retry rolling of the pod.
-
-*Handling log recovery*
-
-7. Set `inLogRecovery` to true for the pod  (`inLogRecovery` is a new boolean that would be added to the `RestartContext`).
-8. Log the values of `remainingLogsToRecover` and `remainingSegmentsToRecover` from the JSON response in an `INFO` message.
-9. Continue with the current behaviour to retry rolling of the pod.
-10. On the next retry, check `inLogRecovery` inside the `restartIfNecessary()` function.
-11. When `inLogRecovery` is set to true, call `awaitReadiness()` which periodically checks and waits for readiness until the operational timeout reaches.
-13. If the operational timeout is reached, repeat from step1.
-14. If the maximum number of attempts has been reached, include log recovery in the reason for failure.
+The following list outlines the high-level logic that will be implemented in `KafkaRoller` for rolling pods:
+1. Wait for pod to become ready if it's not in ready state before checking if it can be rolled.
+2. If pod does not become ready within the operation timeout, check the broker state.
+3. Use the Pod DNS name to connect to the KafkaAgent API endpoint. If it cannot connect to the endpoint (the connection might timeout or refused because KafkaAgent is stuck or running older version), continue with the current behaviour.
+4. Use the cluster operator's client certificate and keys for mTLS authentication.
+5. Send `GET v1/broker-state` request to the endpoint.
+6. If the HTTP return code is not 200, continue with the current behaviour.
+7. If the `brokerState` value is `2` (`RECOVERY`):
+     - Log the values of `remainingLogsToRecover` and `remainingSegmentsToRecover` from the JSON response in an `INFO` message.
+     - Return an exception to repeat from step 1 until the maximum number of attempts is reached.
+     - If the maximum number of attempts has been reached then fail the reconciliation including log recovery in the reason for failure.
+8. If the `brokerState` value is not `2` (`RECOVERY`), continue with the current behaviour that may force restart the pod.
 
 ### For future consideration:
 
