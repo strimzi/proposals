@@ -6,10 +6,18 @@ Make the Operators use [Kubernetes Server Side Apply](https://kubernetes.io/docs
 
 NOTE: Strimzi will still have ownership over the fields it wants.
 
-## Current situation
+## Current situation / cause of proposal
 
 As per [Issue 6938](https://github.com/strimzi/strimzi-kafka-operator/issues/6938) third party Kubernetes operators are having a negative interaction with the existing way Strimzi does Kubernetes applies.
 An example is [Kyverno](https://kyverno.io/) has a policy in a K8s cluster to add a label to all resources with a MutatingWebhookConfiguration, Strimzi detects this label as a resource diff and removes it as it doesn't own it / not included in [hard-coded list of ignored labels](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/resource/StatefulSetDiff.java#LL28C34-L28C49). This triggers the MutatingWebhookConfiguration which re-applies the label and the loop continues.
+
+The precise log we saw was: 
+
+```
+2023-03-03 14:25:52 DEBUG ResourceDiff:38 - Reconciliation #178(timer) Kafka(kafka-backup-spike/kafka-backup-spike): StatefulSet kafka-backup-spike-zookeeper differs: {"op":"replace","path":"/metadata/annotations/policies.kyverno.io~1last-applied-patches","value":""}
+```
+
+This shows a diff found in the annotations of a `StatefulSet` (this was before StrimziPodSets) which generates the behaviour desribed above.
 
 ## Motivation
 
@@ -34,11 +42,13 @@ From:
 
 To:
 
+<!-- Note: change the below examples to serverSideApply once we know how -->
 ```
 ....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withForce(true).build(), desired);
 ```
 
-client.services().withName("name").patch(service);
+Also, the `StrimziPodSetOperator` patches this method [here](https://github.com/strimzi/strimzi-kafka-operator/blob/main/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/StrimziPodSetOperator.java#L65), this would need updating too. 
+It would also need confirming that all resource creates/updates go through `serverSideApply`, not something that should be done in this proposal.
 
 And Kubernetes recommend it is used on CREATE also:
 [From](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#L272):
@@ -55,14 +65,21 @@ ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(name
 
 According to the [package being used](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
-NOTE: The version of fabric8io being used is [6.5.1](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/pom.xml#L106) which [contains Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
+NOTE: The version of fabric8io being used is [6.6.1](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/pom.xml#L106) which [contains Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
-It is likely that other parts of the codebase will need modifying in terms of label/annotation discovery so that they only check labels/annotations that are owned by themselves.
+The operators will need modifying in terms of change discovery so that they only check fields that are owned by themselves, `metadata.managedFields`.
 
 The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) will need to filter only the parts of the resource that Strimzi owns as to not trigger a reconcile loop for externally owned resource paths.
 This will allow the removal of `ignorableFields` throughout the codebase as paths are being selected now, rather than filtering out fields.
 
 It appears [this is a place](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ServiceOperator.java#L123) that the `desired` state imports existing external annotations, this would need to change to not include existing external annotations within the `desired` state as then Kubernetes would create an ownership conflict with Server Side Apply.
+
+
+### Modifications to existing behaviours
+
+The only change to existing (non-Strimzi specific) behaviours is that Strimzi won't care about other fields it chooses not to care about. This does mean that another entity within the cluster can modify things without Strimzi's knowledge, but it shouldn't matter if the `metadata.managedFields` are chosen correctly.
+
+I do not know the codebase for the strimzi kafka operator so cannot comment on specific behaviours that might change, as this is just a proposal I suspect that is better placed in the eventual PR if this proposal gets accepted.
 
 ### Three-way diff
 
@@ -71,6 +88,8 @@ The live object (A) is stored in the `.metadata`, `.spec` etc. The knowledge of 
 ## Compatibility
 
 This proposal aims to be feature-flagged as not to affect existing use of Strimzi, but also allow people to "upgrade" at their own / controlled pace.
+A proposed name is `useServerSideApply`.
+It should follow the same protocol as other feature gates, such as [`UseStrimziPodSets`](https://github.com/strimzi/strimzi-kafka-operator/blob/bcecad71b3676194ec7e17f245aef8d23556908a/CHANGELOG.md) (which was deployed in `0.28.0`, moved to beta in `0.30.0` and graduated in `0.35.0`).
 
 ## Rejected alternatives
 
