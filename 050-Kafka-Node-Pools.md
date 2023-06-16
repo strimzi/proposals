@@ -612,9 +612,9 @@ The following table shows the expected graduation of the `KafkaNodePools` featur
 
 | Phase | Strimzi versions       | Default state                                          |
 |:------|:-----------------------|:-------------------------------------------------------|
-| Alpha | 0.35 - 0.37            | Disabled by default                                    |
-| Beta  | 0.38 - 0.39            | Enabled by default                                     |
-| GA    | 0.40 and newer         | Enabled by default (without possibility to disable it) |
+| Alpha | 0.36 - 0.38            | Disabled by default                                    |
+| Beta  | 0.39 - 0.40            | Enabled by default                                     |
+| GA    | 0.41 and newer         | Enabled by default (without possibility to disable it) |
 
 The main purpose of the feature gate is in this case to protect users from a feature which is not mature enough and might be removed in future versions.
 Only small parts of the code will actually depend on the feature gate being enabled or disabled.

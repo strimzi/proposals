@@ -94,9 +94,9 @@ The following table shows the expected graduation of the `StableConnectIdentitie
 
 | Phase | Strimzi versions       | Default state                                          |
 |:------|:-----------------------|:-------------------------------------------------------|
-| Alpha | 0.34, 0.35             | Disabled by default                                    |
-| Beta  | 0.36, 0.37             | Enabled by default                                     |
-| GA    | 0.38 and newer         | Enabled by default (without possibility to disable it) |
+| Alpha | 0.34 - 0.36            | Disabled by default                                    |
+| Beta  | 0.37 - 0.38            | Enabled by default                                     |
+| GA    | 0.39 and newer         | Enabled by default (without possibility to disable it) |
 
 ### Migration from Kubernetes Deployments to StrimziPodSets
 
