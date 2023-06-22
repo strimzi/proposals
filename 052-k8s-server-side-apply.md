@@ -1,5 +1,3 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Kubernetes Server Side Apply
 
 Make the Operators use [Kubernetes Server Side Apply](https://kubernetes.io/docs/reference/using-api/server-side-apply). This will enable third parties (e.g. Kyverno, Kopf) to have their own labels/annotations on Strimzi owned Kubernetes Resources without Strimzi attempting to remove them.
@@ -9,7 +7,9 @@ NOTE: Strimzi will still have ownership over the fields it wants.
 ## Current situation / cause of proposal
 
 As per [Issue 6938](https://github.com/strimzi/strimzi-kafka-operator/issues/6938) third party Kubernetes operators are having a negative interaction with the existing way Strimzi does Kubernetes applies.
-An example is [Kyverno](https://kyverno.io/) has a policy in a K8s cluster to add a label to all resources with a MutatingWebhookConfiguration, Strimzi detects this label as a resource diff and removes it as it doesn't own it / not included in [hard-coded list of ignored labels](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/resource/StatefulSetDiff.java#LL28C34-L28C49). This triggers the MutatingWebhookConfiguration which re-applies the label and the loop continues.
+An example is [Kyverno](https://kyverno.io/) has a policy in a K8s cluster to add an annotation (`policies.kyverno.io/last-applied-patches:...`) to all resources with a MutatingWebhookConfiguration, Strimzi detects this label as a resource diff and removes it as it doesn't own it / not included in [hard-coded list of ignored labels](https://github.com/strimzi/strimzi-kafka-operator/blob/main/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L26). This triggers the MutatingWebhookConfiguration which re-applies the label and the loop continues.
+
+Another use case could be a Kyverno policy that adds AWS IRSA annotations to a Service Account (specifically useful for a Kafka Sink/Source Connector), this would allow the annotation to be owned by Kyverno and therefore leave it in place without constantly trying to remove it.
 
 The precise log we saw was: 
 
@@ -21,7 +21,7 @@ This shows a diff found in the annotations of a `StatefulSet` (this was before S
 
 ## Motivation
 
-Once this change is made (which is relatively simple to implement), it will allow third party tools within the cluster to interact with Strimzi owned resources without looping and Strimzi will be operating as if it never knew about them.
+Once this change is made it will allow third party tools within the cluster to interact with Strimzi owned resources without looping and Strimzi will be operating as if it never knew about them.
 
 ## Proposal
 
@@ -32,6 +32,15 @@ This would let the Kubernetes apiserver handle the three-way diff, updates etc, 
 Conflicts can happen with Server Side Apply as described [here](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply), it is open to choose the method that Strimzi would use for this.
 
 [Kubernetes suggest](https://kubernetes.io/docs/reference/using-api/server-side-apply/#conflicts:~:text=It%20is%20strongly%20recommended%20for%20controllers%20to%20always%20%22force%22%20conflicts%2C%20since%20they%20might%20not%20be%20able%20to%20resolve%20or%20act%20on%20these%20conflicts.) using the above _force_ method to make sure Strimzi have control over the parts they want. As described in the Kubernetes docs _"This forces the operation to succeed, changes the value of the field, and removes the field from all other managers' entries in managedFields"_, this obviously means if another party is _forcing_ the same field that they will create a loop of ownership but this would be rare as operators should only care about their own fields.
+
+[Kubernetes recommend](https://kubernetes.io/docs/reference/using-api/server-side-apply/#upgrading-from-client-side-apply-to-server-side-apply:~:text=the%20object%20doesn%27t%20have%20to%20be%20read%20beforehand) omitting the `GET` call from the Kubernetes API, given that we only want to send the API our desired fields and leave it up to the API to solve.
+The thing here is that by removing `GET`, we would always need to `UPDATE` with the desired status and allow Kubernetes to resolve it. This would in theory be 1 API call made by Strimzi per reconciliation as opposed to more. 
+
+Existing Resources (Pods/ConfigMaps/etc) contain a patch strategy in the [upstream docs](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), this explains how Server Side Apply will merge fields together, this will be unique to every field and if no strategy is listed then it can be assumed the whole field is changed each time. If this occurs and is not a desired behaviour then we can stick to the Read -> edit -> apply method instead for those examples with a justification.
+
+There is more documentation within the [Merge Strategy][https://kubernetes.io/docs/reference/using-api/server-side-apply/#merge-strategy] documentation in which it defines how we can change CRDs to merge how we want them to (StrimziPodSet, for example). For reference, there are two main kinds: `atomic` and `map`/`set`/`granular`; with `atomic` set, any change replaces the whole field/list and is recursive downwards; with the others the behaviour is more fine-tuned and is described on the above link in a table.
+
+### Code changes
 
 It appears as simple as modifying [this line](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#LL263C88-L263C102).
 From:
@@ -47,10 +56,13 @@ To:
 ....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withForce(true).build(), desired);
 ```
 
+It has been suggested that the first pass of a Server-Side Apply would keep `force = false` and if a conflict were to arise then set `force = true`, this provides better visibility as to when these events may occur.
+This seems like a logical approach and can be included in the proposal.
+
 Also, the `StrimziPodSetOperator` patches this method [here](https://github.com/strimzi/strimzi-kafka-operator/blob/main/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/StrimziPodSetOperator.java#L65), this would need updating too. 
 It would also need confirming that all resource creates/updates go through `serverSideApply`, not something that should be done in this proposal.
 
-And Kubernetes recommend it is used on CREATE also:
+And [Kubernetes](https://kubernetes.io/docs/reference/using-api/server-side-apply/#:~:text=through%20declarative%20configurations.-,Clients%20can%20create,-and%20modify%20their)/[Fabric8io](https://github.com/fabric8io/kubernetes-client/blob/master/doc/CHEATSHEET.md#server-side-apply:~:text=For%20any%20create%20or%20update) recommend it is used on CREATE also:
 [From](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#L272):
 
 ```
@@ -67,19 +79,40 @@ According to the [package being used](https://github.com/fabric8io/kubernetes-cl
 
 NOTE: The version of fabric8io being used is [6.6.1](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/pom.xml#L106) which [contains Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
-The operators will need modifying in terms of change discovery so that they only check fields that are owned by themselves, `metadata.managedFields`.
-
-The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) will need to filter only the parts of the resource that Strimzi owns as to not trigger a reconcile loop for externally owned resource paths.
-This will allow the removal of `ignorableFields` throughout the codebase as paths are being selected now, rather than filtering out fields.
+The operators will need modifying:
+* The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) will need to filter only `metadata.managedFields` (with `strimzi-cluster-operator` as the manager) to compute whether a change is needed as to not trigger a reconcile loop for externally owned resource paths.
+* This will allow the removal of `ignorableFields` throughout the codebase as paths are being selected now, rather than filtering out fields.
 
 It appears [this is a place](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ServiceOperator.java#L123) that the `desired` state imports existing external annotations, this would need to change to not include existing external annotations within the `desired` state as then Kubernetes would create an ownership conflict with Server Side Apply.
+
+| current value of field | desired value of field | field owner | requires update? | change in behaviour |
+| --------               | --------               | ------      | ---------------- | ------------------- |
+| x                      | x                      | Strimzi     | no               | no                  |
+| x                      | y                      | Strimzi     | yes              | no                  |
+| x                      | not set                | Strimzi     | yes              | no                  |
+| x                      | not set                | Not Strimzi | no               | yes                 |
+| not set                | y                      | Strimzi     | yes              | no                  |
+| not set                | y                      | Not Strimzi | yes              | no                  |
+
+The key thing to take from this table is that currently Strimzi is trying to make changes to ALL fields (minus short `ignorableFields` list), once Strimzi has knowledge of the fields it owns - we don't want it to try and change the fields it doesn't own.
+
+It would be wise to try and include this in as many operators as possible, but in some situations where it is decided against it can be overridden in the code and left as is.
 
 
 ### Modifications to existing behaviours
 
-The only change to existing (non-Strimzi specific) behaviours is that Strimzi won't care about other fields it chooses not to care about. This does mean that another entity within the cluster can modify things without Strimzi's knowledge, but it shouldn't matter if the `metadata.managedFields` are chosen correctly.
+The only change to existing (non-Strimzi specific) behaviours is that `ResourceDiff` won't care about other fields it chooses not to care about. This does mean that another entity within the cluster can modify things without Strimzi's knowledge, but it shouldn't matter if the `metadata.managedFields` are chosen correctly.
 
 I do not know the codebase for the strimzi kafka operator so cannot comment on specific behaviours that might change, as this is just a proposal I suspect that is better placed in the eventual PR if this proposal gets accepted.
+
+For users:
+
+* If you want to configure something for a single object (e.g. a single Kafka cluster), and it's in scope of the configuration, use that
+* If you want to configure something that's not the currently configurable fields, you can use other mechanisms to do so (Kyverno, other controllers), and Strimzi won't interfere
+* If you must configure something through some other method, and it's not directly being set in a different way by Strimzi, then Strimzi won't interfere and it'll "just work" (e.g. cattle annotations, pvc resizing annotations, metallb annotations. The user didn't make a choice about this other than the "I want to run Strimzi on this cluster that uses those technologies")
+* If you (and again this may not be the direct user of Strimzi, but the platform/corporate/enterprise team enforcing policy on a wide scale) want to set certain fields, then again if it doesn't conflict, go for it. (e.g., The Datadog admission controller setting labels, Kyverno setting labels or annotations or automated topologySpreadConstraints)
+
+This does not add the possibility of conflicts, they already exist. This reduces the liklihood of reaching a conflict and has some mechanisms in place to avoid them once they are found, although it is still possible if 2 controllers are forcing ownership on the same field of the same resource.
 
 ### Three-way diff
 
