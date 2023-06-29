@@ -39,7 +39,7 @@ The thing here is that by removing `GET`, we would always need to `UPDATE` with 
 
 Existing Resources (Pods/ConfigMaps/etc) contain a patch strategy in the [upstream docs](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), this explains how Server Side Apply will merge fields together, this will be unique to every field and if no strategy is listed then it can be assumed the whole field is changed each time. If this occurs and is not a desired behaviour then we can stick to the Read -> edit -> apply method instead for those examples with a justification.
 
-There is more documentation within the [Merge Strategy][https://kubernetes.io/docs/reference/using-api/server-side-apply/#merge-strategy] documentation in which it defines how we can change CRDs to merge how we want them to (StrimziPodSet, for example). For reference, there are two main kinds: `atomic` and `map`/`set`/`granular`; with `atomic` set, any change replaces the whole field/list and is recursive downwards; with the others the behaviour is more fine-tuned and is described on the above link in a table.
+There is more documentation within the [Merge Strategy](https://kubernetes.io/docs/reference/using-api/server-side-apply/#merge-strategy) documentation in which it defines how we can change CRDs to merge how we want them to (StrimziPodSet, for example). For reference, there are two main kinds: `atomic` and `map`/`set`/`granular`; with `atomic` set, any change replaces the whole field/list and is recursive downwards; with the others the behaviour is more fine-tuned and is described on the above link in a table.
 
 ### Code changes
 
@@ -52,7 +52,7 @@ We need to:
 ---
 
 ### **Modify the PATCH/CREATE commands to server-side apply**
-It appears as simple as modifying [this line](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#LL263C88-L263C102).
+Modify [this line](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#LL263C88-L263C102).
 From:
 
 ```
