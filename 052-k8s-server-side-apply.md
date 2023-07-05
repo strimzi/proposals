@@ -37,7 +37,7 @@ Conflicts can happen with Server Side Apply as described [here](https://github.c
 The thing here is that by removing `GET`, we would always need to `UPDATE` with the desired status and allow Kubernetes to resolve it. This would in theory be 1 API call made by Strimzi per resource per reconciliation as opposed to more. 
 [Kuberenetes suggest](https://kubernetes.io/blog/2022/10/20/advanced-server-side-apply/#reconstructive-controllers) there are two ways to write controllers with Server Side Apply, the first being a modification to the existing "Read-Modify-Update" method that Strimzi is currently using, to compute the changes in a similar fashion but only on the fields Strimzi owns. The second (and recommended) way is that you reconstruct the whole resource for every reconciliation (of each resource) and Apply that, letting Kubernetes manage it. The advantages and disadvantages are discussed in the above link. Notably a NO OP Apply is not very taxing on the API and can reduce the number of calls by quite a lot. **Ideally Strimzi would do it the second way, that is we can remove all comparison logic and storing of state and all GET requests, and just rebuild the resource every time and Server Side Apply it.**
 
-Existing Resources (Pods/ConfigMaps/etc) contain a patch strategy in the [upstream docs](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), this explains how Server Side Apply will merge fields together, this will be unique to every field and if no strategy is listed then it can be assumed the whole field is changed each time. If this occurs and is not a desired behaviour then we can stick to the Read -> edit -> apply method instead for those examples with a justification.
+Existing Resources (Pods/ConfigMaps/etc) contain a patch strategy in the [upstream docs](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), this explains how Server Side Apply will merge fields together, this will be unique to every field and if no strategy is listed then it can be assumed the whole field is changed each time. 
 
 There is more documentation within the [Merge Strategy](https://kubernetes.io/docs/reference/using-api/server-side-apply/#merge-strategy) documentation in which it defines how we can change CRDs to merge how we want them to (StrimziPodSet, for example). For reference, there are two main kinds: `atomic` and `map`/`set`/`granular`; with `atomic` set, any change replaces the whole field/list and is recursive downwards; with the others the behaviour is more fine-tuned and is described on the above link in a table.
 
@@ -46,7 +46,7 @@ There is more documentation within the [Merge Strategy](https://kubernetes.io/do
 We need to:
 * Modify the PATCH/CREATE commands to server-side apply
 * Remove the GET commands
-* Change the ResourceDiff (and other similar functions) to only look at `strimzi-cluster-operator` owned resources (within `metadata.managedFields`)
+* Remove the ResourceDiff (and other similar functions)
 * Update tests
 
 ---
@@ -55,60 +55,67 @@ We need to:
 Modify [this line](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#LL263C88-L263C102).
 From:
 
-```
+```java
 ....patch(PatchContext.of(PatchType.JSON), desired);
 ```
 
 To:
 
 <!-- Note: change the below examples to serverSideApply once we know how -->
-```
-....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withForce(true).build(), desired);
+```java
+....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(true).build(), desired);
 ```
 
-Also, the `StrimziPodSetOperator` patches this method [here](https://github.com/strimzi/strimzi-kafka-operator/blob/main/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/StrimziPodSetOperator.java#L65), this would need updating too. 
-It would also need confirming that all resource creates/updates go through `serverSideApply`, not something that should be done in this proposal.
+And to set without `Force`, as aforementioned for the first pass:
+
+```java
+....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(false).build(), desired);
+```
+
+Also, the `StrimziPodSetOperator` patches this method [here](https://github.com/strimzi/strimzi-kafka-operator/blob/main/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/StrimziPodSetOperator.java#L65), this would need updating too. Every create/update call from the existing Operator should become a `serverSideApply` patch call.
 
 And [Kubernetes](https://kubernetes.io/docs/reference/using-api/server-side-apply/#:~:text=through%20declarative%20configurations.-,Clients%20can%20create,-and%20modify%20their)/[Fabric8io](https://github.com/fabric8io/kubernetes-client/blob/master/doc/CHEATSHEET.md#server-side-apply:~:text=For%20any%20create%20or%20update) recommend it is used on CREATE also:
 [From](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/AbstractNamespacedResourceOperator.java#L272):
 
-```
+```java
 ReconcileResult<T> result = ReconcileResult.created(operation().inNamespace(namespace).resource(desired).create());
 ```
 
 To:
 
-```
-ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(namespace).withName(name).patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withForce(true).build(), desired);
+```java
+ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(namespace).withName(name).patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(true).build(), desired);
 ```
 
-Here `ReconcileResult` would be the `patched` type so would behave as such, code that relies on looking for `created` would need to be updated.
+And to set without `Force`, as aforementioned for the first pass:
+
+```java
+ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(namespace).withName(name).patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(false).build(), desired);
+```
+
+Currently `ReconcileResult.patched` is used for `patch` and `ReconcileResult.created` is used for `create` operations, we can keep it this way - it seems only for logging purposes - or change it so that every call is `ReconcileResult.patched`, which would better represent what is actually happening within the code (there is no `create` called, as mentioned after the first example above).
 
 According to the [package being used](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
 NOTE: The versions of fabric8io used by Strimzi [contain Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
 ---
-### **Change the ResourceDiff**
+### **Remove the ResourceDiff**
 
 The operators will need modifying:
-* The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) will need to filter only `metadata.managedFields` (with `strimzi-cluster-operator` as the manager) to compare the current desired state and the new desired state, before sending it to the Kubernetes API.
+* The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) is no longer needed, we can generate the whole resource (from Strimzi's perspective) every time and send it as a PATCH with Server-Side Apply.
 * This will allow the removal of the `GET` method, as the operator should not care about other fields. It should only know the desired state, and ask Kubernetes API to apply that, letting Kubernetes handle the merge.
-
-It appears [this is a place](https://github.com/strimzi/strimzi-kafka-operator/blob/18d76bfabcfb9e91c71f9afda60b9dd880797f02/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ServiceOperator.java#L123) that the `desired` state imports existing external annotations, this would need to change to not include existing external annotations within the `desired` state as then Kubernetes would create an ownership conflict with Server Side Apply.
 
 | current value of field | desired value of field | field owner | requires update? | change in behaviour |
 | --------               | --------               | ------      | ---------------- | ------------------- |
-| x                      | x                      | Strimzi     | no               | no                  |
+| x                      | x                      | Strimzi     | no               | yes                 |
 | x                      | y                      | Strimzi     | yes              | no                  |
 | x                      | not set                | Strimzi     | yes              | no                  |
 | x                      | not set                | Not Strimzi | no               | yes                 |
 | not set                | y                      | Strimzi     | yes              | no                  |
 | not set                | y                      | Not Strimzi | yes              | no                  |
 
-The key thing to take from this table is that currently Strimzi is trying to make changes to ALL fields (minus short `ignorableFields` list), once Strimzi has knowledge of the fields it owns - we don't want it to try and change the fields it doesn't own.
-
-It would be wise to try and include this in as many operators as possible, but in some situations where it is decided against it can be overridden in the code and left as is.
+The key thing to take from this table is that currently Strimzi is trying to make changes to ALL fields (minus short `ignorableFields` list), once Strimzi has knowledge of the fields it owns - we don't want it to try and change the fields it doesn't own. Also Strimzi will be sending a PATCH call for every resource every reconciliation loop, so where no fields have changed it will be a NO-OP with little resource usage
 
 ---
 ### Modifications to existing behaviours
@@ -121,15 +128,21 @@ For users:
 * If you want to configure something that's not the currently configurable fields, you can use other mechanisms to do so (Kyverno, other controllers), and Strimzi won't interfere
 * If you must configure something through some other method, and it's not directly being set in a different way by Strimzi, then Strimzi won't interfere and it'll "just work" (e.g. cattle annotations, pvc resizing annotations, metallb annotations. The user didn't make a choice about this other than the "I want to run Strimzi on this cluster that uses those technologies")
 
-This does not add the possibility of conflicts, they already exist. This reduces the liklihood of reaching a conflict and has some mechanisms in place to avoid them once they are found, although it is still possible if 2 controllers are forcing ownership on the same field of the same resource.
+This does not add the possibility of conflicts, they already exist. This reduces the likelihood of reaching a conflict and has some mechanisms in place to avoid them once they are found, although it is still possible if 2 controllers are forcing ownership on the same field of the same resource.
 
 ### Three-way diff
 
 The live object (A) is stored in the `.metadata`, `.spec` etc. The knowledge of which fields the client previously applied, and indeed all clients (B) is stored in the `.metadata.managedFields`. And the incoming object (C) is supplied by the client. Kubernetes knows which fields were previously set by the client (in the case that the new object no longer specifies some, and they can be removed), and it knows about which client set all the other fields, and will keep them around instead of wiping out all the other labels etc.
+Kubernetes knows this information as it is set in the `patch` call, example:
+```java
+PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(true).build();
+```
+
+Currently, if a field that Strimzi owns is unset by a user then Strimzi sets a default value. This behaviour will stay the same as the Operator can choose which fields to default if unset by a user when constructing the resource to send to Kubernetes API, this means that if `affinity` is unset then the Operator can set it before Applying and Kubernetes will know it is owned by Strimzi.
 
 ## Compatibility
 
-This proposal aims to be feature-flagged as not to affect existing use of Strimzi, but also allow people to "upgrade" at their own / controlled pace.
+This proposal aims to be feature-flagged to allow a gradual roll-out of this change to the users and give them time to adjust their own environments to it.
 A proposed name is `useServerSideApply`.
 It should follow the same protocol as other feature gates, such as [`UseStrimziPodSets`](https://github.com/strimzi/strimzi-kafka-operator/blob/bcecad71b3676194ec7e17f245aef8d23556908a/CHANGELOG.md) (which was deployed in `0.28.0`, moved to beta in `0.30.0` and graduated in `0.35.0`), the suggested protocol here is:
 * alpha at `0.37.0`
