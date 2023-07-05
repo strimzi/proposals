@@ -93,7 +93,7 @@ And to set without `Force`, as aforementioned for the first pass:
 ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(namespace).withName(name).patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(false).build(), desired);
 ```
 
-Currently `ReconcileResult.patched` is used for `patch` and `ReconcileResult.created` is used for `create` operations, we can keep it this way - it seems only for logging purposes - or change it so that every call is `ReconcileResult.patched`, which would better represent what is actually happening within the code (there is no `create` called, as mentioned after the first example above).
+Currently `ReconcileResult.patched` is used for `patch` and `ReconcileResult.created` is used for `create` operations. We will no longer be making an initial GET request to determine the current resource, so will always be using a PATCH request and returning `ReconcileResult.patched`. There is no code specifically using the `ReconcileResult.Created` type to determine behaviour that we can see, it is only used in tests.
 
 According to the [package being used](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
