@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 56  | [KRaft controller configuration via Kafka Agent](./056-kafka-agent-controller-configuration.md) |
 | 55  | [Infinite auto-restart of Apache Kafka connectors](./055-infinite-auto-restart-of-Kafka-connectors.md) 
 | 54  | [Support stopping Kafka Connect connectors](./054-stopping-kafka-connect-connectors.md) |
 | 53  | [Record Reconciled Version in Kafka Custom Resource status](./053-record-reconciled-versions.md) |
