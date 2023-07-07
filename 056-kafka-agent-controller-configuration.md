@@ -73,6 +73,8 @@ We could think about having a dedicated additional parameter for that, but what 
 
 During the Kafka start up script, the node configuration is generated and saved on the disk in the `/tmp/strimzi.properties` file.
 As soon as the Kafka Agent runs, it can read this file and load its content in memory in a JSON format.
+The top level JSON value is an object with all string-typed values (i.e. even if they are numbers).
+Following, an example of the JSON object bringing the `controller` configuration.
 
 ```json
 {
