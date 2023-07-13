@@ -35,7 +35,7 @@ Conflicts can happen with Server Side Apply as described [here](https://github.c
 
 [Kubernetes recommend](https://kubernetes.io/docs/reference/using-api/server-side-apply/#upgrading-from-client-side-apply-to-server-side-apply:~:text=the%20object%20doesn%27t%20have%20to%20be%20read%20beforehand) omitting the `GET` call from the Kubernetes API, given that we only want to send the API our desired fields and leave it up to the API to solve.
 The thing here is that by removing `GET`, we would always need to `UPDATE` with the desired status and allow Kubernetes to resolve it. This would in theory be 1 API call made by Strimzi per resource per reconciliation as opposed to more. 
-[Kuberenetes suggest](https://kubernetes.io/blog/2022/10/20/advanced-server-side-apply/#reconstructive-controllers) there are two ways to write controllers with Server Side Apply, the first being a modification to the existing "Read-Modify-Update" method that Strimzi is currently using, to compute the changes in a similar fashion but only on the fields Strimzi owns. The second (and recommended) way is that you reconstruct the whole resource for every reconciliation (of each resource) and Apply that, letting Kubernetes manage it. The advantages and disadvantages are discussed in the above link. Notably a NO OP Apply is not very taxing on the API and can reduce the number of calls by quite a lot. **Ideally Strimzi would do it the second way, that is we can remove all comparison logic and storing of state and all GET requests, and just rebuild the resource every time and Server Side Apply it.**
+[Kuberenetes suggest](https://kubernetes.io/blog/2022/10/20/advanced-server-side-apply/#reconstructive-controllers) there are two ways to write controllers with Server Side Apply, the first being a modification to the existing "Read-Modify-Update" method that Strimzi is currently using, to compute the changes in a similar fashion but only on the fields Strimzi owns. The second (and recommended) way is that you reconstruct the whole resource for every reconciliation (of each resource) and Apply that, letting Kubernetes manage it. The advantages and disadvantages are discussed in the above link. Notably a NO OP Apply is not very taxing on the API and can reduce the number of calls by quite a lot. **Strimzi will adopt the second way, that is we can remove all comparison logic and storing of state and all GET requests, and just rebuild the resource every time and Server Side Apply it.**
 
 Existing Resources (Pods/ConfigMaps/etc) contain a patch strategy in the [upstream docs](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), this explains how Server Side Apply will merge fields together, this will be unique to every field and if no strategy is listed then it can be assumed the whole field is changed each time. 
 
@@ -61,7 +61,6 @@ From:
 
 To:
 
-<!-- Note: change the below examples to serverSideApply once we know how -->
 ```java
 ....patch(new PatchContext.Builder().withPatchType(PatchType.SERVER_SIDE_APPLY).withFieldManager("strimzi-cluster-operator").withForce(true).build(), desired);
 ```
@@ -102,7 +101,6 @@ NOTE: The versions of fabric8io used by Strimzi [contain Server Side Apply](http
 ---
 ### **Remove the ResourceDiff**
 
-The operators will need modifying:
 * The [`ResourceDiff`](https://github.com/strimzi/strimzi-kafka-operator/blob/c3522cf4b17004004a676854d37ba01bb9a44800/operator-common/src/main/java/io/strimzi/operator/common/operator/resource/ResourceDiff.java#L46-L78) is no longer needed, we can generate the whole resource (from Strimzi's perspective) every time and send it as a PATCH with Server-Side Apply.
 * This will allow the removal of the `GET` method, as the operator should not care about other fields. It should only know the desired state, and ask Kubernetes API to apply that, letting Kubernetes handle the merge.
 
@@ -153,6 +151,7 @@ It should follow the same protocol as other feature gates, such as [`UseStrimziP
 
 We have seen the [Fabric8 Mock Server](https://github.com/fabric8io/mockwebserver) in CRUD mode returns an error when using the `patch()` call (with server-side apply) when attempting to create a new resource, there is an existing issue [here](https://github.com/fabric8io/mockwebserver/issues/76) which would need fixing also.
 The Mock Server could be put into Expectation Mode to allow us to override this behaviour, but it would require a lot more maintenance to upkeep.
+The limitations will be addressed either in the Fabric8 Mock Server or by moving to another Mock Server as part of the server-side apply implementation.
 
 ## Rejected alternatives
 
