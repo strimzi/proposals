@@ -94,6 +94,8 @@ ReconcileResult<T> result = ReconcileResult.patched(operation().inNamespace(name
 
 Currently `ReconcileResult.patched` is used for `patch` and `ReconcileResult.created` is used for `create` operations. We will no longer be making an initial GET request to determine the current resource, so will always be using a PATCH request and returning `ReconcileResult.patched`. There is no code specifically using the `ReconcileResult.Created` type to determine behaviour that we can see, it is only used in tests.
 
+It seems there is some [usage](https://github.com/strimzi/strimzi-kafka-operator/blob/834bfc894475a3204029c2abd1426d4200ca3b22/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaExporterReconciler.java#L191C21-L192C46) around `ReconcileResult.noop`, the implementation piece should also address this and make sure the logic continues to work.
+
 According to the [package being used](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
 
 NOTE: The versions of fabric8io used by Strimzi [contain Server Side Apply](https://github.com/fabric8io/kubernetes-client/blob/v6.5.1/doc/CHEATSHEET.md#server-side-apply).
