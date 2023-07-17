@@ -1,4 +1,5 @@
 # Liveness and Readiness probes in a KRaft Kafka cluster
+> Note: This proposal has been updated since its initial merge.
 
 This proposal describes the liveness and readiness probes that should be put in place 
 for a Kafka cluster that is using KRaft rather than ZooKeeper. This includes a KRaft 
@@ -70,7 +71,7 @@ The proposed probes are:
 
 The proposed probes are:
 
-* Liveness: broker is listening on the port 9091 which is configured in `inter.broker.listener.name`
+* Liveness: the Java process in the container is running
 * Readiness: the BrokerState metric >=3 && != 127
 
 **Note:** This means the brokers will not become ready until a majority of the controllers 
@@ -159,7 +160,7 @@ This will be used for the broker only and combined readiness checks later and wi
 ### Phase 2 - Strimzi adds support for broker only and controller only modes
 
 * Controller only pod liveness and readiness checks are fully implemented to match this proposal.
-* Broker only pods are marked as both alive and ready if listening on port 9091.
+* Broker only pods are marked as both alive and ready when there is a Java process running (no change from phase 1).
 * Combined mode pods are marked as both alive and ready when there is a Java process running (no change from phase 1).
 
 ### Phase 3 - KafkaRoller is updated to take the existence of controller pods and status of controller quorum into account when deciding whether to roll pods
