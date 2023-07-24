@@ -180,12 +180,13 @@ This defines an example where it is imagined that 0.37.0 had this mechanism alre
 
 
 ## Kafka Version Annotation
-As a follow-on from this proposal, the mechanism could be extended to cover Kafka versions as well, such as:
+As an addition to this proposal, the mechanism could be extended to cover Kafka versions on the `Kafka` CR as well, such as:
 ```
-strimzi.io/kafkaVersion: 3.5.
+strimzi.io/kafka-version: 3.5.0
 ```
-Where the `strimzi.io/kafkaVersion` annotation is updated only once the SPS has rolled all brokers to the new version.
-A label like `strimzi.io/kafkaVersionReconciling` is not needed, since `Kafka.spec.kafka.version` already exists so a Kafka version update still in progress could be determined if `Kafka.spec.kafka.version` and `Kafka.metadata.annotations[strimzi.io/kafkaVersion]` do not match.
+mirroring the same annotation on `StrimizPodSets`
+Where the `strimzi.io/kafka-version` annotation is updated only once the SPS has rolled all brokers to the new version.
+A label like `strimzi.io/kafka-version-reconciling` is not needed, since `Kafka.spec.kafka.version` already exists so a Kafka version update still in progress could be determined if `Kafka.spec.kafka.version` and `Kafka.metadata.annotations[strimzi.io/kafka-version]` do not match.
 
 ## Affected/not affected projects
 To the best of my knowledge only the `strimzi-kafka-operator` would be affected by this mechanism, including the code changes to the reconcilers, the doc changes, and the updates to the system tests.
