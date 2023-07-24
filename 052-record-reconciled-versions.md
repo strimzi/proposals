@@ -197,4 +197,6 @@ No compatibility issues, unless this feature was later removed in which case a u
 
 ## Rejected alternatives
 
-The original implementation was going to use fields in the CR status, i.e. `Kafka.status.reconciled` but this would involve API changes, which after discussion with others seemed less preferable to simply using labels or annotations.
+- The original implementation was going to use fields in the CR status, i.e. `Kafka.status.reconciled` but this would involve API changes, which after discussion with others seemed less preferable to simply using labels or annotations.
+
+- Just have `strimzi.io/reconciled` annotation and do not include the `strimzi.io/reconciling` annotation, this simplifies the implementation somewhat as then it is only updated on a final update, rather than the initial update. However in cases of errors on install or upgrade it is a little less clear that a reconcile at a specific version was attempted and failed.
