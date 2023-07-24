@@ -11,16 +11,15 @@ Though this works, from a user standpoint it is far from ideal as it assumes a l
 
 ## Motivation
 
-The reason this proposal should be considered is it will allow a user to rely on the `Kafka` custom resource as their single source of truth, instead of watching/querying the individual kafka/zookeeper pods.
-This proposal lays out all the information we need and at what points in the reconcile. This should all be available from within the Reconcile loop, so orchestrating and figuring out if a component has been fully upgraded can and should be propogated into the Custom Resource via metadata.
+This proposal allows a user to rely on the `Kafka` custom resource as their single source of truth, instead of watching/querying the individual kafka/zookeeper pods.
+This proposal lays out all the information we need and at what points in the reconcile. This information is already available within the Reconcile loop, so orchestrating and figuring out if a component has been fully upgraded will be propagated into the Custom Resource via metadata.
 
 ## Proposal
 
-The following is a mechanism to record reconcilliation information into a Custom Resource.
-This proposal will cover the `Kafka` and `StrimziPodSet` custom resources, but could be extended to include other Custom Resources if there would be value in it, but this proposal was designed to cover the Kafka Custom Resource as this is the core component of Strimzi, and its reliance on `StrimziPodSet` means we should implement it for this CR type as well.
+This proposal will cover the `Kafka` and `StrimziPodSet` custom resources, but could be extended to include other Custom Resources if there would be value in it. This proposal starts with the `Kafka` Custom Resource as this is the core component of Strimzi, and its reliance on `StrimziPodSet` means we should implement it for this CR type as well.
 
 This proposal assumes that all key value pairs mentioned will be writen to the `metadata.annotations` field [docs here](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/).
-But there is an argument for putting them in the [metadata.labels field](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/), but given Strimzi's heavy use of the labels field, in order to not confuse a user who might think they had accidentally set the field themselves, this proposal has chosen to use annotations.
+Alternatively, there is an argument for putting them in the [metadata.labels field](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/), but given Strimzi's heavy use of the labels field, in order to not confuse a user who might think they had accidentally set the field themselves, this proposal has chosen to use annotations.
 
 
 The following are the two proposed new annotations:
@@ -36,8 +35,10 @@ The `strimzi.io/reconciling` annotation is patched to the CR at the start of rec
 strimzi.io/reconciling: '0.37.0'
 ```
 This annotation is required for the following reasons:
-- It signals to a user know that a reconcile on version Y has started, so that the operator is functional without checking the logs of the operator.
-- The Reconciler should update some value on reconcilliation startup without overriding the `strimzi.io/reconciled` annotation, the reason for this is, if for any reason the operator errors during reconcile it would incorrectly update `reconciled` to Y, despite not finishing to successful completion. So having a two stage commit mechanism here would give much more information to a user regarding whether it started reconcile versus whether it finished.
+- It signals that a reconcile on version Y has started, and that the operator is functional without checking the logs of the operator.
+- The operator updates the `strimzi.io/reconciling` annotation value on reconciliation startup without overriding the `strimzi.io/reconciled` annotation. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully.
+
+An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the annotation, this proposal suggests that `strimzi.io/reconciling` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
 
 ## `Kafka` Custom Resource
 - The update to `strimzi.io/reconciling` would happen in the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
@@ -54,7 +55,17 @@ with `strimzi.io/reconciled` remaining unchanged, leaving it unset if unset, or 
 
 ## Examples
 
-For the following example any key set to `null` counts as it not being set for explicitness and clarity
+For the following example any key set to `null` counts as it not being set for explicitness and clarity.
+e.g. then 
+```
+annotations:
+  strimzi.io/reconciled: null
+  strimzi.io/reconciling: null
+```
+would in a real scenario simply be:
+```
+annotations: {}
+```
 
 ### Fresh Install
 
@@ -84,7 +95,7 @@ For the following example any key set to `null` counts as it not being set for e
   strimzi.io/reconciling: 0.37.0
   ```
 - Kafka Reconciler picks up that SPS is now Ready and finished, installing other components
-  Once all other components installed, `Kafka` CR updates to:
+  Once all other components are installed, the `Kafka` CR updates to:
   ```
   strimzi.io/reconciled: 0.37.0
   strimzi.io/reconciling: 0.37.0
@@ -121,7 +132,7 @@ Same as fresh install:
   strimzi.io/reconciling: 0.37.0
   ```
 - Kafka Reconciler picks up that SPS is now Ready and finished, installing other components
-  Once all other components installed, Kafka CR updates to:
+  Once all other components are installed, the `Kafka` CR updates to:
   ```
   strimzi.io/reconciled: 0.37.0
   strimzi.io/reconciling: 0.37.0
@@ -157,7 +168,7 @@ This defines an example where it is imagined that 0.37.0 had this mechanism alre
   strimzi.io/reconciling: 0.38.0
   ```
 - Kafka Reconciler picks up that SPS is now `Ready` and finished, installing other components
-  Once all other components installed, Kafka CR updates to:
+  Once all other components are installed, the `Kafka` CR updates to:
   ```
   strimzi.io/reconciled: 0.38.0
   strimzi.io/reconciling: 0.38.0
@@ -169,9 +180,10 @@ This defines an example where it is imagined that 0.37.0 had this mechanism alre
 As a follow-on from this proposal, the mechanism could be extended to cover Kafka versions as well, such as:
 ```
 strimzi.io/kafkaVersion: 3.5.0
-strimzi.io/kafkaVersionUpdating: 3.4.0
+strimzi.io/kafkaVersionReconciling: 3.6.0
 ```
-Where the `kafkaVersion` annotation is updated only once the SPS has rolled all brokers to the new version.
+Where the `strimzi.io/kafkaVersion` annotation is updated only once the SPS has rolled all brokers to the new version.
+And `strimzi.io/kafkaVersionReconciling` signals that a Kafka version update is in progress if `kafkaVersionReconciling` and `kafkaVersion` don't match.
 
 ## Affected/not affected projects
 To the best of my knowledge only the `strimzi-kafka-operator` would be effected by this mechanism, including the code changes to the reconcilers, the doc changes, and the updates to the system tests.
