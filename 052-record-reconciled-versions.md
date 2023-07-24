@@ -40,8 +40,11 @@ This annotation is required for the following reasons:
 
 An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the annotation, this proposal suggests that `strimzi.io/reconciling` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
 
+
+The following two sections assume that along with status updates, the operator now also patches the annotations alongside to reflect the new annotation state, which will require a patch/update to the CR, rather than a simple `updateStatus` call.
+
 ## `Kafka` Custom Resource
-- The update to `strimzi.io/reconciling` would happen in the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
+- The update to `strimzi.io/reconciling` would happen in or around the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
 with `strimzi.io/reconciled` remaining unchanged, leaving it unset if unset, or leaving it as whatever it was set to previously if set.
 - The update to `strimzi.io/reconciled` would happen in the `createOrUpdate` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L137) alongside the `Ready` update where the operator version would be updated into the field.
 - `KafkaReconciler` will also need to be modified to wait for all SPS to be updated, I believe in the `podsReady` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaReconciler.java#L817C4-L817C4) where instead of checking the pods the operator will insteady wait for the SPS CR to have `strimzi.io/reconciled` set to the operator version signalling its completion.
@@ -179,20 +182,19 @@ This defines an example where it is imagined that 0.37.0 had this mechanism alre
 ## Kafka Version Annotation
 As a follow-on from this proposal, the mechanism could be extended to cover Kafka versions as well, such as:
 ```
-strimzi.io/kafkaVersion: 3.5.0
-strimzi.io/kafkaVersionReconciling: 3.6.0
+strimzi.io/kafkaVersion: 3.5.
 ```
 Where the `strimzi.io/kafkaVersion` annotation is updated only once the SPS has rolled all brokers to the new version.
-And `strimzi.io/kafkaVersionReconciling` signals that a Kafka version update is in progress if `kafkaVersionReconciling` and `kafkaVersion` don't match.
+A label like `strimzi.io/kafkaVersionReconciling` is not needed, since `Kafka.spec.kafka.version` already exists so a Kafka version update still in progress could be determined if `Kafka.spec.kafka.version` and `Kafka.metadata.annotations[strimzi.io/kafkaVersion]` do not match.
 
 ## Affected/not affected projects
-To the best of my knowledge only the `strimzi-kafka-operator` would be effected by this mechanism, including the code changes to the reconcilers, the doc changes, and the updates to the system tests.
+To the best of my knowledge only the `strimzi-kafka-operator` would be affected by this mechanism, including the code changes to the reconcilers, the doc changes, and the updates to the system tests.
 
 ## Compatibility
 
 This mechanism is backwards compatible, in the sense that it works even if the annotations were not set on prior versions.
-No compatability issues, unless this feature was later removed in which case a user would no longer be able to rely on this annotation.
+No compatibility issues, unless this feature was later removed in which case a user would no longer be able to rely on this annotation.
 
 ## Rejected alternatives
 
-The original implementation was going to use fields in the CR status, i.e. `Kafka.status.reconciled` but this would involve API changes, which after discussion with others seemed less preferably to simply using labels/annotations.
+The original implementation was going to use fields in the CR status, i.e. `Kafka.status.reconciled` but this would involve API changes, which after discussion with others seemed less preferable to simply using labels or annotations.
