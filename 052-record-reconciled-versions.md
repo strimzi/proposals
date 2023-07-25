@@ -1,7 +1,7 @@
 # Record Reconciled Version in Kafka Custom Resource status
 
 For the `Kafka` Custom Resource it is often unclear when an upgrade has finished, whether all the brokers have rolled and to which version of the operator a cluster has been reconciled with.
-The following proposal puts forward a mechanism to make this clear in the `Kafka` custom resources status, making it easy to programmatically check for upgrade completion that could also be used/adopted in the upgrade system tests, simplifying the code and making for a slightly better upgrade UX story.
+The following proposal puts forward a mechanism to make this clear in the `Kafka` custom resources status, making it easy to programmatically check for upgrade completion that could also be used/adopted in the upgrade system tests, simplifying the code and making for a better upgrade UX story.
 
 ## Current situation
 
@@ -31,7 +31,7 @@ status:
   versions:
     reconciled: '0.37.0'
 ```
-If a reconcile does not reach completion, this field is not added or updated, however in the case where it already exists it is let at the previous value.
+If a reconcile does not reach completion, this field is not added or updated, however in the case where it already exists it is left at the previous value.
 i.e.
 `status.versions.reconciled=0.35.0` would remain if a reconcilliation on `0.36.0` failed as the information that a prior reconcilliation passed could be useful to an end user.
 
@@ -44,7 +44,7 @@ status:
 ```
 
 This field is required for the following reasons:
-- It signals that a reconcile on version Y has started, and that the operator is functional without checking the logs of the operator.
+- It signals that a reconcile on version Y has started, and that the operator reconciler & watcher are functional without checking the logs of the operator.
 - The operator updates the `status.versions.managedBy` field on reconciliation startup without overriding the `status.versions.reconciled` field. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully.
 
 An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the field, this proposal suggests that `status.versions.managedBy` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
@@ -84,7 +84,7 @@ status: {}
 - StrimziPodSet reconciler reconciles the `SPS`s
 - Kafka Reconciler picks up that `SPS` is now Ready and finished installing.
   Kafka Reconciler continues to install other components such as entity operator.
-  Once all components are deployed and updated
+  Once all components are deployed and updated, update `Kafka` CR with
   ```
   reconciled: 0.37.0
   managedBy: 0.37.0
@@ -110,7 +110,7 @@ Same as fresh install, upgrade from 0.37.0 to 0.38.0
 - StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
 - Kafka Reconciler picks up that `SPS` is now Ready and finished upgrading.
   Kafka Reconciler continues to install other components such as entity operator.
-  Once all components are upgraded
+  Once all components are upgraded, update `Kafka` CR with
   ```
   reconciled: 0.38.0
   managedBy: 0.38.0
@@ -136,7 +136,7 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
 - StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
 - Kafka Reconciler picks up that `SPS` is now Ready and finished upgrading.
   Kafka Reconciler continues to install other components such as entity operator.
-  Once all components are upgraded
+  Once all components are upgraded, update `Kafka` CR with
   ```
   reconciled: 0.38.0
   managedBy: 0.38.0
