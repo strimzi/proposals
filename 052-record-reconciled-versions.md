@@ -1,7 +1,7 @@
-# Record Reconciled Version in Custom Resource
+# Record Reconciled Version in Kafka Custom Resource status
 
 For the `Kafka` Custom Resource it is often unclear when an upgrade has finished, whether all the brokers have rolled and to which version of the operator a cluster has been reconciled with.
-The following proposal puts forward a mechanism to make this clear in the `StrimziPodSet` and `Deployment` custom resources, making it easy to programmatically check for upgrade completio that could also be used/adopted in the upgrade system tests, simplifying the code and making for a slightly better upgrade UX story.
+The following proposal puts forward a mechanism to make this clear in the `Kafka` custom resources status, making it easy to programmatically check for upgrade completion that could also be used/adopted in the upgrade system tests, simplifying the code and making for a slightly better upgrade UX story.
 
 ## Current situation
 
@@ -11,45 +11,48 @@ Though this works, from a user standpoint it is far from ideal as it assumes a l
 
 ## Motivation
 
-This proposal allows a user to rely on the `StrimziPodSet` custom resources owned by the `Kafka` custom resource as their single source(s) of truth, instead of watching/querying the individual kafka/zookeeper pods.
-This proposal lays out all the information we need and at what points in the reconcile. This information is already available within the Reconcile loop, so orchestrating and figuring out if a component has been fully upgraded will be propagated into the Custom Resource via metadata.
+This proposal allows a user to rely on the `Kafka` custom resources as their single source of truth, instead of watching/querying the individual kafka/zookeeper pods.
+This proposal lays out all the information we need and at what points in the reconcile. This information is already available within the Reconcile loop, so orchestrating and figuring out if a component has been fully upgraded will be propagated into the Custom Resource via status fields.
 
 ## Proposal
 
-This proposal will cover the `StrimziPodSet` custom resources and `Deployment` resources deployed as part of a `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2`, but could be extended to include other Custom Resources if there would be value in it. This proposal starts with the `Kafka` Custom Resource as the base example as it is the core component of Strimzi, and it deploys both `StrimziPodSet`s and `Deployment`s.
+This proposal will cover the `Kafka` custom resource but could apply to other CR types that use `StrimziPodSets` such as `KafkaConnect` and `KafkaMirrorMaker2`, but could be extended to include other Custom Resources if there would be value in it.
+This proposal starts with the `Kafka` Custom Resource as the base example as it is the core component of Strimzi, and it deploys both `StrimziPodSet`s and `Deployment`s.
 
-This proposal assumes that all key value pairs mentioned will be writen to the `metadata.annotations` field [docs here](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/).
-Alternatively, there is an argument for putting them in the [metadata.labels field](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/), but given Strimzi's heavy use of the labels field, in order to not confuse a user who might think they had accidentally set the field themselves, this proposal has chosen to use annotations.
+This proposal assumes that all key value pairs mentioned will be writen to the `status` field as this is managed by the operator and can be added to without impacting end users.
 
+The following is the proposed new fields:
 
-The following is the proposed new annotations:
-
-The `strimzi.io/reconciled` annotation is patched at the end of a **successful** reconcile, and signals to a user that the operator at version `X` was able to reconcile to successful completion.
-This would be the annotation a user or System Test would query against to check whether upgrade was complete.
+### status.versions.reconciled
+The `status.versions.reconciled` field is patched at the end of a **successful** reconcile, and signals to a user that the operator at version `X` was able to reconcile to successful completion.
+This would be the field a user or System Test would query against to check whether upgrade was complete.
 ```
-strimzi.io/reconciled: '0.37.0'
+status:
+  versions:
+    reconciled: '0.37.0'
+```
+If a reconcile does not reach completion, this field is not added or updated, however in the case where it already exists it is let at the previous value.
+i.e.
+`status.versions.reconciled=0.35.0` would remain if a reconcilliation on `0.36.0` failed as the information that a prior reconcilliation passed could be useful to an end user.
+
+### status.versions.managedBy
+The `status.versions.managedBy` field is patched to the CR at the start of reconcile in the `initialStatus` and signals to a user that the operator is attempting to reconcile the CR at version `Y`, regardless of success or failure.
+```
+status:
+  versions:
+    managedBy: '0.37.0'
 ```
 
-<!-- The `strimzi.io/reconciling` annotation is patched to the CR at the start of reconcile and signals to a user that the operator is attempting to reconcile the CR at version Y.
-```
-strimzi.io/reconciling: '0.37.0'
-```
-This annotation is required for the following reasons:
+This field is required for the following reasons:
 - It signals that a reconcile on version Y has started, and that the operator is functional without checking the logs of the operator.
-- The operator updates the `strimzi.io/reconciling` annotation value on reconciliation startup without overriding the `strimzi.io/reconciled` annotation. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully. -->
+- The operator updates the `status.versions.managedBy` field on reconciliation startup without overriding the `status.versions.reconciled` field. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully.
 
-An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the annotation, this proposal suggests that `strimzi.io/reconciling` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
-
-
-The following two sections assume that along with status updates, the operator now also patches the annotations alongside to reflect the new annotation state, which will require a patch/update to the CR, rather than a simple `updateStatus` call.
-
-## `Kafka` Custom Resource
-- The `Kafka` custom resource will have no changes, since this is a public facing API, users would often when patching the CR delete the annotations, making them useless.
-- The KafkaAssembly however will need to be modified/tested to ensure it does not remove annotations applied by the `StrimziPodSet` controller.
+An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the field, this proposal suggests that `status.versions.managedBy` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
 
 
-## `StrimziPodSet` Custom Resource
-- The update to `strimzi.io/reconciled` would happen in the `reconcile` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/StrimziPodSetController.java#L407) alongside the finish of the status update where the operator version would be updated into the field.
+## `Kafka` Custom Resource changes
+- The update to `status.versions.managedBy` would happen in the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
+- The update to `status.versions.reconciled` would happen in the `createOrUpdate` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L137) alongside the `Ready` update where the operator version would be updated into the field.
 
 
 ## Examples
@@ -57,102 +60,101 @@ The following two sections assume that along with status updates, the operator n
 For the following example any key set to `null` counts as it not being set for explicitness and clarity.
 e.g. then 
 ```
-annotations:
-  strimzi.io/reconciled: null
-  strimzi.io/reconciling: null
+reconciled: null
+managedBy: null
 ```
 would in a real scenario simply be:
 ```
-annotations: {}
+status: {}
 ```
 
 ### Fresh Install
 
 - On a fresh install, a user creates a Kafka CR:
-- The Kafka Reconciler watcher picks up the CR and starts a reconcile
-  and creates `StrimziPodSet` CRs with annotations:
   ```
-  strimzi.io/reconciled: null
+  reconciled: null
+  managedBy: null
   ```
-- StrimziPodSet reconciler reconciles the `SPS` CR with initial status update:
+- The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  strimzi.io/reconciled: null
+  reconciled: null
+  managedBy: 0.37.0
   ```
-  and starts deploying Kafka brokers one at a time, and on completion updates the SPS CR to:
-  ```
-  strimzi.io/reconciled: 0.37.0
-  ```
+  and creates `StrimziPodSet` CRs
+- StrimziPodSet reconciler reconciles the `SPS`s
 - Kafka Reconciler picks up that `SPS` is now Ready and finished installing.
   Kafka Reconciler continues to install other components such as entity operator.
-  Adding the `strimzi.io/reconciled` annotation to the deployments also.
+  Once all components are deployed and updated
   ```
-  strimzi.io/reconciled: 0.37.0
+  reconciled: 0.37.0
+  managedBy: 0.37.0
   ```
-- User can now verify well known names of `StrimziPodSet`s (`<instance-name>-kafka`, `<instance-name>-zookeeper`) and `Deployment`s (`<instance-name>-entity-operator`) to check if `metadata.annotations["strimzi.io/reconciled"] == 0.37.0` so they can verify it has reconciled to correct level
+- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
 
 
 ### Upgrade (from no mechansim)
-Same as fresh install:
+Same as fresh install, upgrade from 0.37.0 to 0.38.0
 
-- On a fresh install, a user creates a Kafka CR:
-- The Kafka Reconciler watcher picks up the CR and starts a reconcile
-  and creates `StrimziPodSet` CRs with annotations:
+- User has pre-existing Kafka CR:
   ```
-  strimzi.io/reconciled: null
+  reconciled: null
+  managedBy: null
   ```
-- StrimziPodSet reconciler reconciles the `SPS` CR with initial status update:
+- The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  strimzi.io/reconciled: null
+  reconciled: null
+  managedBy: 0.38.0
   ```
-  and starts deploying Kafka brokers one at a time, and on completion updates the SPS CR to:
-  ```
-  strimzi.io/reconciled: 0.37.0
-  ```
+  and patches `StrimziPodSet` CRs
+- StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
 - Kafka Reconciler picks up that `SPS` is now Ready and finished upgrading.
   Kafka Reconciler continues to install other components such as entity operator.
-  Adding the `strimzi.io/reconciled` annotation to the deployments also.
+  Once all components are upgraded
   ```
-  strimzi.io/reconciled: 0.37.0
+  reconciled: 0.38.0
+  managedBy: 0.38.0
   ```
-- User can now verify well known names of `StrimziPodSet`s (`<instance-name>-kafka`, `<instance-name>-zookeeper`) and `Deployment`s (`<instance-name>-entity-operator`) to check if `metadata.annotations["strimzi.io/reconciled"] == 0.37.0` so they can verify it has reconciled to correct level
+- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
+
 
 ### Upgrade (with new mechansim)
-This defines an example where it is imagined that 0.37.0 had this mechanism already implemented, and is now upgrading to a new version 0.38.0
+This defines an example where it is imagined that `0.37.0` had this mechanism already implemented, and is now upgrading to a new version 0.38.0
 
-- On a fresh install, a user creates a Kafka CR:
-- The Kafka Reconciler watcher picks up the CR and starts a reconcile
-  and creates `StrimziPodSet` CRs with annotations:
+- User has pre-existing Kafka CR:
   ```
-  strimzi.io/reconciled: 0.37.0
+  reconciled: 0.37.0
+  managedBy: 0.37.0
   ```
-- StrimziPodSet reconciler reconciles the `SPS` CR with initial status update:
+- The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  strimzi.io/reconciled: 0.37.0
+  reconciled: 0.37.0
+  managedBy: 0.38.0
   ```
-  and starts deploying Kafka brokers one at a time, and on completion updates the SPS CR to:
-  ```
-  strimzi.io/reconciled: 0.38.0
-  ```
+  and patches `StrimziPodSet` CRs
+- StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
 - Kafka Reconciler picks up that `SPS` is now Ready and finished upgrading.
-  Kafka Reconciler continues to upgrade other components such as entity operator.
-  Adding the `strimzi.io/reconciled` annotation to the deployments also.
+  Kafka Reconciler continues to install other components such as entity operator.
+  Once all components are upgraded
   ```
-  strimzi.io/reconciled: 0.38.0
+  reconciled: 0.38.0
+  managedBy: 0.38.0
   ```
-- User can now verify well known names of `StrimziPodSet`s (`<instance-name>-kafka`, `<instance-name>-zookeeper`) and `Deployment`s (`<instance-name>-entity-operator`) to check if `metadata.annotations["strimzi.io/reconciled"] == 0.38.0` so they can verify it has reconciled to correct level
+- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
+
 
 ## Affected/not affected projects
 To the best of my knowledge only the `strimzi-kafka-operator` would be affected by this mechanism, including the code changes to the reconcilers, the doc changes, and the updates to the system tests.
 
 ## Compatibility
 
-This mechanism is backwards compatible, in the sense that it works even if the annotations were not set on prior versions.
-No compatibility issues, unless this feature was later removed in which case a user would no longer be able to rely on this annotation.
+This mechanism is backwards compatible, in the sense that it works even if the status fields were not set on prior versions.
+No compatibility issues, unless this feature was later removed in which case a user would no longer be able to rely on this status field.
 
 ## Rejected alternatives
 
-- The original implementation was going to use fields in the CR status, i.e. `Kafka.status.reconciled` but this would involve API changes, which after discussion with others seemed less preferable to simply using labels or annotations.
+- Using two new metadata annotations both `strimzi.io/reconciled` and `strimzi.io/reconciling` annotations, which would be a two staged update, so as to distinguish between a start of a reconcile and a completed one on the current operator version. However annotations can be overwritten by users.
 
-- Use both `strimzi.io/reconciled` and `strimzi.io/reconciling` annotations, which would be a two staged update, so as to distinguish between a start of a reconcile and a completed one on the current operator version.
-
-- adding these annotations to the `Kafka` CR, the Kafka CR is a public entity and such users may overwrite the CR, deleting the annotations regularly, this would cause confusion and needless extra updates.
+- Just checking the pods from the StrimziPodSets, this is the current mechanism, but is hardly ideal, given there can be quite a few pods, and the KafkaAssembly already has a step to wait for all pods to be rolled, we can add the logic for updating the status to happen after this.
