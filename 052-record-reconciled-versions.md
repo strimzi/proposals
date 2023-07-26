@@ -23,36 +23,36 @@ This proposal assumes that all key value pairs mentioned will be writen to the `
 
 The following is the proposed new fields:
 
-### status.versions.reconciled
-The `status.versions.reconciled` field is patched at the end of a **successful** reconcile, and signals to a user that the operator at version `X` was able to reconcile to successful completion.
+### status.versions.strimziReconciled
+The `status.versions.strimziReconciled` field is patched at the end of a **successful** reconcile, and signals to a user that the operator at version `X` was able to reconcile to successful completion.
 This would be the field a user or System Test would query against to check whether upgrade was complete.
 ```
 status:
   versions:
-    reconciled: '0.37.0'
+    strimziReconciled: '0.37.0'
 ```
 If a reconcile does not reach completion, this field is not added or updated, however in the case where it already exists it is left at the previous value.
 i.e.
-`status.versions.reconciled=0.35.0` would remain if a reconcilliation on `0.36.0` failed as the information that a prior reconcilliation passed could be useful to an end user.
+`status.versions.strimziReconciled=0.35.0` would remain if a reconcilliation on `0.36.0` failed as the information that a prior reconcilliation passed could be useful to an end user.
 
-### status.versions.managedBy
-The `status.versions.managedBy` field is patched to the CR at the start of reconcile in the `initialStatus` and signals to a user that the operator is attempting to reconcile the CR at version `Y`, regardless of success or failure.
+### status.versions.strimziManagedBy
+The `status.versions.strimziManagedBy` field is patched to the CR at the start of reconcile in the `initialStatus` and signals to a user that the operator is attempting to reconcile the CR at version `Y`, regardless of success or failure.
 ```
 status:
   versions:
-    managedBy: '0.37.0'
+    strimziManagedBy: '0.37.0'
 ```
 
 This field is required for the following reasons:
 - It signals that a reconcile on version Y has started, and that the operator reconciler & watcher are functional without checking the logs of the operator.
-- The operator updates the `status.versions.managedBy` field on reconciliation startup without overriding the `status.versions.reconciled` field. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully.
+- The operator updates the `status.versions.strimziManagedBy` field on reconciliation startup without overriding the `status.versions.strimziReconciled` field. If the operator errors during reconcile it will be clear that the currently reconciled version does not match the version that the operator is applying. A two stage commit mechanism here gives much more information regarding whether it started the reconciliation versus whether it finished successfully.
 
-An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the field, this proposal suggests that `status.versions.managedBy` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
+An important note here, in order to avoid unnecessary extra reconcilliations, and to avoid constant re-adding and removal of the field, this proposal suggests that `status.versions.strimziManagedBy` remains, even after a reconcile, and that the annotation is only ever updated once a new operator version attempts the reconcile.
 
 
 ## `Kafka` Custom Resource changes
-- The update to `status.versions.managedBy` would happen in the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
-- The update to `status.versions.reconciled` would happen in the `createOrUpdate` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L137) alongside the `Ready` update where the operator version would be updated into the field.
+- The update to `status.versions.strimziManagedBy` would happen in the `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292)
+- The update to `status.versions.strimziReconciled` would happen in the `createOrUpdate` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L137) alongside the `Ready` update where the operator version would be updated into the field.
 
 
 ## Examples
@@ -60,8 +60,8 @@ An important note here, in order to avoid unnecessary extra reconcilliations, an
 For the following example any key set to `null` counts as it not being set for explicitness and clarity.
 e.g. then 
 ```
-reconciled: null
-managedBy: null
+strimziReconciled: null
+strimziManagedBy: null
 ```
 would in a real scenario simply be:
 ```
@@ -72,13 +72,13 @@ status: {}
 
 - On a fresh install, a user creates a Kafka CR:
   ```
-  reconciled: null
-  managedBy: null
+  strimziReconciled: null
+  strimziManagedBy: null
   ```
 - The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  reconciled: null
-  managedBy: 0.37.0
+  strimziReconciled: null
+  strimziManagedBy: 0.37.0
   ```
   and creates `StrimziPodSet` CRs
 - StrimziPodSet reconciler reconciles the `SPS`s
@@ -86,11 +86,11 @@ status: {}
   Kafka Reconciler continues to install other components such as entity operator.
   Once all components are deployed and updated, update `Kafka` CR with
   ```
-  reconciled: 0.37.0
-  managedBy: 0.37.0
+  strimziReconciled: 0.37.0
+  strimziManagedBy: 0.37.0
   ```
-- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
-- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
+- User can now verify `Kafka.status.versions.strimziReconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.strimziReconciled` will not be updated.
 
 
 ### Upgrade (from no mechansim)
@@ -98,13 +98,13 @@ Same as fresh install, upgrade from 0.37.0 to 0.38.0
 
 - User has pre-existing Kafka CR:
   ```
-  reconciled: null
-  managedBy: null
+  strimziReconciled: null
+  strimziManagedBy: null
   ```
 - The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  reconciled: null
-  managedBy: 0.38.0
+  strimziReconciled: null
+  strimziManagedBy: 0.38.0
   ```
   and patches `StrimziPodSet` CRs
 - StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
@@ -112,11 +112,11 @@ Same as fresh install, upgrade from 0.37.0 to 0.38.0
   Kafka Reconciler continues to install other components such as entity operator.
   Once all components are upgraded, update `Kafka` CR with
   ```
-  reconciled: 0.38.0
-  managedBy: 0.38.0
+  strimziReconciled: 0.38.0
+  strimziManagedBy: 0.38.0
   ```
-- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
-- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
+- User can now verify `Kafka.status.versions.strimziReconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.strimziReconciled` will not be updated.
 
 
 ### Upgrade (with new mechansim)
@@ -124,13 +124,13 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
 
 - User has pre-existing Kafka CR:
   ```
-  reconciled: 0.37.0
-  managedBy: 0.37.0
+  strimziReconciled: 0.37.0
+  strimziManagedBy: 0.37.0
   ```
 - The Kafka Reconciler watcher picks up the CR does an initial status update:
   ```
-  reconciled: 0.37.0
-  managedBy: 0.38.0
+  strimziReconciled: 0.37.0
+  strimziManagedBy: 0.38.0
   ```
   and patches `StrimziPodSet` CRs
 - StrimziPodSet reconciler reconciles the `SPS`s with help of `KafkaRoller` and `ZookeeperRoller`
@@ -138,11 +138,11 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
   Kafka Reconciler continues to install other components such as entity operator.
   Once all components are upgraded, update `Kafka` CR with
   ```
-  reconciled: 0.38.0
-  managedBy: 0.38.0
+  strimziReconciled: 0.38.0
+  strimziManagedBy: 0.38.0
   ```
-- User can now verify `Kafka.status.versions.reconciled` to check if it has reconciled to correct/expected level.
-- if there is an error at any point during reconcile `Kafka.status.versions.reconciled` will not be updated.
+- User can now verify `Kafka.status.versions.strimziReconciled` to check if it has reconciled to correct/expected level.
+- if there is an error at any point during reconcile `Kafka.status.versions.strimziReconciled` will not be updated.
 
 
 ## Affected/not affected projects
