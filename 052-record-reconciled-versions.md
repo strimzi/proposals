@@ -53,8 +53,6 @@ This field is required as it signals that a reconcile to Kafka version `Y` has f
 If the operator errors during the Kafka reconciliation this field will not be updated. 
 If Kafka was successfully updated, the field will also be updated, meaning errors later in the reconcile, such as failing to deploy the `entity-operator` or `kafka-exporter` will still show `status.versions.kafka` correctly up to date, but `lastSuccessfulReconciliationBy` will not be updated, and the CR will no longer be in a `Ready` state.
 
-Note: It may be useful to also include versions for the `inter-broker-protocol-version` and `log-message-format-version` in the status, such as `status.versions.kafkaInterBrokerProtocol` and `status.versions.kafkaLogMessageFormat` as these too could cause multiple reconciles and a user might want to verify that these have been picked up by the brokers, but this is less important than the main two fields proposed above.
-
 
 ## `Kafka` Custom Resource & Reconciler changes
 
@@ -183,3 +181,5 @@ No compatibility issues, unless this feature was later removed in which case a u
 - Just checking the pods from the StrimziPodSets, this is the current mechanism, but is hardly ideal, given there can be quite a few pods, and the KafkaAssembly already has a step to wait for all pods to be rolled, we can add the logic for updating the status to happen after this.
 
 - Having a field `Kafka.status.versions.managedBy` that is updated at the beginning of reconcile, this has little value to the user and might just cause more confusion.
+
+- It may be useful to also include versions for the `inter-broker-protocol-version` and `log-message-format-version` in the status, such as `status.versions.kafkaInterBrokerProtocol` and `status.versions.kafkaLogMessageFormat` as these too could cause multiple reconciles and a user might want to verify that these have been picked up by the brokers. However these are not used in KRaft as `log.message.format.version` is ignored if `inter.broker.protocol.version` is 3.0 or higher. `inter.broker.protocol.version` is not deprecated formally. But it is not used in KRaft mode. So it will be essentially removed in Kafka `4.0`. So removing it from this proposal.
