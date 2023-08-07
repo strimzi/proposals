@@ -48,6 +48,8 @@ status:
     kafka: '3.5.1'
 ```
 
+Note: This will update the field in the reconcilers internal status object and have it be written at the end of the reconciliation rather then having a separate status update API call each time this is updated.
+
 This field is required as it signals that a reconcile to Kafka version `Y` has finished, and this extra information is important and needs to be available, as a user just checking `status.versions.lastSuccessfulReconciliationBy` is not sufficient for upgrades where multiple rolls of the brokers are required, such as a Kafka version update alongside an upgrade.
 
 If the operator errors during the Kafka reconciliation this field will not be updated. 
@@ -58,9 +60,7 @@ If Kafka was successfully updated, the field will also be updated, meaning error
 
 - Update `KafkaStatus` with new `versions` field and sub fields as agreed on this proposal.
 
-- Update `initialStatus` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/0c4e96de69e20cb80e86fd8ccb3ab8baca431822/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L292) to seed new status with the `status.versions` field if it is already set on the CR. This is so that any status update leaves these fields unchanged, unless they are explicitly modified as part of reconcile.
-
-- The update to `status.versions.kafka` would happen after the `podsReady` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/0c4e96de69e20cb80e86fd8ccb3ab8baca431822/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaReconciler.java#L817) updating the Kafka version once all pods are ready. The Kafka version can be determined from the `StrimziPodSet` which has the information available in the `strimzi.io/kafka-version` annotation.
+- The update to `status.versions.kafka` would happen after the `podsReady` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/0c4e96de69e20cb80e86fd8ccb3ab8baca431822/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaReconciler.java#L817) updating the Kafka version once all pods are ready.
 
 - The update to `status.versions.lastSuccessfulReconciliationBy` would happen in the `createOrUpdate` [method](https://github.com/strimzi/strimzi-kafka-operator/blob/2a1fdf9d8695bb22a2bf977b0ba5414291530207/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaAssemblyOperator.java#L137) alongside the `Ready` update where the operator version would be updated into the field.
 
@@ -102,8 +102,7 @@ Same as fresh install, upgrade from 0.37.0 to 0.38.0 with Kafka cersion 3.5.1
 - On an upgrade, a user has a Kafka CR:
   ```
   # the status.versions is not set, but treat it as empty here
-  status:
-    versions: {}
+  status: {}
   ```
 - The KafkaReconciler reconciles the CR and creates `StrimziPodSet` CRs
 - StrimziPodSet reconciler reconciles the `SPS`s creating the Kafka Brokers
@@ -162,8 +161,9 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
 
 ## `KafkaNodePool` considerations
 
-Some users use new `KafkaNodePool` CRs to facilitate upgrades through rolling out new brokers with new Kafka versions, reassigning the partitions and then delete the old brokers.
-This proposal should work with this method od upgrade, since the Kafka version + readiness checks will be track by the `StrimziPodSet`, so that when a user had finished upgrading via this method, the new `status.versions.kafka` should be updated accordingly.
+Some users use the new `KafkaNodePool` CRs to facilitate upgrades through rolling out new brokers with new Kafka versions, reassigning the partitions and then delete the old brokers.
+This proposal should work with this method of upgrade, since the Kafka version + readiness checks will be track by the `StrimziPodSet`, so that when a user had finished upgrading via this method, the new `status.versions.kafka` should be updated accordingly.
+In the potential case where a user is using multiple `KafkaNodePool`s for a cluster using different Kafka Versions, it is my recommendation that `status.versions.kafka` is set to the 'minimum' of all these Kafka Versions, as a user is more likely interested in what the minimum kafka version is for API compatability, rather than the highest version.
 
 ## Affected/not affected projects
 
