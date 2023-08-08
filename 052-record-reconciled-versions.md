@@ -163,7 +163,8 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
 
 Some users use the new `KafkaNodePool` CRs to facilitate upgrades through rolling out new brokers with new Kafka versions, reassigning the partitions and then delete the old brokers.
 This proposal should work with this method of upgrade, since the Kafka version + readiness checks will be track by the `StrimziPodSet`, so that when a user had finished upgrading via this method, the new `status.versions.kafka` should be updated accordingly.
-In the potential case where a user is using multiple `KafkaNodePool`s for a cluster using different Kafka Versions, it is my recommendation that `status.versions.kafka` is set to the 'minimum' of all these Kafka Versions, as a user is more likely interested in what the minimum kafka version is for API compatability, rather than the highest version.
+In the potential case where a user is using multiple `KafkaNodePool`s for a cluster using different Kafka Versions, it is my recommendation that `status.versions.kafka` is a comma delimitered (sequentially ordered) list of all these Kafka Versions rather than the minimum or maximum kafka version.
+In discussions it was deemed unlikely that Strimzi would choose to support multiple Kafka versions at once like this, but this would be my proposal for how it is displayed to the user if it was supported.
 
 ## Affected/not affected projects
 
@@ -183,3 +184,14 @@ No compatibility issues, unless this feature was later removed in which case a u
 - Having a field `Kafka.status.versions.managedBy` that is updated at the beginning of reconcile, this has little value to the user and might just cause more confusion.
 
 - It may be useful to also include versions for the `inter-broker-protocol-version` and `log-message-format-version` in the status, such as `status.versions.kafkaInterBrokerProtocol` and `status.versions.kafkaLogMessageFormat` as these too could cause multiple reconciles and a user might want to verify that these have been picked up by the brokers. However these are not used in KRaft as `log.message.format.version` is ignored if `inter.broker.protocol.version` is 3.0 or higher. `inter.broker.protocol.version` is not deprecated formally. But it is not used in KRaft mode. So it will be essentially removed in Kafka `4.0`. So removing it from this proposal.
+
+- The `Kafka.status.versions.kafka` field being an array of `String`s for the purposes of covering the multiple-kafka versions scenario in the [KafkaNodePool section](#-`KafkaNodePool`-considerations).
+  i.e
+  ```
+  status:
+    versions:
+      kafka:
+      - '3.5.0'
+      - '3.5.1'
+  ```
+  since this is unlikely to be supported, and reading a string rather than an array is easier, a single string for the field seems preferable.
