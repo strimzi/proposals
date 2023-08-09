@@ -27,7 +27,7 @@ The following is the proposed new fields:
 ### status.versions.lastSuccessfulReconciliationBy
 
 The `status.versions.lastSuccessfulReconciliationBy` field is patched at the end of a **successful** reconcile, and signals to a user that the operator at version `X` was able to reconcile to successful completion, meaning it reached the end of a reconcile without error.
-This would be the field a user would query against to check whether an upgrade was complete - or atleast a complete roll of the Kafka brokers on the latest operator version. Details on how to verify that an upgrade has completed when the `Kafka.spec.kafka.version` is updated is covered in the next section.
+This would be the field a user would query against to check whether an operator upgrade was complete - or at least a complete roll of the Kafka brokers on the latest operator version. Details on how to verify that an upgrade has completed when the `Kafka.spec.kafka.version` is updated is covered in the next section.
 
 Example field in status:
 ```
@@ -161,7 +161,7 @@ This defines an example where it is imagined that `0.37.0` had this mechanism al
 
 ## `KafkaNodePool` considerations
 
-Some users use the new `KafkaNodePool` CRs to facilitate upgrades through rolling out new brokers with new Kafka versions, reassigning the partitions and then delete the old brokers.
+It might be that in the future each `KafkaNodePool` CR supports having its own Kafka version which might differ from other `KafkaNodePools` in the same Kafka cluster.
 This proposal should work with this method of upgrade, since the Kafka version + readiness checks will be track by the `StrimziPodSet`, so that when a user had finished upgrading via this method, the new `status.versions.kafka` should be updated accordingly.
 In the potential case where a user is using multiple `KafkaNodePool`s for a cluster using different Kafka Versions, it is my recommendation that `status.versions.kafka` is a comma delimitered (sequentially ordered) list of all these Kafka Versions rather than the minimum or maximum kafka version.
 In discussions it was deemed unlikely that Strimzi would choose to support multiple Kafka versions at once like this, but this would be my proposal for how it is displayed to the user if it was supported.
