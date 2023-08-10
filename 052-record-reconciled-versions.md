@@ -52,8 +52,9 @@ Note: This will update the field in the reconcilers internal status object and h
 
 This field is required as it signals that a reconcile to Kafka version `Y` has finished, and this extra information is important and needs to be available, as a user just checking `status.versions.lastSuccessfulReconciliationBy` is not sufficient for upgrades where multiple rolls of the brokers are required, such as a Kafka version update alongside an upgrade.
 
-If the operator errors during the Kafka reconciliation this field will not be updated. 
-If Kafka was successfully updated, the field will also be updated, meaning errors later in the reconcile, such as failing to deploy the `entity-operator` or `kafka-exporter` will still show `status.versions.kafka` correctly up to date, but `lastSuccessfulReconciliationBy` will not be updated, and the CR will no longer be in a `Ready` state.
+If the operator errors during the Kafka reconciliation this field will not be updated, and will instead remain set to its prior set value, or unset if no previous value was set.
+This does mean that during an upgrade the value set in the `status.values.kafka` field will not reflect the kafka version correctly for all brokers, but this is desired, as the operator should only update the status field to reflect a finished upgrade so that a user can query the field to understand when an upgrade is finished and not for a breakdown broker-by-broker, if a user wants an understanding this granular this proposal does not cover this, and would instead recommend they check the kafka broker versions by querying the pods.
+If Kafka was successfully updated, the field will also be updated, meaning errors later in the reconcile such as failing to deploy the `entity-operator`, `cruise-control`, `kafka-exporter`, or any other components added in the future to the `KafkaAssembly`; will still show `status.versions.kafka` correctly up to date, but `lastSuccessfulReconciliationBy` will not be updated, and the CR will no longer be in a `Ready` state.
 
 
 ## `Kafka` Custom Resource & Reconciler changes
@@ -98,7 +99,7 @@ If Kafka was successfully updated, the field will also be updated, meaning error
 
 ### Upgrade (from no mechansim)
 
-Same as fresh install, upgrade from 0.37.0 to 0.38.0 with Kafka cersion 3.5.1
+Same as fresh install, upgrade from 0.37.0 to 0.38.0 with Kafka version 3.5.1
 - On an upgrade, a user has a Kafka CR:
   ```
   # the status.versions is not set, but treat it as empty here
