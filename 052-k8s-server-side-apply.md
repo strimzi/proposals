@@ -127,32 +127,32 @@ The only change to existing (non-Strimzi specific) behaviours is that `ResourceD
 
 For users:
 
-* If you want to configure part of a Strimzi Custom Resource (CR) (e.g. `Kafka` CR `replicas`) and the field exists within the CR, then you should use that field
+* If you want to configure part of a Strimzi Custom Resource (CR) (e.g. Kafka CR replicas) and the field exists within the CR, then you should use that field
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
 metadata:
   name: my-cluster
-  annotations:
-    custom-annotation: "..." # defined with use of CR, therefore "owned" by Strimzi
 spec:
   kafka:
-    replicas: 3
+    template:
+      pod:
+        metadata:
+          annotations:
+            custom-annotation: "..." # defined with use of CR, therefore "owned" by Strimzi
     ...
 ```
-* If you want to configure part of a Strimzi CR that is not within the configurable fields (e.g. `annotations` used by another operator), you can apply them in any manner you like and Strimzi won't interfere (unless you define them in the CR itself).
+* If you want to configure part of a Strimzi CR that is not within the configurable fields (e.g. annotations used by another operator) or has a dynamic value, you can apply them in any manner you like and Strimzi won't interfere (unless you define them in the CR itself).
 ```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: Kafka
+apiVersion: v1
+kind: Pod
 metadata:
-  name: my-cluster
+  name: my-cluster-kafka-0
   annotations:
     policies.kyverno.io/last-applied-patches: "..." # applied from Kyverno operator, therefore ignored by Strimzi operator
     custom-annotation: "..." # defined with use of CR, therefore "owned" by Strimzi
 spec:
-  kafka:
-    replicas: 3
-    ...
+  ...
 ```
 
 This does not add to the possibility of conflicts that already exist. But it does reduce the likelihood of reaching a conflict and has some mechanisms in place to avoid them once they are found. Conflicts are still possible if 2 controllers are forcing ownership on the same field of the same resource.
