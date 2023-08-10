@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 52  | [Kubernetes Server Side Apply](./052-k8s-server-side-apply.md) |
 | 51  | [Unidirectional Topic Operator](./051-unidirectional-topic-operator.md) |
 | 50  | [Kafka Node Pools](./050-Kafka-Node-Pools.md) |
 | 49  | [Prevent broker scale down if it contains partition replicas](./049-prevent-broker-scale-down-if-it-contains-partition-replicas.md) |
