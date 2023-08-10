@@ -127,9 +127,33 @@ The only change to existing (non-Strimzi specific) behaviours is that `ResourceD
 
 For users:
 
-* If you want to configure something for a single object (e.g. a single Kafka cluster), and it's in scope of the configuration, use that
-* If you want to configure something that's not the currently configurable fields, you can use other mechanisms to do so (Kyverno, other controllers), and Strimzi won't interfere
-* If you must configure something through some other method, and it's not directly being set in a different way by Strimzi, then Strimzi won't interfere and it'll "just work" (e.g. cattle annotations, pvc resizing annotations, metallb annotations. The user didn't make a choice about this other than the "I want to run Strimzi on this cluster that uses those technologies")
+* If you want to configure part of a Strimzi Custom Resource (CR) (e.g. `Kafka` CR `replicas`) and the field exists within the CR, then you should use that field
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+  annotations:
+    custom-annotation: "..." # defined with use of CR, therefore "owned" by Strimzi
+spec:
+  kafka:
+    replicas: 3
+    ...
+```
+* If you want to configure part of a Strimzi CR that is not within the configurable fields (e.g. `annotations` used by another operator), you can apply them in any manner you like and Strimzi won't interfere (unless you define them in the CR itself).
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+  annotations:
+    policies.kyverno.io/last-applied-patches: "..." # applied from Kyverno operator, therefore ignored by Strimzi operator
+    custom-annotation: "..." # defined with use of CR, therefore "owned" by Strimzi
+spec:
+  kafka:
+    replicas: 3
+    ...
+```
 
 This does not add to the possibility of conflicts that already exist. But it does reduce the likelihood of reaching a conflict and has some mechanisms in place to avoid them once they are found. Conflicts are still possible if 2 controllers are forcing ownership on the same field of the same resource.
 
