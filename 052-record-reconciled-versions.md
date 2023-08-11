@@ -22,7 +22,7 @@ This proposal starts with the `Kafka` Custom Resource as the base example as it 
 
 This proposal assumes that all key value pairs mentioned will be writen to the `status` field as this is managed by the operator and can be added to without impacting end users.
 
-The following is the proposed new fields:
+The following are the proposed new fields:
 
 ### status.versions.lastSuccessfulReconciliationBy
 
