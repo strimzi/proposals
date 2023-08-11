@@ -23,7 +23,7 @@ spec:
 
 Since Kafka 3.5, Kafka Connect connectors can also be stopped. This is done by using a new REST endpoint `PUT /connectors/{connector}/stop`. Compared to paused where the connector and tasks stay instantiated, when stopped only the configuration of the connector is kept but nothing is actually running.
 
-A connector paused still uses some resources but it's faster to resume. So using pause is great if you want to halt data flowing for a short duration. For longer durations it's interesting to fully stop the connector with the new API. Also the stopped state will be required to use the offset delete/reset endpoints that should come with Kafka 3.6. For these reasons, Strimzi should support both pausing and stopping connectors.
+A paused connector still uses some resources but it's faster to resume. So using pause is well-suited if you want to halt data flowing for a short duration. For longer durations it could be beneficial to free up memory and other resources by fully stopping the connector with the new API. The stopped state will be required to use the offset delete/reset endpoints that should come with Kafka 3.6. For these reasons, Strimzi should support both pausing and stopping connectors.
 
 The `PUT /connectors/{connector}/resume` REST endpoint is used to restart both paused and stopped connectors.
 
