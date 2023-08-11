@@ -33,6 +33,8 @@ Since a connector can't be paused and stopped at the same time, the proposal is 
 
 The `pause` property will be marked as deprecated. In the next Strimzi API version, the `pause` field will be deleted.
 
+This feature requires at least Kafka 3.5 to work. In case it is merged when Strimzi still support older releases, a note in the documentation will be added to notify of this limitation.
+
 This proposal does not intend to address deleting/resetting offsets. As explained in the motivation section, stopping connectors has value on its own. Adding support for deleting/resetting connector offsets will be tackled in a separate proposal once Strimzi adopts a Kafka version that supports this feature (expected to release in 3.6).
 
 ## Affected/not affected projects
