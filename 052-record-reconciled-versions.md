@@ -97,7 +97,7 @@ If Kafka was successfully updated, the field will also be updated, meaning error
 - if there is an error at any point during reconcile `Kafka.status.versions.lastSuccessfulReconciliationBy` will not be updated.
 
 
-### Upgrade (from no mechansim)
+### Upgrade (from no mechanism)
 
 Same as fresh install, upgrade from 0.37.0 to 0.38.0 with Kafka version 3.5.1
 - On an upgrade, a user has a Kafka CR:
@@ -127,7 +127,7 @@ Same as fresh install, upgrade from 0.37.0 to 0.38.0 with Kafka version 3.5.1
 - if there is an error at any point during reconcile `Kafka.status.versions.lastSuccessfulReconciliationBy` will not be updated.
 
 
-### Upgrade (with new mechansim)
+### Upgrade (with new mechanism)
 
 This defines an example where it is imagined that `0.37.0` had this mechanism already implemented, and is now upgrading to a new version `0.38.0` (with kafka upgrading from `3.5.0` to `3.5.1`)
 
