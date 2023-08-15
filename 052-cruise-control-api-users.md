@@ -20,7 +20,7 @@ There are a couple use cases where developers would want to access the Cruise Co
 * Monitoring a Strimzi-managed Kafka cluster with the Cruise Control UI.
 * Gathering Cruise Control specific statistical information that is not currently available via Strimzi Operator or Cruise Control sensor metrics e.g. detailed information surrounding cluster and partition load and user tasks.
 * Experiment with Cruise Control operations not currently supported by Strimzi.
-* Debugging Cruise Control in a secured environments.
+* Debugging Cruise Control in a secured environment.
 
 At this time, Strimzi Cruise Control integration offers limited access to Cruise Control data and features.
 Although this limited access protects developers from preforming potentially dangerous cluster operations it also prevents developers from accessing harmless monitoring data.
@@ -37,9 +37,44 @@ In order to allow developers and third-party applications to access the Cruise C
 ### Developer managed API user configuration
 
 Having the developer manage a single secret with their custom Cruise Control API user configuration would greatly reduce the complexity of the proposed design.
-Strimzi could add the contents of this secret to the Cruise Control API user configuration file containing Strimzi's `admin` and `healthcheck` API users.
 
-The schema could look something like this:
+Cruise Control's auth credential files follow Jetty's HashLoginService's file format: `username: password [,rolename ...]`.
+
+By default Cruise Control defines three roles: `VIEWER`, `USER` and `ADMIN`.
+```
+VIEWER role: has access to the most lightweight kafka_cluster_state, user_tasks and review_board endpoints.
+USER role: has access to all the GET endpoints except bootstrap and train.
+ADMIN role: has access to all endpoints.
+```
+For more details checkout the [Cruise Control Wiki](https://github.com/linkedin/cruise-control/wiki/Security#authorization)
+
+So a developer could create a Cruise Control API auth credentials file, `cruise-control-auth.txt`, that looked like this:
+```
+userOne: passwordOne, USER
+userTwo: passwordTwo, VIEWER
+```
+
+Then the developer could create a secret using that file:
+
+```
+kubectl create secret generic cruise-control-api-users-secret  --from-file=key=cruise-control-auth.txt
+```
+
+This would create a Secret:
+
+```yaml=
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cruise-control-api-users-secret
+type: Opaque
+data:
+  key: dXNlck9uZTogcGFzc3dvcmRPbmUsIFVTRVIKdXNlclR3bzogcGFzc3dvcmRUd28sIFZJRVdFUgo=
+```
+
+The developer could then reference the secret in an `spec.cruiseControl.apiUsers` section of the `Kafka` resource.
+
+The schema would look like this:
 
 ```yaml=
 apiVersion: kafka.strimzi.io/v1beta2
@@ -48,11 +83,15 @@ metadata:
   ...
 spec:
   cruiseControl:
-    apiUsersConfig:
+    apiUsers:
+      type: fromSecret (1)
       secret:
         secretName: cruise-control-api-users-secret
      ...
 ```
+(1) A type field is added here for configuration flexibility in the future.
+
+Strimzi would decode and use the contents of this secret to populate the Cruise Control API auth credentials file which would be mounted and used by the Cruise Control pod.
 
 Although this would simplify the overall design it would also shift a lot of the maintanence responsibility to the developer.
 The developer would need to create a valid Cruise Control API user configuration and encode it into a secret.
@@ -68,7 +107,9 @@ For example, an API user with the ADMIN role would be able to execute a rebalanc
 That being said, supporting developers to create Cruise Control API users with non-`ADMIN` roles like `USER` and `VIEWER` roles would mitigate this risk completely.
 This is because the `USER` and `VIEWER` roles are read-only roles and would not conflict with Strimzi cluster operations.
 
-We could support the creation of API users with `ADMIN` roles with a caveat so that developers could experiment with Cruise Control write operations or we could simply disable it completely. 
+This proposal advocates for supporting the creation of API users with `ADMIN` roles with a caveat in the documentation so that advanced developers can experiment with Cruise Control write operations at their own risk.
+
+It is important that we clearly document the risks of using the ADMIN role to prevent developer misuse.
 
 ### How API user management is handled elsewhere
 
@@ -216,5 +257,3 @@ It is not intended, by itself, to define the complete picture.
 Future work _could_ include:
 
 * Configurable API user roles
-* Password renewals for generated passwords
-
