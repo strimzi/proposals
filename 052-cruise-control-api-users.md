@@ -101,15 +101,17 @@ This is because accessing the Cruise Control API directly is neither the support
 ### Risks
 
 Of course, supporting such a feature could come with some risks.
+
 If we were to support developers to create Cruise Control API users with the `ADMIN` role, those users would have access to potentially destructive cluster operations.
 For example, an API user with the ADMIN role would be able to execute a rebalance opeation while the Strimzi Operator is in the middle of preforming a rolling update of the Kafka brokers.
 
+For the above reasons, this proposal advocates for disabling the creation of API users with `ADMIN` roles for now.
+
+We can always enable the `ADMIN` role at a later date with a caveat in the documentation so that advanced developers could experiment with Cruise Control write operations at their own risk.
+
 That being said, supporting developers to create Cruise Control API users with non-`ADMIN` roles like `USER` and `VIEWER` roles would mitigate this risk completely.
 This is because the `USER` and `VIEWER` roles are read-only roles and would not conflict with Strimzi cluster operations.
-
-This proposal advocates for supporting the creation of API users with `ADMIN` roles with a caveat in the documentation so that advanced developers can experiment with Cruise Control write operations at their own risk.
-
-It is important that we clearly document the risks of using the ADMIN role to prevent developer misuse.
+So this proposal if for enabling the `USER` and `VIEWER` roles only.
 
 ### How API user management is handled elsewhere
 
