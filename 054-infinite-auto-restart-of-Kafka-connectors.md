@@ -30,8 +30,9 @@ When enabled, it works like this:
     * 42+ minutes …
     * _There is no exact time, so it will be restarted when the next reconciliation happens and the time condition is fulfilled (i.e. restart after 6+ minutes can happen for example after 7 minutes in the next suitable periodical reconciliation)._
 * After 7th restart, the connector will not be automatically restarted anymore
-* When the container runs successfully for at least the backoff interval for the restart counter to be reset.
-  E.g. if it was restarted 4 times, it needs to run for 20 minutes for the restart counter to be reset to 0 and the restart sequence start from the beginning in case of the next failure.
+* The _restart counter_ (number of restarts already done) is tracked in the `.status` section of the `KafkaConnector` custom resource.
+  When the connector runs successfully for at least the backoff interval corresponding to the number of restarts already done, the restart counter is reset to 0.
+  For example, if it was restarted already 4 times, it needs to run successfully for at least 20 minutes for the restart counter to be reset to 0 and the restart sequence start from the beginning in case of the next failure.
 
 ## Motivation
 
