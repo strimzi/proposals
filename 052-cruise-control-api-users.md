@@ -11,7 +11,7 @@ At this time, Strimzi creates two Cruise Control API users:
 * `heathcheck` - Used by Strimzi for checking the readiness of the Cruise Control application.
 
 Access to these API users is limited to Strimzi.
-So when HTTP basic authentication is enabled for Cruise Control, no one can access the the Cruise Control API other than Strimzi.
+So when HTTP basic authentication is enabled for Cruise Control, no one can access the Cruise Control API other than Strimzi.
 
 ### How API user management is handled elsewhere
 
@@ -119,13 +119,18 @@ metadata:
 spec:
   cruiseControl:
     apiUsers:
-      type: fromSecret (1)
-      secret:
-        secretName: cruise-control-api-users-secret
-        secretKey: key
+      type: hashloginservice (1)
+      valueFrom: (2)
+        secretKeyRef:
+          name: cruise-control-api-users-secret
+          key: key
      ...
 ```
-(1) A type field is added here for configuration flexibility in the future. e.g. Gives us the option to have other methids of configuring API users other than using `secrets`
+(1) A `type` field is added here to describe the format of the data and for configuration flexibility in the future. Thsi gives us the option to add different data format types in the future. 
+In this example we use Jetty's HashLoginService format since that is the format which Cruise Control uses for its API user configuration.
+
+(2) The `valueFrom` construct allows us to add more sources in the future if needed. 
+This is also a pattern used in other Strimzi APIs already, for example Strimzi's logging configuration, password configuration in KafkaUser resources, metrics configuration, and more.
 
 Strimzi would decode and use the contents of this secret to populate the Cruise Control API auth credentials file which would be mounted and used by the Cruise Control pod.
 
@@ -136,6 +141,8 @@ This is because accessing the Cruise Control API directly is not the primary way
 However, with proper supporting documentation, this new feature will give developers a greater degree of control and assistance with special use-cases.
 
 ### Risks
+
+Direct calls to the Cruise Control API like the write operations enabled by the `ADMIN` role could interfere with Strimzi Operator operations and cause damage to a Strimzi-managed Kafka cluster.
 
 Supporting developers to create Cruise Control API users with non-`ADMIN` roles like `USER` and `VIEWER` roles would mitigate this risk completely.
 This is because the `USER` and `VIEWER` roles are read-only roles and would not conflict with Strimzi cluster operations.
