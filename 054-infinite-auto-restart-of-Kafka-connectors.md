@@ -14,7 +14,7 @@ metadata:
 spec:
   # ...
   autoRestart:
-    enabled: false
+    enabled: true
   # ...
 ```
 
@@ -50,7 +50,7 @@ metadata:
 spec:
   # ...
   autoRestart:
-    enabled: false
+    enabled: true
     maxRestarts: 20
   # ...
 ```
@@ -113,7 +113,7 @@ metadata:
 spec:
   # ...
   autoRestart:
-    enabled: false
+    enabled: true
   # ...
 ```
 
@@ -128,7 +128,7 @@ metadata:
 spec:
   # ...
   autoRestart:
-    enabled: false
+    enabled: true
     maxRestarts: 7
   # ...
 ```
@@ -140,7 +140,7 @@ While this change is not backwards compatible, it gives us a clean API for the l
 
 ```yaml
   autoRestart:
-    enabled: false
+    enabled: true
 ```
 
 This API is easier to understand, read, and provides better user experience.
