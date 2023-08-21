@@ -37,7 +37,7 @@ When enabled, it works like this:
 ## Motivation
 
 The auto-restart functionality works fine. But in some cases, it would be useful to have more flexibility including a possibility to retry the restarts indefinitely.
-Infinite restarts allow the auto-restarting to be used for even longer outages which for example take the whole weekend and it increases the value of this feature.
+The capability of infinite restarts allows the auto-restart feature to be used for extended outages, such as those spanning an entire weekend, thereby enhancing the value of its functionality.
 
 ## Proposal
 
@@ -58,8 +58,8 @@ spec:
 
 The `maxRestarts` field will default to null (not set).
 And when it is not set (set to null), the operator will attempt to restart the connector infinitely.
-When a user sets `maxRestarts` to a specific value, the operator will attempt to restart the operator only for a given number of attempts and then give up on it.
-In that case, the user would need to restart it later manually.
+When a user sets `maxRestarts` to a specific value, the operator will attempt to restart the connector only for a given number of attempts and then give up on it.
+In case of failure, the user needs to restart the connector manually, as happens with the current functionality.
 
 **The solution proposed by this proposal is not fully backwards compatible.**
 **Please read the _Compatibility_ section for more details.**
