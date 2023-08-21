@@ -29,7 +29,7 @@ The `PUT /connectors/{connector}/resume` REST endpoint is used to restart both p
 
 ## Proposal
 
-Since a connector can't be paused and stopped at the same time, the proposal is to replace the current `pause` property and add a new property, `state`, in the `AbstractConnectorSpec` schema. That new property will accept the `pause`, `stop` or `run` values.
+Since a connector can't be paused and stopped at the same time, the proposal is to replace the current `pause` property and add a new property, `state`, in the `AbstractConnectorSpec` schema. That new property will accept the `paused`, `stopped` or `running` values.
 
 The `pause` property will be marked as deprecated. In the next Strimzi API version, the `pause` field will be deleted.
 
@@ -42,7 +42,7 @@ spec:
   config:
     file: /opt/kafka/LICENSE
     topic: my-topic
-  state: stop
+  state: stopped
   tasksMax: 1
 ```
 
@@ -55,11 +55,11 @@ This only affects `strimzi-kafka-operator`. This will be usable by regular conne
 ## Compatibility
 
 If `state` is not set, it will:
-- default to `run` if `pause` is `false` or if `pause` is not set
-- default to `pause` if `pause` is `true`
+- default to `running` if `pause` is `false` or if `pause` is not set
+- default to `paused` if `pause` is `true`
 But this will not be done as a change to the custom resource, it will just be handled that way internally.
 
-If `state` is set it will take precedence over the old `pause `field. If both fields are set, a warning will be emitted to notify the user of a potential conflict.
+If `state` is set it will take precedence over the old `pause `field. If both fields are set, a warning will be emitted to notify the user of a potential conflict and a message will be added to the `condition` of the resource.
 
 ## Rejected alternatives
 
