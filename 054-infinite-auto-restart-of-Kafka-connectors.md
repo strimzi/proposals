@@ -134,7 +134,7 @@ spec:
   # ...
 ```
 
-The infinite restarts will be happening at the maximal bak-off interval of 60 minutes.
+The infinite restarts will be happening at the maximal back-off interval of 60 minutes.
 So it should cause only a minimal disruption to users who have this activated by mistake.
 
 While this change is not backwards compatible, it gives us a clean API for the long term future, where the `maxRestarts` field would have no defaults and the following configuration would mean infinite restarts.
