@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 54  | [Support stopping Kafka Connect connectors](./054-stopping-kafka-connect-connectors.md) |
 | 53  | [Record Reconciled Version in Kafka Custom Resource status](./053-record-reconciled-versions.md) |
 | 52  | [Kubernetes Server Side Apply](./052-k8s-server-side-apply.md) |
 | 51  | [Unidirectional Topic Operator](./051-unidirectional-topic-operator.md) |
