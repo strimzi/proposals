@@ -137,7 +137,7 @@ This is also a pattern used in other Strimzi APIs already, for example Strimzi's
 
 Strimzi would decode and use the contents of this secret to populate the Cruise Control API auth credentials file which would be mounted and used by the Cruise Control pod.
 
-Its worth noting that if a developer were to provide a corrupt configuration file - one which specifies the `ADMIN` role or an incorrect format, the Strimzi Operator would ignore the custom configuration and log a warning.
+It's worth noting that if a developer were to provide a corrupt configuration file - one which specifies the `ADMIN` role or an incorrect format, the Strimzi Operator would ignore the custom configuration, log a warning, and add a warning condition to the `Kafka` custom resource.
 
 Although this would simplify the overall design it would also shift a lot of the maintanence responsibility to the developer.
 The developer would need to create a valid Cruise Control API user configuration and encode it into a secret.
