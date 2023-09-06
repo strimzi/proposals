@@ -234,7 +234,7 @@ The problem with this approach is that it would add significant complexity to th
 * A watch on the new `CruiseControlUser` resource
 * A reconciler to manage the `CruiseControlUser` resource.
 
-Given that accessing the Cruise Control API directly is not the primary way of interacting with Cruise Control for a Strimzi-managed Kafka cluster and is expected to be used only by advanced users in special use-cases, this method would not be worth the complexity that it would add to the code base.
+Given that accessing the Cruise Control API directly is not the primary way of interacting with Cruise Control for a Strimzi-managed Kafka cluster and is expected to be used only by advanced developers in special use-cases, this method would not be worth the complexity that it would add to the code base.
 
 ### Add API user list to Cruise Control spec 
 
