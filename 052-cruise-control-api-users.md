@@ -139,6 +139,35 @@ Strimzi would decode and use the contents of this secret to populate the Cruise 
 
 It's worth noting that if a developer were to provide a corrupt configuration file - one which specifies the `ADMIN` role or an incorrect format, the Strimzi Operator would ignore the custom configuration, log a warning, and add a warning condition to the `Kafka` custom resource.
 
+For example, if a developer were to provide a corrupt capacity configuration file, a warning condition like the following would be added to the status section of the `Kafka` custom resource :
+
+```yaml=
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  ...
+spec:
+  cruiseControl:
+    apiUsers:
+      type: hashloginservice (1)
+      valueFrom: (2)
+        secretKeyRef:
+          name: cruise-control-api-users-secret
+          key: key
+     ...
+status:
+  clusterId: 2dJw0Z45S7-NWsM0b71edA
+  conditions:
+  - lastTransitionTime: "2023-09-06T16:04:52.925134592Z"
+    message: The desired Cruise Control capacity configuration contains changes which are
+      not allowed. As a result, all capacity changes will be ignored. Use DEBUG level
+      logging for more information about the detected changes.
+    reason: CruiseControlCapacityConfig
+    status: "True"
+    type: Warning
+ ...
+```
+
 Although this would simplify the overall design it would also shift a lot of the maintanence responsibility to the developer.
 The developer would need to create a valid Cruise Control API user configuration and encode it into a secret.
 That being said, this is still a reasonable amount of responsibility to leave to the developer.
