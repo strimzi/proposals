@@ -16,7 +16,7 @@ There is also no support to upgrade a KRaft-based Apache Kafka cluster to a newe
 
 ## Motivation
 
-The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release.
+The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project while still having missing features are reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
 The ZooKeeper mode has been deprecated in Apache Kafka 3.5 while providing the migration process to KRaft mode as preview.
 The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 (January 2024) but removed after that.
 Starting from Apache Kafka 4.0 (April 2024) only KRaft mode will be supported.
@@ -60,9 +60,7 @@ Assume the following prerequisites, with a ZooKeeper based Kafka cluster defined
 * A `Kafka` custom resource.
 * One or more `KafkaNodePool`(s) for running the ZooKeeper based brokers.
 
-It would assume the operator is not using KRaft by default nor has the `+UseKRaft` feature gate enabled.
-
-First step for the user would be enabling the `+UseKRaft` feature gate unless it’s already enabled by default in a new operator release (depending on which Strimzi version this proposal will land).
+If the operator is not using KRaft by default nor has the `+UseKRaft` feature gate enabled, first step for the user would be enabling the `+UseKRaft` feature gate unless it’s already enabled by default in a new operator release (depending on which Strimzi version this proposal will land).
 So the current operator may need to be upgraded to the new release.
 In both cases, the operator is rolled, a new one starts and it’s able to handle the creation of new Apache Kafka clusters in KRaft mode but not migrating the old ZooKeeper based ones automatically.
 
@@ -158,11 +156,10 @@ If the user doesn't rollback the migration, next step is to move brokers out of 
 In the `DualWrite/WaitBrokersOutMigration` state, the operator expects the user to disable the ZooKeeper migration on the brokers pool.
 The user applies the `strimzi.io/kraft-migration: kraft` annotation to the `KafkaNodePool` resource running the current ZooKeeper based brokers.
 The operator updates the brokers' configuration by removing the ZooKeeper migration flag and connection to the ZooKeeper ensemble.
-It also has to replace the `broker.id` with `node.id` and add `process.roles=broker`.
+It also has to replace the `broker.id` with `node.id`.
 
 ```shell
-# replace broker.id with node.id and add process.roles=broker
-process.roles=broker
+# replace broker.id with node.id
 node.id=0
 
 # Remove the migration enabled flag
