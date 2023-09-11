@@ -28,7 +28,7 @@ Based on the above Apache Kafka community plan, more details in [KIP-833](https:
 The ZooKeeper to KRaft migration implementation is defined by [KIP-866](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration).
 The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run the procedure manually on your cluster.
 
-One of the main points to highlights is that such a process doesn't support to migrate to a KRaft-based cluster running in "combined" mode:
+One of the main points to highlight is that such a process doesn't support to migrate to a KRaft-based cluster running in "combined" mode:
 
 * Cannot migrate from a ZooKeeper based configuration to having a cluster with nodes hosting both controller and broker (so actually reducing the number of nodes by removing the ZooKeeper ones).
 * The migration works by having ZooKeeper nodes to be replaced by new KRaft controller nodes.
@@ -43,12 +43,11 @@ TBD: some intro about Strimzi migration process
 
 An Apache Kafka cluster is running in ZooKeeper mode with `N` brokers and `M` ZooKeeper nodes, as defined by the `replicas` fields in the corresponding `Kafka` custom resource.
 The cluster has to be migrated to use `KafkaNodePool`(s) first for running the brokers (ZooKeeper nodes are never part of pools).
-Without them it’s not possible to deploy the new KRAft controllers (separated from the current Kafka brokers) as the first step of the migration.
-So the prerequisite is having the Kafka cluster still using ZooKeeper but running the Kafka brokers by using `KafkaNodePool`(s).
+Without them it’s not possible to deploy the new KRaft controllers (separated from the current Kafka brokers) as the first step of the migration.
+So the prerequisite is to have the Kafka cluster still using ZooKeeper but running the Kafka brokers with `KafkaNodePool`(s).
 The user can follow the procedure described [here](https://strimzi.io/docs/operators/latest/deploying#proc-migrating-clusters-node-pools-str) in the official documentation, in order to meet this prerequisite.
 
-Also, the minimum Kafka version should be 3.5.0 with `inter.broker.protocol.version` set to “3.5”.
-The user could need to upgrade the Kafka version on its own cluster before running a migration.
+Before migrating to KRaft, the cluster must be upgraded to Kafka version minimum of 3.5.0 with `inter.broker.protocol.version` set to “3.5”.
 
 ### Migration
 
@@ -64,7 +63,7 @@ Assume the following prerequisites, with a ZooKeeper based Kafka cluster defined
 It would assume the operator is not using KRaft by default nor has the `+UseKRaft` feature gate enabled.
 
 First step for the user would be enabling the `+UseKRaft` feature gate unless it’s already enabled by default in a new operator release (depending on which Strimzi version this proposal will land).
-So it could be needed doing an upgrade of the current operator to the new release.
+So the current operator may need to be upgraded to the new release.
 In both cases, the operator is rolled, a new one starts and it’s able to handle the creation of new Apache Kafka clusters in KRaft mode but not migrating the old ZooKeeper based ones automatically.
 
 Currently, the operator prints the following warning:
@@ -84,7 +83,7 @@ The operator has a new `MigrationManager` component in charge of tracking the mi
 Transitioning across the states depends on the current state, stored in the `Kafka.status.migrationState` field, and the "input" represented by the user interaction with the operator through the following annotations:
 
 * `strimzi.io/kraft-migration`: to be applied on the `Kafka` custom resource with `true|false` values to start/end the overall migration process.
-* `strimzi.io/kraft-migration`: to be applied on the `KafkaNodePool`(s) custom resource with `dual|kraft|zk` values to represent the the desired "direction" in the migration process by the user:
+* `strimzi.io/kraft-migration`: to be applied on the `KafkaNodePool`(s) custom resource with `dual|kraft|zk` values to represent the desired "direction" in the migration process by the user:
   * `dual`: allows to move the migration process forward to reach the point of the "dual-write" with KRaft controllers deployed but with metadata written to both ZooKeeper and KRaft. Brokers are also connected to both ZooKeeper nodes and KRaft controllers.
   * `kraft`: allows to move the migration process forward from the "dual-write" to the end of the migration with ZooKeeper out of the picture.
   * `zk`: allows to move the migration process back, when still possible, to have brokers working again with ZooKeeper ensemble only.
@@ -100,7 +99,7 @@ The following sections explain the states and transitions in details.
 Starting from a `NoMigration` (or null) state (as per `Kafka.status.migrationState` field), the user applies the `strimzi.io/kraft-migration: true` on the `Kafka` custom resource to make the operator aware of the migration "intention".
 The FSM moves to a `WaitControllersInMigration` state where the operator expects the user to create the KRaft controllers pool.
 The user creates the `KafkaNodePool` custom resource containing the definition of the KRaft controllers which are going to replace the ZooKeeper nodes.
-These controllers needed to be deployed in "migration mode", so the `KafkaNodePool` custom resource has to be annotate with `strimzi.io/kraft-migration: dual`.
+These controllers need to be deployed in "migration mode", so the `KafkaNodePool` custom resource has to be annotated with `strimzi.io/kraft-migration: dual`.
 
 This way, the operator configures the controllers accordingly with the ZooKeeper migration flag and the connection to the ZooKeeper ensemble. 
 
@@ -121,13 +120,13 @@ The operator has to wait for the KRaft controllers quorum to be formed, leader e
 The FSM moves to a `WaitBrokersInMigration` state where the operator expects the user to enable ZooKeeper migration on the brokers pool in order to actually start the migration (Phase 2).
 
 From this state it's still possible to not move forward with the migration.
-The user can deleted the `KafkaNodePool` custom resource containing the definition of the KRaft controllers and apply the `strimzi.io/kraft-migration: false` annotation (or delete it) on the `Kafka` custom resource.
+The user can delete the `KafkaNodePool` custom resource containing the definition of the KRaft controllers and apply the `strimzi.io/kraft-migration: false` annotation (or delete it) on the `Kafka` custom resource.
 The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process.
 
 #### Phase 2: Enabling the migration on the brokers
 
 In the `WaitBrokersInMigration` state, the operator expects the user to enable ZooKeeper migration on the brokers pool in order to actually start the migration.
-In order to start the actual migration, the brokers needs to be connected to the KRaft controllers and have the ZooKeeper migration enabled.
+In order to start the actual migration, the brokers need to be connected to the KRaft controllers and have the ZooKeeper migration enabled.
 The user annotates the `KafkaNodePool` resource running the current ZooKeeper based brokers with `strimzi.io/kraft-migration: dual`.
 This annotation drives the operator to update the brokers' configuration with the ZooKeeper migration flag enabled and with the new KRaft controllers quorum connection information as well.
 
