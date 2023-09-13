@@ -14,17 +14,7 @@ If the user has an already deployed Apache Kafka cluster using a ZooKeeper ensem
 
 There is also no support to upgrade a KRaft-based Apache Kafka cluster to a newer version, but this missing piece is out of the scope for this proposal.
 
-## Motivation
-
-The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project. 
-Anyway, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
-The ZooKeeper mode has been deprecated in Apache Kafka 3.5 while providing the migration process to KRaft mode as preview.
-The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 (January 2024) but removed after that.
-Starting from Apache Kafka 4.0 (April 2024) only KRaft mode will be supported.
-
-Based on the above Apache Kafka community plan, more details in [KIP-833](https://cwiki.apache.org/confluence/display/KAFKA/KIP-833%3A+Mark+KRaft+as+Production+Ready), the Strimzi project needs to be prepared to allow users to migrate their current clusters from running in ZooKeeper mode to KRaft mode.
-
-## Proposal
+Furthermore, if the user creates one or more `KafkaNodePool` custom resources to deploy KRaft controllers, the operator itself just creates the controller nodes and restarts the Kafka brokers to use them. ZooKeeper is not used anymore but no proper migration takes place (from ZooKeeper to KRaft metadata). Because of KRaft and related migration from ZooKeeper not supported yet, this can drive to the following [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9108).
 
 The ZooKeeper to KRaft migration implementation is defined by [KIP-866](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration).
 The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run the procedure manually on your cluster.
@@ -38,9 +28,21 @@ One of the main points to highlight is that such a process doesn't support migra
 It means that the user environment should be sized to host more nodes running in parallel, because during the migration process both ZooKeeper nodes and KRaft controllers will be running.
 The end of the migration will involve shutting down the ZooKeeper nodes reducing the resources consumption.
 
+## Motivation
+
+The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project. 
+Anyway, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
+The ZooKeeper mode has been deprecated after the Apache Kafka 3.5 version was released while providing the migration process to KRaft mode as preview.
+The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 (January 2024) but removed after that.
+Starting from Apache Kafka 4.0 (April 2024) only KRaft mode will be supported.
+
+Based on the above Apache Kafka community plan, more details in [KIP-833](https://cwiki.apache.org/confluence/display/KAFKA/KIP-833%3A+Mark+KRaft+as+Production+Ready), the Strimzi project needs to be prepared to allow users to migrate their current clusters from running in ZooKeeper mode to KRaft mode.
+
+## Proposal
+
 ### Prerequisites
 
-An Apache Kafka cluster is running in ZooKeeper mode with `N` brokers and `M` ZooKeeper nodes, as defined by the `replicas` fields in the corresponding `Kafka` custom resource.
+An Apache Kafka cluster is running in ZooKeeper mode.
 The cluster has to be migrated to use `KafkaNodePool`(s) first for running the brokers (ZooKeeper nodes are never part of pools).
 Without them it’s not possible to deploy the new KRaft controllers (separated from the current Kafka brokers) as the first step of the migration.
 So the prerequisite is to have the Kafka cluster still using ZooKeeper but running the Kafka brokers with `KafkaNodePool`(s).
@@ -48,13 +50,9 @@ The user can follow the procedure described [here](https://strimzi.io/docs/opera
 
 Before migrating to KRaft, the cluster must be upgraded to Kafka version minimum of 3.5.0 with `inter.broker.protocol.version` set to “3.5”.
 
-Furthermore, the running Apache Kafka cluster should not be using JBOD because in this case the migration to KRaft is not supported.
-
 ### Migration
 
 The migration process is semi-automatic which means having the user driving the process by interacting with the operator (mostly via annotations and custom resources creation/deletion) which is in charge to do the rest (i.e. nodes re-configuration, rolling, checking migration status, ...).
-
-> NOTE: this kind of approach is already in place for the Kafka version upgrade.
 
 Assume the following prerequisites, with a ZooKeeper based Kafka cluster defined by:
 
@@ -115,8 +113,6 @@ zookeeper.metadata.migration.enable=true
 zookeeper.connect=<connection-to-zookeeper>
 ```
 
-> NOTE: without an annotation on the `Kafka` custom resource to differentiate the operator behavior, the operator itself just creates the controllers in the pool and restarts the Kafka brokers to use them. ZooKeeper is not used anymore but no proper migration takes place (from ZooKeeper to KRaft metadata). Because of KRaft and related migration from ZooKeeper not supported yet, this can drive to the following [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9108).
-
 The operator has to wait for the KRaft controllers being ready, the quorum to be formed and leader elected, then the migration process moves to the state of waiting for brokers to register.
 
 The FSM moves to a `WaitBrokersInMigration` state where the operator expects the user to ask for running the actual metadata migration.
@@ -144,6 +140,9 @@ listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
 
 # Enable the migration
 zookeeper.metadata.migration.enable=true
+
+# ZooKeeper client configuration
+zookeeper.connect=<connection-to-zookeeper>
 ```
 
 Finally, the operator rolls the brokers.
