@@ -77,12 +77,9 @@ The migration process can be also rolled back to ZooKeeper at any point before t
 
 The migration process can be described with a Finite State Machine (FSM).
 The operator has a new `KRaftMigrationManager` component in charge of driving and tracking transitions in the FSM.
-Transitioning across the states depends on the current state, stored in the `strimzi.io/kraft-migration-state` annotation on the `Kafka` custom resource, and the "input" represented by the user interaction with the operator through the `strimzi.io/kraft-migration` annotation to be applied on the `Kafka` custom resource.
+Transitioning across the states depends on the current state, stored in the `Kafka.status.migrationState` field, and the "input" represented by the user interaction with the operator through the `strimzi.io/kraft-migration` annotation to be applied on the `Kafka` custom resource.
 
-The operator is the owner of the `strimzi.io/kraft-migration-state` annotation.
-The user is in charge to use the `strimzi.io/kraft-migration` annotation to drive the migration.
-
-The usage of the `strimzi.io/kraft-migration-state` annotation for tracking the migration state, and not using a dedicated field under `Kafka.status`, is to avoid a permanent API change (on the `Kafka` CRD) for a temporary process, which won't be used anymore when users will move all their current clusters from ZooKeeper to KRaft.
+> NOTE: the `Kafka.status.migrationState` field for storing the migration current state would be dropped when releasing `v1` API. It's anyway going to be used just for a transitioning period until community users will migrate all their clusters to be KRaft based.
 
 The possible values for the `strimzi.io/kraft-migration` annotation are `pre-migration|migration|post-migration` to represent the desired "direction" in the migration process:
  
@@ -100,7 +97,7 @@ Also, the `PRE_MIGRATION`, `MIGRATION` and `POST_MIGRATION` dotted boxes corresp
 
 #### Phase 1: Provisioning the KRaft controller quorum
 
-Starting from a `NoMigration` (or null) state (with the `strimzi.io/kraft-migration-state` annotation missing), the user applies the `strimzi.io/kraft-migration: pre-migration` on the `Kafka` custom resource to make the operator aware of the migration intention.
+Starting from a `NoMigration` (or null) state (as per `Kafka.status.migrationState` field), the user applies the `strimzi.io/kraft-migration: pre-migration` on the `Kafka` custom resource to make the operator aware of the migration intention.
 The FSM moves to a `WaitControllersInMigration` state where the operator expects the user to create the KRaft controllers pool.
 The user creates the `KafkaNodePool` custom resource containing the definition of the KRaft controllers which are going to replace the ZooKeeper nodes.
 The operator creates and configures the controllers accordingly with the ZooKeeper migration flag and the connection to the ZooKeeper ensemble. 
@@ -120,7 +117,7 @@ It means the operator has to enable the ZooKeeper migration on the brokers pool 
 
 From this state it's still possible to not move forward with the migration.
 The user can delete the `KafkaNodePool` custom resource containing the definition of the KRaft controllers and remove the `strimzi.io/kraft-migration` annotation from the `Kafka` custom resource.
-The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process and the operator removes the `strimzi.io/kraft-migration-state` annotation from the `Kafka` custom resource.
+The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
 There is nothing to do with the brokers which are still configured to work with the ZooKeeper ensemble only.
 
 #### Phase 2: Enabling the migration on the brokers
@@ -204,7 +201,7 @@ The FSM moves back to the `WaitBrokersInMigration`, so actually at the beginning
 At this point the ZooKeeper ensemble is out of the picture, still running but not used anymore.
 In the `FullKRaft` state, the operator expects the user to finalize the migration by removing ZooKeeper.
 The user removes the `spec.zookeeper` on the `Kafka` custom resource so that the operator can delete the ZooKeeper nodes.
-The FSM moves back to a `NoMigration` state (or null) and the operator removes the `strimzi.io/kraft-migration-state` annotation from the `Kafka` custom resource.
+The FSM moves back to a `NoMigration` state (or null) and the operator upgrades `Kafka.status.migrationState` field accordingly.
 
 ### Metrics
 
@@ -237,7 +234,7 @@ No other projects in the Strimzi ecosystem are impacted by this proposal.
 
 This proposal is not going to break any backward compatibility.
 The described procedure is new and doesn't change the Strimzi Cluster Operator behavior when the `strimzi.io/kraft-migration` annotation is not used.
-The `strimzi.io/kraft-migration-state` annotation is also new and doesn't have any impact on previous operator versions.
+The `Kafka.status.migrationState` field is also new and doesn't have any impact on previous operator versions.
 
 ## Rejected alternatives
 
