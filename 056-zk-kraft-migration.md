@@ -17,7 +17,7 @@ There is also no support to upgrade a KRaft-based Apache Kafka cluster to a newe
 Furthermore, if the user creates one or more `KafkaNodePool` custom resources to deploy KRaft controllers, the operator itself just creates the controller nodes and restarts the Kafka brokers to use them. ZooKeeper is not used anymore but no proper migration takes place (from ZooKeeper to KRaft metadata). Because of KRaft and related migration from ZooKeeper not supported yet, this leads to the following [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9108).
 
 The ZooKeeper to KRaft migration implementation is defined by [KIP-866](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration).
-The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run the procedure manually on your cluster.
+The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run the procedure manually on your cluster not deployed via the Strimzi Cluster Operator.
 
 One of the main points to highlight is that such a process doesn't support migration to a KRaft-based cluster running in "combined" mode:
 
@@ -78,6 +78,7 @@ The migration process can be also rolled back to ZooKeeper at any point before t
 The migration process can be described with a Finite State Machine (FSM).
 The operator has a new `KRaftMigrationManager` component in charge of driving and tracking transitions in the FSM.
 Transitioning across the states depends on the current state, stored in the `Kafka.status.migrationState` field, and the "input" represented by the user interaction with the operator through the `strimzi.io/kraft-migration` annotation to be applied on the `Kafka` custom resource.
+Another "input" is represented by the Kafka migration metrics checked by the operator during the actual metadata migration from ZooKeeper to KRaft.
 
 > NOTE: the `Kafka.status.migrationState` field for storing the migration current state would be dropped when releasing `v1` API. It's anyway going to be used just for a transitioning period until community users will migrate all their clusters to be KRaft based.
 
@@ -95,7 +96,7 @@ The following sections explain the states and transitions in details.
 The "Phase"(s) reflect what is described in the official [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide in the Apache Kafka documentation but with the right degree of automation provided by the operator.
 Also, the `PRE_MIGRATION`, `MIGRATION` and `POST_MIGRATION` dotted boxes correspond to the `ZkMigrationState` [enum values](https://github.com/apache/kafka/blob/trunk/metadata/src/main/java/org/apache/kafka/metadata/migration/ZkMigrationState.java#L32) from the Apache Kafka migration component.
 
-Each phase is described by:
+In order to make the process clearer as much as possible, each phase is described by:
 
 * _Preconditions_: conditions that should be met (i.e. current state in the migration FSM) in order to have the operator taking actions on a trigger.
 * _Trigger_: what makes the operator actions to run only with verified preconditions.
@@ -116,7 +117,7 @@ The user applies the `strimzi.io/kraft-migration: pre-migration` annotation on t
 **_Actions_**
 
 The operator starts a reconciliation but there are no actual actions to be executed.
-The `KRaftMigrationManager` component just prepares, with an internal status change, to be ready for the migration process.
+The `KRaftMigrationManager` component just prepares itself, with an internal status change, to be ready for the migration process.
 The current reconciliation ends.
 
 **_Status changes_**
@@ -143,9 +144,11 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves back to the `NoMigration` state.
+The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
 
 ---
+
+If not rolling back, the user can move forward by deploying the KRaft controllers pool.
 
 **_Preconditions_**
 
