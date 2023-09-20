@@ -31,7 +31,7 @@ The possible values would be:
 
 This way, during the reconciliation, the operator is able to detect a ZooKeeper-based cluster avoiding the warning, as described in the "Current" section, but allowing the user to operate it.
 On the KRaft side, the annotation would be needed to have the operator reconciling the corresponding `Kafka` custom resource.
-Without the annotation, but the `UseKRaft` feature gate enabled, the operator would ignore the cluster.
+Without the annotation, but the `UseKRaft` feature gate enabled, the operator would try to handle it as a ZooKeeper-based one.
 This approach is actually the same as for the node pools: enabling the `KafkaNodePools` feature gate on the operator is not enough and the user needs to apply the `strimzi.io/node-pools: enabled` annotation on the `Kafka` custom resource using node pools for brokers (and controllers, if KRaft enabled as well).
 
 The same annotation could be even used in the proposal [PR#90](https://github.com/strimzi/proposals/pull/90) for handling the ZooKeeper to KRaft migration steps.
