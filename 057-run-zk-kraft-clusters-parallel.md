@@ -1,7 +1,7 @@
-# Marking ZooKeeper and KRaft based clusters for KRaft enabled operators
+# Allow running ZooKeeper and KRaft based clusters in parallel
 
 This proposal is about changing the way the current `UseKRaft` feature gate works.
-It changes the way the Strimzi Cluster Operator handles ZooKeeper and KRaft based clusters when such feature gate is enabled.
+It changes the way the Strimzi Cluster Operator handles ZooKeeper and KRaft based clusters when it is enabled.
 
 ## Current situation
 
@@ -17,6 +17,9 @@ io.strimzi.operator.common.model.InvalidResourceException: Tha Kafka cluster my-
 In this case, the reconciliation fails and the cluster is not operated at all.
 It means that the operator doesn't take any actions on changes applied by the user to the `spec.kafka` or `spec.zookeeper` in the `Kafka` custom resource.
 
+Furthermore, the `UseKRaft` feature gate was created for development and testing.
+As we move forward, it will be soon available for regular clusters and the current state is not going to be sufficient anymore.
+
 ## Motivation
 
 Leaving a ZooKeeper-based cluster not operated when the `UseKRaft` feature gate is enabled looks like a bad thing for the user, until the ZooKeeper support will be completely removed.
@@ -28,13 +31,16 @@ Also, taking into account the future ZooKeeper to KRaft migration process, as de
 The proposal is about adding a new `strimzi.io/kraft` annotation to the `Kafka` custom resource, to be applied by the user, in order to identify a ZooKeeper or KRaft based cluster.
 The possible values would be:
 
-* `disabled` (or missing): identifies a ZooKeeper-based cluster.
+* `disabled`, missing or any invalid value: identifies a ZooKeeper-based cluster.
 * `enabled`: identifies a KRaft-based cluster.
 
 This way, during the reconciliation, the operator is able to "detect" a ZooKeeper-based cluster avoiding the warning and allowing the user to operate it.
 On the KRaft side, the annotation would be needed to have the operator reconciling the corresponding `Kafka` custom resource.
 Without the annotation, but the `UseKRaft` feature gate enabled, the operator would try to handle it as a ZooKeeper-based one.
-This could drive to unexpected behaviors so the expectation is that when upgrading to Strimzi 0.38.0 having this proposal implemented, there are no KRaft-based clusters already deployed.
+The `UseKRaft` feature gate does currently not support any upgrades of KRaft clusters.
+It is expected to be used only for short-lives clusters used for development and testing.
+So no clusters are expected to exist.
+Therefore adding the annotation now does not present any backwards compatibility issues.
 Only ZooKeeper-based clusters are expected and newly created KRaft-based clusters having the `strimzi.io/kraft: enabled`.
 This approach is actually the same as for the node pools: enabling the `KafkaNodePools` feature gate on the operator is not enough and the user needs to apply the `strimzi.io/node-pools: enabled` annotation on the `Kafka` custom resource using node pools for brokers (and controllers, if KRaft is enabled as well).
 

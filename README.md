@@ -9,8 +9,9 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-| 56  | [Add ability to create Cruise Control REST API users](./056-cruise-control-api-users.md) 
-| 55  | [Infinite auto-restart of Apache Kafka connectors](./055-infinite-auto-restart-of-Kafka-connectors.md) 
+| 57  | [Allow running ZooKeeper and KRaft based clusters in parallel](./057-run-zk-kraft-clusters-parallel.md) |
+| 56  | [Add ability to create Cruise Control REST API users](./056-cruise-control-api-users.md) |
+| 55  | [Infinite auto-restart of Apache Kafka connectors](./055-infinite-auto-restart-of-Kafka-connectors.md) |
 | 54  | [Support stopping Kafka Connect connectors](./054-stopping-kafka-connect-connectors.md) |
 | 53  | [Record Reconciled Version in Kafka Custom Resource status](./053-record-reconciled-versions.md) |
 | 52  | [Kubernetes Server Side Apply](./052-k8s-server-side-apply.md) |
