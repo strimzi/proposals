@@ -8,10 +8,10 @@ It changes the way the Strimzi Cluster Operator handles ZooKeeper and KRaft base
 Currently, when the `UseKRaft` feature gate is enabled (together with the required `KafkaNodePools` one), the operator expects all the already running Apache Kafka clusters being KRaft-based.
 It means that the `Kafka` custom resources are configured together with `KafkaNodePool`(s) with `broker` and `controller` roles.
 There is no way to differentiate between clusters running in ZooKeeper or KRaft mode.
-When a `Kafka` custom resource is configured to actually use ZooKeeper or it's just badly configured but supposed to be KRaft based, the operator detects it as having a missing KRaft controllers configuration and logs the following warning:
+When a `Kafka` custom resource is configured to actually use ZooKeeper or it's just badly configured but supposed to be KRaft-based, the operator detects it as having a missing KRaft controllers configuration and logs the following warning:
 
 ```shell
-io.strimzi.operator.common.model.InvalidResourceException: Tha Kafka cluster my-cluster is invalid: [At least one KafkaNodePool with the controller role and at least one replica is required when KRaft mode is enabled]
+io.strimzi.operator.common.model.InvalidResourceException: The Kafka cluster my-cluster is invalid: [At least one KafkaNodePool with the controller role and at least one replica is required when KRaft mode is enabled]
 ```
 
 In this case, the reconciliation fails and the cluster is not operated at all.
@@ -38,7 +38,7 @@ This way, during the reconciliation, the operator is able to "detect" a ZooKeepe
 On the KRaft side, the annotation would be needed to have the operator reconciling the corresponding `Kafka` custom resource.
 Without the annotation, but the `UseKRaft` feature gate enabled, the operator would try to handle it as a ZooKeeper-based one.
 The `UseKRaft` feature gate does currently not support any upgrades of KRaft clusters.
-It is expected to be used only for short-lives clusters used for development and testing.
+It is expected to be used only for short-lived clusters used for development and testing.
 So no clusters are expected to exist.
 Therefore adding the annotation now does not present any backwards compatibility issues.
 Only ZooKeeper-based clusters are expected and newly created KRaft-based clusters having the `strimzi.io/kraft: enabled`.
