@@ -48,7 +48,7 @@ In order to start the ZooKeeper to KRaft migration, the following prerequisites 
 * Running at Kafka 3.5.0 or higher and with `inter.broker.protocol.version` set to 3.5 or higher.
 * Configured to use one or more node pools, with `KafkaNodePool` custom resources, all with the `broker` role.
 * No existing node pool(s) which include the `controller` role.
-* The Unidirectional Topic Operator has to be configured, or not used at all, as the previous Bidirectional doesn't work in KRaft mode.
+* If the Topic Operator is used, the `UnidirectionalTopicOperator` feature gate has to be enabled since the old Bidirectional Topic Operator does not work in the KRaft mode.
 * Either KRaft mode is opted into (using the `+UseKRaft` feature gate), or the `+UseKRaft` feature gate has reached beta level and defaults to enabled.
 
 If the cluster is not configured to use node pools to run brokers, the user can follow the procedure described [here](https://strimzi.io/docs/operators/latest/deploying#proc-migrating-clusters-node-pools-str) in the official documentation, in order to meet such a prerequisite.
@@ -389,7 +389,7 @@ The FSM is in the `FullKRaft` state (as per `Kafka.status.migrationState` field)
 
 **_Trigger_**
 
-The user applies the `strimzi.io/kraft: post-migration` annotation and removes the `spec.zookeeper` on the `Kafka` custom resource.
+The user applies the `strimzi.io/kraft: enabled` annotation and removes the `spec.zookeeper` on the `Kafka` custom resource.
 
 **_Actions_**
 
