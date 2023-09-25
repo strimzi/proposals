@@ -102,7 +102,7 @@ In order to make the process clearer as much as possible, each phase is describe
 **_Preconditions_**
 
 The Apache Kafka cluster is running in KRaft mode, so the `strimzi.io/kraft: enabled` annotation is already applied on the `Kafka` custom resource.
-The FSM is in the `None` state (as per `Kafka.status.migrationState` field).
+The FSM is in the `KRaft` state (as per `Kafka.status.migrationState` field).
 
 **_Trigger_**
 
@@ -115,7 +115,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM stays in the `None` state.
+The FSM stays in the `KRaft` state.
 The `Kafka.status` keeps the warning condition, on each subsequent reconciliation, until the user re-applies the `strimzi.io/kraft: enabled` annotation.
 
 #### Initializing migration process
@@ -124,7 +124,7 @@ The `Kafka.status` keeps the warning condition, on each subsequent reconciliatio
 
 The Apache Kafka cluster is running, meets the prerequisites described above, and is in a functional state.
 The `strimzi.io/kraft: disabled` annotation is already applied on the `Kafka` custom resource or missing, denoting a ZooKeeper-based cluster.
-The FSM is in the `NoMigration` (or null) state (as per `Kafka.status.migrationState` field).
+The FSM is in the `ZooKeeper` (or null) state (as per `Kafka.status.migrationState` field).
 
 **_Trigger_**
 
@@ -160,7 +160,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
+The FSM moves back to the `ZooKeeper` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
 
 ---
 
@@ -215,7 +215,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves back to the `NoMigration` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
+The FSM moves back to the `ZooKeeper` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
 
 ---
 
@@ -379,7 +379,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves to the `FullKRaft` state and ZooKeeper is not used anymore.
+The FSM moves to the `PostMigration` state and ZooKeeper is not used anymore.
 
 #### Phase 5: Removing ZooKeeper
 
@@ -387,7 +387,7 @@ At this point the ZooKeeper ensemble is out of the picture, still running but no
 
 **_Preconditions_**
 
-The FSM is in the `FullKRaft` state (as per `Kafka.status.migrationState` field) and the operator expects the user to finalize the migration by removing ZooKeeper.
+The FSM is in the `PostMigration` state (as per `Kafka.status.migrationState` field) and the operator expects the user to finalize the migration by removing ZooKeeper.
 
 **_Trigger_**
 
@@ -400,7 +400,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves back to a `NoMigration` state (or null) and the operator upgrades `Kafka.status.migrationState` field accordingly.
+The FSM moves back to a `KRaft` state (or null) and the operator upgrades `Kafka.status.migrationState` field accordingly.
 
 ### Metrics
 
