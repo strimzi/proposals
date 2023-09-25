@@ -37,6 +37,14 @@ The possible values would be:
 This way, during the reconciliation, the operator is able to "detect" a ZooKeeper-based cluster avoiding the warning and allowing the user to operate it.
 On the KRaft side, the annotation would be needed to have the operator reconciling the corresponding `Kafka` custom resource.
 Without the annotation, but the `UseKRaft` feature gate enabled, the operator would try to handle it as a ZooKeeper-based one.
+
+| Operator Feature Gate | `strimzi.io/kraft` annotation | Operator behaviour       |
+|-----------------------|-------------------------------|--------------------------|
+| `-UseKRaft`           | `enabled`                     | Ignore annotation        |
+| `-UseKRaft`           | missing or anything else      | ZooKeeper reconciliation |
+| `+UseKRaft`           | `enabled`                     | KRaft reconciliation     |
+| `+UseKRaft`           | missing or anything else      | ZooKeeper reconciliation |
+
 The `UseKRaft` feature gate does currently not support any upgrades of KRaft clusters.
 It is expected to be used only for short-lived clusters used for development and testing.
 So no clusters are expected to exist.
