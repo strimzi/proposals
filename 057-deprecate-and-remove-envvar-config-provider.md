@@ -6,7 +6,7 @@ This proposes deprecating the [kafka-env-var-config-provider](https://github.com
 
 In [proposal 30](https://github.com/strimzi/proposals/blob/main/030-env-var-config-provider.md), we added an implementation of the [ConfigProvider](https://kafka.apache.org/35/javadoc/org/apache/kafka/common/config/provider/ConfigProvider.html) interface of Apache Kafka that allows retrieving configuration values at runtime from environment variables. This implementation lives in the `kafka-env-var-config-provider` project. This is especially useful to safely configure sensitive settings in virtualized/containerized environments like Kubernetes.
 
-For example a Kafka client can use this provider with:
+For example, a Kafka client can use this provider with specified environment variables:
 ```properties
 config.providers=env
 config.providers.env.class=io.strimzi.kafka.EnvVarConfigProvider
