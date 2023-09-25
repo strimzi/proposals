@@ -28,13 +28,15 @@ One of the main points to highlight is that such a process doesn't support migra
 It means that the user environment should be sized to host more nodes running in parallel, because during the migration process both ZooKeeper nodes and KRaft controllers will be running.
 The end of the migration will involve shutting down the ZooKeeper nodes reducing the resources consumption.
 
+Afterwards the migration, the users should be also able to migrate to use combined nodes for an additional reduction of resources, which is anyway out of the scope for this proposal.
+
 ## Motivation
 
 The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project. 
 Anyway, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
 The ZooKeeper mode has been deprecated after the Apache Kafka 3.5 version was released while providing the migration process to KRaft mode as preview.
-The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 (January 2024) but removed after that.
-Starting from Apache Kafka 4.0 (April 2024) only KRaft mode will be supported.
+The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 but removed after that.
+Starting from Apache Kafka 4.0 only KRaft mode will be supported.
 
 Based on the above Apache Kafka community plan, more details in [KIP-833](https://cwiki.apache.org/confluence/display/KAFKA/KIP-833%3A+Mark+KRaft+as+Production+Ready), the Strimzi project needs to be prepared to allow users to migrate their current clusters from running in ZooKeeper mode to KRaft mode.
 
@@ -49,7 +51,7 @@ In order to start the ZooKeeper to KRaft migration, the following prerequisites 
 * Configured to use one or more node pools, with `KafkaNodePool` custom resources, all with the `broker` role.
 * No existing node pool(s) which include the `controller` role.
 * If the Topic Operator is used, the `UnidirectionalTopicOperator` feature gate has to be enabled since the old Bidirectional Topic Operator does not work in the KRaft mode.
-* Either KRaft mode is opted into (using the `+UseKRaft` feature gate), or the `+UseKRaft` feature gate has reached beta level and defaults to enabled.
+* The `UseKRaft` feature gate should be enabled (explicitly, or via it being beta status).
 
 If the cluster is not configured to use node pools to run brokers, the user can follow the procedure described [here](https://strimzi.io/docs/operators/latest/deploying#proc-migrating-clusters-node-pools-str) in the official documentation, in order to meet such a prerequisite.
 
