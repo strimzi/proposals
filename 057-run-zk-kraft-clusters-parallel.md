@@ -5,7 +5,7 @@ It changes the way the Strimzi Cluster Operator handles ZooKeeper and KRaft base
 
 ## Current situation
 
-Currently, when the `UseKRaft` feature gate is enabled (together with the required `KafkaNodePools` one), the operator expects all the already running Apache Kafka clusters being KRaft-based.
+Currently, when the `UseKRaft` feature gate is enabled (together with the required `KafkaNodePools` one), the operator expects the Apache Kafka clusters already running to be KRaft-based.
 It means that the `Kafka` custom resources are configured together with `KafkaNodePool`(s) with `broker` and `controller` roles.
 There is no way to differentiate between clusters running in ZooKeeper or KRaft mode.
 When a `Kafka` custom resource is configured to actually use ZooKeeper or it's just badly configured but supposed to be KRaft-based, the operator detects it as having a missing KRaft controllers configuration and logs the following warning:
@@ -45,7 +45,7 @@ Without the annotation, but the `UseKRaft` feature gate enabled, the operator wo
 | `+UseKRaft`           | `enabled`                     | KRaft reconciliation     |
 | `+UseKRaft`           | missing or anything else      | ZooKeeper reconciliation |
 
-The `UseKRaft` feature gate does currently not support any upgrades of KRaft clusters.
+The `UseKRaft` feature gate does not currently support any upgrades of KRaft clusters.
 It is expected to be used only for short-lived clusters used for development and testing.
 So no clusters are expected to exist.
 Therefore adding the annotation now does not present any backwards compatibility issues.
