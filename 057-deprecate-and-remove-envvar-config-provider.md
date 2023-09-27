@@ -10,7 +10,7 @@ For example, a Kafka client can use this provider with specified environment var
 ```properties
 config.providers=env
 config.providers.env.class=io.strimzi.kafka.EnvVarConfigProvider
-option1=${env::FIRST_ENV_VAR}
+option1=${env:FIRST_ENV_VAR}
 ```
 
 ## Motivation
