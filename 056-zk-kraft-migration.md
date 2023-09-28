@@ -74,13 +74,21 @@ The current state is stored in the `Kafka.status.migrationState` field updated b
 
 The user "input" is represented by the user interaction with the operator through the `strimzi.io/kraft` annotation to be applied on the `Kafka` custom resource.
 Currently, the `strimzi.io/kraft` annotation is already used to specify a ZooKeeper-based cluster by using `disabled` as value or a KRaft-based cluster by using `enabled`.
-The following new values are introduced to represent the desired "direction" in the migration process:
- 
-* `pre-migration`: used at the very beginning of the migration process, it represents the user's intention to move into the phase where operator is waiting for the user to create one or more `KafkaNodePool`(s) with the `role: controller` in order to deploy the corresponding nodes with the ZooKeeper migration enabled. This value can be also used to rollback the migration progress, when still possible, to have brokers working again with ZooKeeper ensemble only.
-* `migration`: indicates the user's intention to move the migration process forward with brokers configured with the ZooKeeper migration enabled, and connected to both ZooKeeper nodes and the KRaft controllers, so that the Apache Kafka migration component can run the actual metadata migration ending with the "dual write" mode where metadata are both written to ZooKeeper and KRaft. Brokers are also connected to both ZooKeeper nodes and KRaft controllers.
-* `post-migration`: indicates the user's intention to finalize the migration by disabling the ZooKeeper migration on controllers and brokers, rolling the nodes, and finally having a full KRaft-based cluster with ZooKeeper ensemble still running but not used by brokers anymore.
+The new `migration` value is added and used by the user to start the migration process which is automated by the operator taking the following actions:
 
-Another "input" is represented by the Kafka migration metrics checked by the operator during the actual metadata migration from ZooKeeper to KRaft.
+* deploy the controllers, configured with the ZooKeeper migration enabled, through the `KafkaNodePool` custom resources with the `role: controller` provided by the user.
+* roll the brokers, configured with the ZooKeeper migration enabled and connected to the newly created controllers.
+* run the actual metadata migration by the Apache Kafka migration component.
+
+Furthermore, the already available annotation values are using as following:
+
+* `enabled` to finalize the migration by disabling the ZooKeeper migration and removing the ZooKeeper connection information on controllers and brokers, rolling the nodes, and finally having a full KRaft-based cluster with ZooKeeper ensemble still running but not used by brokers anymore.
+* `disabled` to rollback the migration process, when still possible, to have brokers working again with the ZooKeeper ensemble only.
+
+Other "inputs" for the FSM are represented by:
+
+* the Kafka migration metrics checked by the operator during the actual metadata migration from ZooKeeper to KRaft.
+* the readiness of nodes (controllers or brokers) after deploying or rolling them, depending on the step in the process.
 
 The state machine is described in the following diagram:
 
@@ -106,7 +114,7 @@ The FSM is in the `KRaft` state (as per `Kafka.status.migrationState` field).
 
 **_Trigger_**
 
-The user applies the `strimzi.io/kraft: pre-migration` annotation on the `Kafka` custom resource.
+The user applies the `strimzi.io/kraft: migration` annotation on the `Kafka` custom resource.
 
 **_Actions_**
 
@@ -118,61 +126,19 @@ The current reconciliation ends.
 The FSM stays in the `KRaft` state.
 The `Kafka.status` keeps the warning condition, on each subsequent reconciliation, until the user re-applies the `strimzi.io/kraft: enabled` annotation.
 
-#### Initializing migration process
+#### Phase 1/2: Provisioning the KRaft controller quorum, enabling the migration on the brokers or Rollback
+
+At the beginning of this phase, we expect the user to start the pre-migration for the current ZooKeeper-based cluster.
 
 **_Preconditions_**
 
-The Apache Kafka cluster is running, meets the prerequisites described above, and is in a functional state.
-The `strimzi.io/kraft: disabled` annotation is already applied on the `Kafka` custom resource or missing, denoting a ZooKeeper-based cluster.
-The FSM is in the `ZooKeeper` (or null) state (as per `Kafka.status.migrationState` field).
+The Apache Kafka cluster is running in ZooKeeper mode, so the `strimzi.io/kraft: disabled` annotation is already applied on the `Kafka` custom resource.
+The FSM is in the `ZooKeeper` state (as per `Kafka.status.migrationState` field) and it keeps staying in this state until the user applies the `strimzi.io/kraft: migration` annotation on the `Kafka` custom resource, and creates the `KafkaNodePool` custom resources(s) for the KRaft controllers.
 
 **_Trigger_**
 
-The user applies the `strimzi.io/kraft: pre-migration` annotation on the `Kafka` custom resource to make the operator aware of the migration intention.
-
-**_Actions_**
-
-The operator starts a reconciliation but there are no actual actions to be executed.
-The `KRaftMigrationManager` component just prepares itself, with an internal status change, to be ready for the migration process.
-The current reconciliation ends.
-
-**_Status changes_**
-
-The FSM moves to the `WaitControllersInMigration` state where the operator expects the user to create the KRaft controllers pool.
-
-#### Phase 1: Provisioning the KRaft controller quorum
-
-At the beginning of this phase, it's still possible to back out of the migration.
-
-**_Preconditions_**
-
-The FSM is in the `WaitControllersInMigration` state (as per `Kafka.status.migrationState` field).
-
-**_Trigger_**
-
-The user sets the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
-
-**_Actions_**
-
-The operator starts a reconciliation but there are no actual actions to be executed.
-The `KRaftMigrationManager` component just comes back to idle, with an internal status change.
-The current reconciliation ends.
-
-**_Status changes_**
-
-The FSM moves back to the `ZooKeeper` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
-
----
-
-If not rolling back, the user can move forward by deploying the KRaft controllers pool.
-
-**_Preconditions_**
-
-The FSM is in the `WaitControllersInMigration` state (as per `Kafka.status.migrationState` field).
-
-**_Trigger_**
-
-The user creates the `KafkaNodePool` custom resource containing the definition of the KRaft controllers which are going to replace the ZooKeeper nodes.
+The user creates the `KafkaNodePool` custom resource(s) containing the definition of the KRaft controllers which are going to replace the ZooKeeper nodes.
+The user sets the `strimzi.io/kraft: migration` annotation on the `Kafka` custom resource. 
 
 **_Actions_**
 
@@ -187,51 +153,30 @@ zookeeper.metadata.migration.enable=true
 zookeeper.connect=<connection-to-zookeeper>
 ```
 
-The operator has to wait for the KRaft controllers being ready, the quorum to be formed and leader elected, then the migration process moves to the state of waiting for brokers to register.
-The current reconciliation ends.
+The operator waits for the KRaft controllers being ready, the quorum to be formed and leader elected, then the migration process moves to the state of waiting for brokers to register.
 
 **_Status changes_**
 
-The FSM moves to a `WaitBrokersInMigration` state where the operator expects the user to ask for running the actual metadata migration.
-Before proceeding to phase 2 (while in the `WaitBrokersInMigration` state) the user is able to reconfigure their controller node pool as many times as they wish. 
-
-#### Phase 2: Rollback or Enabling the migration on the brokers
-
-At the beginning of this phase, it's still possible to back out of the migration.
-
-**_Preconditions__**
-
-The FSM is in the `WaitBrokersInMigration` state (as per `Kafka.status.migrationState` field).
-
-**_Trigger_**
-
-The user deletes the `KafkaNodePool` custom resource containing the definition of the KRaft controllers and sets the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
-
-**_Actions_**
-
-The operator starts a reconciliation and, via the `KafkaReconciler` component, deletes the controllers pods.
-There is nothing to do with the brokers which are still configured to work with the ZooKeeper ensemble only.
-The current reconciliation ends.
-
-**_Status changes_**
-
-The FSM moves back to the `ZooKeeper` state (or null) actually exiting from the migration process and the operator upgrades `Kafka.status.migrationState` field accordingly.
+The FSM moves to a `ControllersInMigration` state to continue the pre-migration by configuring and rolling the brokers with the ZooKeeper migration enabled and connected to the newly created KRaft controllers.
+This state is useful if the operator crashes and it needs to recover correctly on startup, not deploying controllers but continuing with rolling brokers.
 
 ---
 
-Instead of rolling back, in order to start the actual migration, the brokers need to be connected to the KRaft controllers and have the ZooKeeper migration enabled.
+When the controllers are deployed, the operator can proceed the reconciliation by configuring and rolling brokers.
 
 **_Preconditions_**
 
-The FSM is in the `WaitBrokersInMigration` state (as per `Kafka.status.migrationState` field) and the operator expects the user to ask for running the actual metadata migration.
+The FSM is in the `ControllersInMigration` state (as per `Kafka.status.migrationState` field).
+The the `strimzi.io/kraft: migration` annotation is already applied on the `Kafka` custom resource.
+The controllers are up and running and ready with the ZooKeeper migration enabled.
 
 **_Trigger_**
 
-The the user applies the `strimzi.io/kraft: migration` annotation on the `Kafka` custom resource running the current ZooKeeper based brokers.
+The operator just finished to deploy the controllers and they are ready or it's restarting after a crash while rolling the brokers.
 
 **_Actions_**
 
-With the applied annotation, the operator starts a reconciliation and, via the `KafkaReconciler` component, updates the brokers' configuration with the ZooKeeper migration flag enabled and with the new KRaft controllers quorum connection information as well.
+During the current reconciliation and, via the `KafkaReconciler` component, the operator updates the brokers' configuration with the ZooKeeper migration flag enabled and with the new KRaft controllers quorum connection information as well.
 More specifically, the brokers are automatically updated with the following configuration (the user cannot set them manually).
 
 ```shell
@@ -259,29 +204,6 @@ The FSM moves to `Migration` state and stays there while migration is ongoing.
 
 ---
 
-While migration is running, it's still possible to not move forward with finalizing the migration but rolling back instead.
-
-**_Preconditions_**
-
-The FSM is in the `Migration` state (as per `Kafka.status.migrationState` field).
-The migration is ongoing.
-
-**_Trigger_**
-
-The user can rollback the process by applying the `strimzi.io/kraft: pre-migration` annotation on the `Kafka` custom resource.
-
-**_Actions_**
-
-In this case, the operator starts a reconciliation an, via the `KafkaReconciler` component, configures the brokers with no ZooKeeper migration flag, and no KRaft controllers quorum connection information.
-Finally, the operator rolls the brokers, via the `KafkaRoller`, and waits for them to be ready again.
-The current reconciliation ends.
-
-**_Status changes_**
-
-The FSM moves back to the `WaitBrokersInMigration`, so actually at the beginning of the Phase 2.
-
----
-
 While migration is running, the operator has to check for its status and if it's finished and KRaft controllers are working in "dual write" mode.
 This way the next step will be to move brokers and controllers out of migration and using KRaft only in Phase 3/4.
 
@@ -305,6 +227,52 @@ The current reconciliation ends.
 If the migration finished, the FSM moves to the `DualWrite` state.
 If the migration is still ongoing, the FSM stays in the `Migration` state.
 
+---
+
+While migration is running, it's still possible to not move forward with finalizing the migration but rolling back instead.
+
+**_Preconditions_**
+
+The FSM is in the `Migration` state (as per `Kafka.status.migrationState` field).
+The migration is ongoing.
+
+**_Trigger_**
+
+The user can rollback the process by applying the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
+
+**_Actions_**
+
+In this case, the operator starts a reconciliation an, via the `KafkaReconciler` component, configures the brokers with no ZooKeeper migration flag, and no KRaft controllers quorum connection information.
+Finally, the operator rolls the brokers, via the `KafkaRoller`, and waits for them to be ready again.
+The current reconciliation ends.
+
+**_Status changes_**
+
+The FSM moves back to the `ControllersInMigration`, so actually at the beginning of the Phase 2.
+
+---
+
+When the controllers are configured with ZooKeeper migration enabled but the user has applied the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource during the migration, the brokers are working with the ZooKeeper ensemble again and the user can rollback the overall process by deleting the controllers as well.
+
+**_Preconditions_**
+
+The `strimzi.io/kraft: disabled` annotation is already applied on the `Kafka` custom resource.
+The FSM is in the `ControllersInMigration` state (as per `Kafka.status.migrationState` field) and keep staying in this state until the user deletes the controllers pool(s) to rollback (or re-apply `strimzi.io/kraft: migration` to move forward with migration).
+
+**_Trigger_**
+
+The user deletes the `KafkaNodePool` custom resource(s) defining the controllers already running with ZooKeeper migration enabled.
+
+**_Actions_**
+
+In this case, the operator starts a reconciliation an deletes the pods running the controllers.
+The current reconciliation ends.
+
+**_Status changes_**
+
+The FSM moves back to the `ZooKeeper`, so actually at the beginning of the Phase 1.
+There is no more migration in progress and the Apache Kafka cluster is running in ZooKeeper mode.
+
 #### Phase 3/4: Migrating brokers and controllers to full KRaft
 
 At the beginning of this phase, the user has the last opportunity to rollback the migration process.
@@ -315,7 +283,7 @@ The FSM is in the `DualWrite` state (as per `Kafka.status.migrationState` field)
 
 **_Trigger_**
 
-The user can rollback the process by applying the `strimzi.io/kraft: pre-migration` annotation on the `Kafka` custom resource.
+The user can rollback the process by applying the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
 
 **_Actions_**
 
@@ -325,7 +293,7 @@ The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves back to the `WaitBrokersInMigration`, so actually at the beginning of the Phase 2.
+The FSM moves back to the `ControllersInMigration`, so actually at the beginning of the Phase 2.
 
 ---
 
@@ -337,7 +305,7 @@ The FSM is in the `DualWrite` state (as per `Kafka.status.migrationState` field)
 
 **_Trigger_**
 
-The user applies the `strimzi.io/kraft: post-migration` annotation to the `Kafka` custom resource.
+The user applies the `strimzi.io/kraft: enabled` annotation to the `Kafka` custom resource.
 
 **_Actions_**
 
@@ -362,7 +330,26 @@ node.id=0
 The operator rolls the brokers, via the `KafkaRoller`, and waits for them to be ready again.
 They are now connected to the KRaft controllers quorum only and not to the ZooKeeper ensemble anymore.
 
-When brokers are rolled and ready again, the operator updates the controllers' configuration by removing the ZooKeeper migration flag and connection to the ZooKeeper ensemble.
+**_Status changes_**
+
+The FSM moves to a `BrokersOutMigration` state to continue the finalization by configuring and rolling the controllers with the ZooKeeper migration disabled and not connected to ZooKeeper anymore.
+This state is useful if the operator crashes and it needs to recover correctly on startup not rolling brokers again but continuing with rolling controllers.
+
+---
+
+**_Preconditions_**
+
+The FSM is in the `BrokersOutMigration` state (as per `Kafka.status.migrationState` field).
+The the `strimzi.io/kraft: enabled` annotation is already applied on the `Kafka` custom resource.
+The brokers are up and running with the ZooKeeper migration disabled and not connect to ZooKeeper ensemble anymore.
+
+**_Trigger_**
+
+The operator just finished to roll the brokers and they are ready or it's restarting after a crash.
+
+**_Actions_**
+
+During the current reconciliation and, via the `KafkaReconciler` component, the operator updates the controllers' configuration by removing the ZooKeeper migration flag and connection to the ZooKeeper ensemble.
 More specifically, the controllers are automatically updated with the following configuration (the user cannot set them manually).
 
 ```shell
@@ -375,32 +362,12 @@ More specifically, the controllers are automatically updated with the following 
 
 Finally, the operator rolls the controllers, via the `KafkaRoller`, and waits for them to be ready again.
 They are now disconnected from the ZooKeeper ensemble which remain running but are no longer the source of truth for Kafka metadata.
+If the user also removes the `spec.zookeeper` section from the `Kafka` custom resource, then the operator deletes the ZooKeeper nodes pods as well.
 The current reconciliation ends.
 
 **_Status changes_**
 
-The FSM moves to the `PostMigration` state and ZooKeeper is not used anymore.
-
-#### Phase 5: Removing ZooKeeper
-
-At this point the ZooKeeper ensemble is out of the picture, still running but not used anymore.
-
-**_Preconditions_**
-
-The FSM is in the `PostMigration` state (as per `Kafka.status.migrationState` field) and the operator expects the user to finalize the migration by removing ZooKeeper.
-
-**_Trigger_**
-
-The user applies the `strimzi.io/kraft: enabled` annotation and removes the `spec.zookeeper` on the `Kafka` custom resource.
-
-**_Actions_**
-
-The operator starts a reconciliation and, via the `KafkaReconciler` component, deletes the ZooKeeper nodes pods.
-The current reconciliation ends.
-
-**_Status changes_**
-
-The FSM moves back to a `KRaft` state (or null) and the operator upgrades `Kafka.status.migrationState` field accordingly.
+The FSM moves to the `KRaft` state and ZooKeeper is not used anymore.
 
 ### Metrics
 
@@ -437,9 +404,11 @@ The `Kafka.status.migrationState` field is also new and doesn't have any impact 
 
 ## Rejected alternatives
 
-During the first pass of the proposal review, the following migration FSM was rejected as proposal.
+### Using different annotations
 
-![Migration Finite State Machine](./images/056-rejected-zk-kraft-migration-fsm.png)
+The following migration FSM was rejected as proposal.
+
+![Migration Finite State Machine](./images/056-rejected-zk-kraft-migration-fsm-1.png)
 
 It was based on using two different annotations:
 
@@ -451,3 +420,16 @@ It was based on using two different annotations:
 
 It was rejected after the agreement of having more automation on rolling nodes and less user involvement.
 It also had more complexity and a corresponding issue in case the user applies the `strimzi.io/kraft-migration` annotation only on some of the brokers pool and not all of them, so actually leaving some brokers out of the migration process.
+
+### Using additional `strimzi.io/kraft` annotation values for migration
+
+![Migration Finite State Machine](./images/056-rejected-zk-kraft-migration-fsm-2.png)
+
+It was based on using three different values for the `strimzi.io/kraft` annotation:
+
+* `pre-migration`: used at the very beginning of the migration process, it represents the user's intention to move into the phase where operator is waiting for the user to create one or more `KafkaNodePool`(s) with the `role: controller` in order to deploy the corresponding nodes with the ZooKeeper migration enabled. This value can be also used to rollback the migration progress, when still possible, to have brokers working again with ZooKeeper ensemble only.
+* `migration`: indicates the user's intention to move the migration process forward with brokers configured with the ZooKeeper migration enabled, and connected to both ZooKeeper nodes and the KRaft controllers, so that the Apache Kafka migration component can run the actual metadata migration ending with the "dual write" mode where metadata are both written to ZooKeeper and KRaft. Brokers are also connected to both ZooKeeper nodes and KRaft controllers.
+* `post-migration`: indicates the user's intention to finalize the migration by disabling the ZooKeeper migration on controllers and brokers, rolling the nodes, and finally having a full KRaft-based cluster with ZooKeeper ensemble still running but not used by brokers anymore.
+
+It was rejected after the agreement of having more automation on rolling nodes and less user involvement.
+It also didn't reuse `enabled` and `disabled` values which could replace `pre-migration` and `post-migration` as per the current proposal.
