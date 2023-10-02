@@ -64,7 +64,6 @@ The migration process can be rolled back to ZooKeeper at any point before taking
 ### Finite State Machine (FSM)
 
 The migration process can be described with a Finite State Machine (FSM).
-The operator has a new `KRaftMigrationManager` component in charge of driving and tracking transitions in the FSM.
 Transitioning across the states depends on the current state and "input" from the user.
 
 The current state is stored in the `Kafka.status.metadataState` field updated by the operator depending on the transition in the FSM.
