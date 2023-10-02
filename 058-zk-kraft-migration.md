@@ -13,26 +13,27 @@ It is currently not possible to migrate a ZooKeeper-based Apache Kafka cluster t
 
 There is also no support to upgrade a KRaft-based Apache Kafka cluster to a newer version, but this missing piece is out of the scope for this proposal.
 
-Furthermore, if the user creates one or more `KafkaNodePool` custom resources to deploy KRaft controllers, the operator itself just creates the controller nodes and restarts the Kafka brokers to use them. ZooKeeper is not used anymore but no proper migration takes place (from ZooKeeper to KRaft metadata). Because of KRaft and related migration from ZooKeeper not supported yet, this leads to the following [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9108).
+Furthermore, if the user creates one or more `KafkaNodePool` custom resources to deploy KRaft controllers, the operator itself just creates the controller nodes and restarts the Kafka brokers to use them. ZooKeeper is not used anymore but no proper migration takes place (from ZooKeeper to KRaft metadata). Because KRaft and related migration from ZooKeeper is not supported yet, this leads to the following [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9108).
 
 The ZooKeeper to KRaft migration implementation is defined by [KIP-866](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration).
-The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run the procedure manually on your cluster not deployed via the Strimzi Cluster Operator.
+The upstream Apache Kafka community documentation also provides a [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide showing how to run a procedure manually on a cluster not deployed via the Strimzi Cluster Operator.
 
-One of the main points to highlight is that such a process doesn't support migration to a KRaft-based cluster running in "combined" mode:
+The key points to highlight about this migration process: 
 
-* Cannot migrate from a ZooKeeper based configuration to a cluster with nodes hosting both controller and broker (so actually reducing the number of nodes by removing the ZooKeeper ones).
-* The migration works by having ZooKeeper nodes to be replaced by new KRaft controller nodes.
+* Migration to a KRaft-based cluster in "combined" mode is not supported. Specifically, migrating from a ZooKeeper-based configuration to a cluster with nodes serving as both controllers and brokers, resulting in a reduction of nodes by removing the ZooKeeper nodes, is not possible.
+* The migration works by having ZooKeeper nodes replaced by new KRaft controller nodes.
 * Supporting "combined" mode is actually one of the rejected [alternatives](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration#KIP866ZooKeepertoKRaftMigration-CombinedModeMigrationSupport) in KIP-866.
 
 It means that the user environment should be sized to host more nodes running in parallel, because during the migration process both ZooKeeper nodes and KRaft controllers will be running.
 The end of the migration will involve shutting down the ZooKeeper nodes reducing the resources consumption.
 
 After the migration, the users should be also able to migrate to use combined nodes for an additional reduction of resources, but that is out of the scope for this proposal.
+It is anyway not recommended for production workloads.
 
 ## Motivation
 
 The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project. 
-Anyway, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
+Despite this, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
 The ZooKeeper mode has been deprecated after the Apache Kafka 3.5 version was released while providing the migration process to KRaft mode as preview.
 The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 but removed after that.
 Starting from Apache Kafka 4.0 only KRaft mode will be supported.
@@ -68,7 +69,7 @@ Transitioning across the states depends on the current state and "input" from th
 
 The current state is stored in the `Kafka.status.metadataState` field updated by the operator depending on the transition in the FSM.
 
-> NOTE: the `Kafka.status.metadataState` field for storing the migration current state would be dropped when releasing `v1` API. It's anyway going to be used just for a transitioning period until community users will migrate all their clusters to be KRaft based.
+> NOTE: the `Kafka.status.metadataState` field for storing the migration current state would be dropped when releasing `v1` API. It's anyway going to be used just for a transitioning period until community users will migrate all their clusters to be KRaft-based.
 
 The user "input" is represented by the user interaction with the operator through the `strimzi.io/kraft` annotation to be applied on the `Kafka` custom resource.
 Currently, the `strimzi.io/kraft` annotation is already used to specify a ZooKeeper-based cluster by using `disabled` as value or a KRaft-based cluster by using `enabled`.
@@ -78,7 +79,7 @@ The new `migration` value is added and used by the user to start the migration p
 * roll the brokers, configured with the ZooKeeper migration enabled and connected to the newly created controllers.
 * run the actual metadata migration by the Apache Kafka migration component.
 
-Furthermore, the already available annotation values are using as following:
+Furthermore, the already available annotation values are used as follows:
 
 * `enabled` to finalize the migration by disabling the ZooKeeper migration and removing the ZooKeeper connection information on controllers and brokers, rolling the nodes, and finally having a full KRaft-based cluster with ZooKeeper ensemble still running but not used by brokers anymore.
 * `disabled` to rollback the migration process, when still possible, to have brokers working again with the ZooKeeper ensemble only.
@@ -93,7 +94,7 @@ The state machine is described in the following diagram:
 ![Migration Finite State Machine](./images/058-zk-kraft-migration-fsm.png)
 
 The following sections explain the states and transitions in details.
-The "Phase"(s) reflect what is described in the official [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide in the Apache Kafka documentation but with the right degree of automation provided by the operator.
+The phases reflect what is described in the official [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide in the Apache Kafka documentation but with the right degree of automation provided by the operator.
 Also, the `PRE_MIGRATION`, `MIGRATION` and `POST_MIGRATION` dotted boxes correspond to the `ZkMigrationState` [enum values](https://github.com/apache/kafka/blob/trunk/metadata/src/main/java/org/apache/kafka/metadata/migration/ZkMigrationState.java#L32) from the Apache Kafka migration component.
 
 In order to make the process clearer as much as possible, each phase is described by:
@@ -240,7 +241,7 @@ The user can rollback the process by applying the `strimzi.io/kraft: disabled` a
 
 **_Actions_**
 
-In this case, the operator starts a reconciliation an, via the `KafkaReconciler` component, configures the brokers with no ZooKeeper migration flag, and no KRaft controllers quorum connection information.
+In this case, the operator starts a reconciliation and, via the `KafkaReconciler` component, configures the brokers with no ZooKeeper migration flag, and no KRaft controllers quorum connection information.
 Finally, the operator rolls the brokers, via the `KafkaRoller`, and waits for them to be ready again.
 The current reconciliation ends.
 
@@ -369,7 +370,7 @@ The FSM moves to the `KRaft` state and ZooKeeper is not used anymore.
 
 ### Metrics
 
-During ZooKeeper to KRaft migration, there are some Kafka metrics that could be useful to check the status in each of the phases.
+During ZooKeeper to KRaft migration, there are some Kafka metrics that will be used to check the status in each of the phases.
 More details in the [“Metrics”](https://cwiki.apache.org/confluence/display/KAFKA/KIP-866+ZooKeeper+to+KRaft+Migration#KIP866ZooKeepertoKRaftMigration-Metrics) section of KIP-866.
 
 The most interesting and useful ones are:
