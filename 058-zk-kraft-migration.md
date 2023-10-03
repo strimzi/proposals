@@ -237,6 +237,7 @@ The migration is ongoing.
 **_Trigger_**
 
 The user can rollback the process by applying the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
+The operator reports a warning condition in the `Kafka` resource status if the ZooKeeper metadata are behind the KRaft ones, which means metadata loss if the user decides to rollback (see `ZkWriteBehindLag` metric description).
 
 **_Actions_**
 
@@ -282,6 +283,7 @@ The FSM is in the `KRaftDualWriting` state (as per `Kafka.status.metadataState` 
 **_Trigger_**
 
 The user can rollback the process by applying the `strimzi.io/kraft: disabled` annotation on the `Kafka` custom resource.
+The operator reports a warning condition in the `Kafka` resource status if the ZooKeeper metadata are behind the KRaft ones, which means metadata loss if the user decides to rollback (see `ZkWriteBehindLag` metric description).
 
 **_Actions_**
 
@@ -379,12 +381,14 @@ The most interesting and useful ones are:
 | kafka.controller:type=KafkaController,name=MetadataType           | An enumeration of: ZooKeeper (1), KRaft (2), or Dual (3). The active controller reports this.                                      |
 | kafka.controller:type=KafkaController,name=MigratingZkBrokerCount | A count of ZK brokers that are registered with KRaft and ready for migration. This will only be reported by the active controller. |
 | kafka.controller:type=KafkaController,name=ZkMigrationState       | An enumeration of the possible migration states the cluster can be in. This is only reported by the active controller.             |
+| kafka.controller:type=KafkaController,name=ZkWriteBehindLag       | The amount of lag in records that ZooKeeper is behind relative to the highest committed record in the metadata log. This metric will only be reported by the active KRaft controller.             |
 
 They are used the following way:
 
 * `MetadataType`: to understand if the active controller is not in the "dual write" mode anymore (keeping metadata in both ZooKeeper and KRaft) and also out of ZooKeeper, keeping metadata only as KRaft.
 * `MigratingZkBrokerCount`: to understand when the migration is starting because after creating the KRaft controllers and forming the quorum, they will "wait for brokers" (beginning of Phase 2). It happens when brokers are switched to the migration mode. Having all brokers registered means migration was started/is going to start.
 * `ZkMigrationState`: to get the actual status of the migration. More details [here](https://github.com/apache/kafka/blob/trunk/metadata/src/main/java/org/apache/kafka/metadata/migration/ZkMigrationState.java).
+* `ZkWriteBehindLag`: to understand if the metadata stored in ZooKeeper are behind the updated one in KRaft (during "dual write") which means that a rollback operation could drive to metadata loss for the user.
 
 The Kafka Agent could expose a `/kraft-migration` endpoint providing some of/all the metrics above (in JSON format) which are useful during the automated migration process, in order to allow the operator to understand when a phase is completed and the user can drive to the next one.
 
