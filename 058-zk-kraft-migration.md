@@ -28,14 +28,14 @@ It means that the user environment should be sized to host more nodes running in
 The end of the migration will involve shutting down the ZooKeeper nodes reducing the resources consumption.
 
 After the migration, the users should be also able to migrate to use combined nodes for an additional reduction of resources, but that is out of the scope for this proposal.
-It is anyway not recommended for production workloads.
+Combined mode is anyway not recommended for production workloads.
 
 ## Motivation
 
 The KRaft mode has been declared to be production-ready since Apache Kafka 3.3 release by the Apache Kafka project. 
 Despite this, there are still missing features as reported in the official [documentation](https://kafka.apache.org/documentation/#kraft_missing).
 The ZooKeeper mode has been deprecated after the Apache Kafka 3.5 version was released while providing the migration process to KRaft mode as preview.
-The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported until Apache Kafka 3.7 but removed after that.
+The coming Apache Kafka 3.6 release will have such a migration process supported as GA and the ZooKeeper mode will be supported in all the next 3.X releases and then removed in 4.0.
 Starting from Apache Kafka 4.0 only KRaft mode will be supported.
 
 Based on the above Apache Kafka community plan, more details in [KIP-833](https://cwiki.apache.org/confluence/display/KAFKA/KIP-833%3A+Mark+KRaft+as+Production+Ready), the Strimzi project needs to be prepared to allow users to migrate their current clusters from running in ZooKeeper mode to KRaft mode.
@@ -47,7 +47,7 @@ Based on the above Apache Kafka community plan, more details in [KIP-833](https:
 In order to start the ZooKeeper to KRaft migration, the following prerequisites should be met:
 
 * A Strimzi-managed Apache Kafka cluster running in ZooKeeper mode.
-* Running at Kafka 3.5.0 or higher and with `inter.broker.protocol.version` set to 3.5 or higher.
+* Running at Kafka 3.6.0 or higher and with `inter.broker.protocol.version` set to 3.6 or higher.
 * Configured to use one or more node pools, with `KafkaNodePool` custom resources, all with the `broker` role.
 * No existing node pool(s) which include the `controller` role.
 * If the Topic Operator is used, the `UnidirectionalTopicOperator` feature gate has to be enabled since the old Bidirectional Topic Operator does not work in the KRaft mode.
@@ -165,7 +165,7 @@ When the controllers are deployed, the operator can proceed the reconciliation b
 **_Preconditions_**
 
 The FSM is in the `KRaftEnablingMigration` state (as per `Kafka.status.metadataState` field).
-The the `strimzi.io/kraft: migration` annotation is already applied on the `Kafka` custom resource.
+The `strimzi.io/kraft: migration` annotation is already applied on the `Kafka` custom resource.
 The controllers are up and running and ready with the ZooKeeper migration enabled.
 
 **_Trigger_**
