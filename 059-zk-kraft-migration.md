@@ -90,7 +90,7 @@ Other "inputs" for the FSM are represented by:
 
 The state machine is described in the following diagram:
 
-![Migration Finite State Machine](./images/058-zk-kraft-migration-fsm.png)
+![Migration Finite State Machine](./images/059-zk-kraft-migration-fsm.png)
 
 The following sections explain the states and transitions in details.
 The phases reflect what is described in the official [ZooKeeper to KRaft Migration](https://kafka.apache.org/documentation/#kraft_zk_migration) guide in the Apache Kafka documentation but with the right degree of automation provided by the operator.
@@ -410,7 +410,7 @@ The `Kafka.status.metadataState` field is also new and doesn't have any impact o
 
 The following migration FSM was rejected as proposal.
 
-![Migration Finite State Machine](./images/058-rejected-zk-kraft-migration-fsm-1.png)
+![Migration Finite State Machine](./images/059-rejected-zk-kraft-migration-fsm-1.png)
 
 It was based on using two different annotations:
 
@@ -425,7 +425,7 @@ It also had more complexity and a corresponding issue in case the user applies t
 
 ### Using additional `strimzi.io/kraft` annotation values for migration
 
-![Migration Finite State Machine](./images/058-rejected-zk-kraft-migration-fsm-2.png)
+![Migration Finite State Machine](./images/059-rejected-zk-kraft-migration-fsm-2.png)
 
 It was based on using three different values for the `strimzi.io/kraft` annotation:
 
