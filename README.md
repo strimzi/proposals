@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 58  | [Deprecate and remove EnvVarConfigProvider](./058-deprecate-and-remove-envvar-config-provider.md) |
 | 57  | [Allow running ZooKeeper and KRaft based clusters in parallel](./057-run-zk-kraft-clusters-parallel.md) |
 | 56  | [Add ability to create Cruise Control REST API users](./056-cruise-control-api-users.md) |
 | 55  | [Infinite auto-restart of Apache Kafka connectors](./055-infinite-auto-restart-of-Kafka-connectors.md) |
