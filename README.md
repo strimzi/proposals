@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 59  | [ZooKeeper to KRaft migration](./059-zk-kraft-migration.md) |
 | 58  | [Deprecate and remove EnvVarConfigProvider](./058-deprecate-and-remove-envvar-config-provider.md) |
 | 57  | [Allow running ZooKeeper and KRaft based clusters in parallel](./057-run-zk-kraft-clusters-parallel.md) |
 | 56  | [Add ability to create Cruise Control REST API users](./056-cruise-control-api-users.md) |
