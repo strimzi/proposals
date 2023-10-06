@@ -48,7 +48,7 @@ Apache Kafka [KRaft upgrade procedure](https://kafka.apache.org/documentation/#u
 2. Update the `metadata.version` using the `kafka-reafutres.sh` command line tool (or using the Kafka Admin API).
    Unlike updating the `inter.broker.protocol.version`, updating the `metadata.version` does not require a rolling update of all Kafka nodes.
 
-Downgrade is possibly as well, by:
+Downgrade is possible as well:
 1. Downgrading the `metadata.version`
 2. Rolling out the older Kafka version
 
@@ -56,7 +56,7 @@ Changes to the metadata formats - that are defined by the `metadata.version` - m
 As a result, the first step of the downgrade procedure - downgrading the `metadata.version` - can be done safely without any metadata loss only for selected metadata versions.
 For other versions, the downgrade will be possible only as _unsafe_ downgrade that might result in loosing some metadata information and might have negative impact on the cluster.
 
-#### Exiting downgrade limitations
+#### Existing downgrade limitations
 
 As of today, the situation is following:
 1. The unsafe downgrade is currently not supported by Apache Kafka.
@@ -93,7 +93,7 @@ This field will be used for validations and to track if upgrade / downgrade can 
 
 ##### Upgrading metadata version
 
-When upgrading the metadata version, the operator will validate the desired version and check if it is expected to work with the used Kafka version (e.g. is not higher than the Kafka version).
+When upgrading the metadata version, the operator will validate the desired version and check if it is expected to work with the used Kafka version (e.g. is not higher than `metadata.version` supported by the Kafka version).
 If it passes the validation, Kafka Admin API will be used to upgrade the metadata.
 If the validation fails, the existing metadata version will be used and the error will be raised in log and in the `.status` section of the Kafka CR.
 
@@ -117,7 +117,7 @@ To allow users to deploy Kafka clusters with older metadata version, Strimzi wil
 The value will be mounted into the Kafka pods and used when formatting the storage of a new Kafka cluster.
 That way - unlike when using environment variable - we will not need to roll the Pod every time the `metadata.version` changes (since in such cases we can update it dynamically without rolling the pods).
 
-#### Upgrades
+#### Upgrade procedure
 
 Upgrade can happen in two situations:
 * After the upgrade of the Strimzi Cluster Operator:
@@ -131,7 +131,8 @@ In both cases, the Strimzi Cluster Operator will:
 2. Roll all Kafka pods to use the containers with the new Kafka version.
 
 Once all the Kafka pods are rolled, the next step will depend on whether `Kafka.spec.kafka.metadataVersion` is set or not.
-When it is not set, Strimzi will automatically update it to the default version corresponding to the new Kafka version.
+When it is not set, Strimzi will automatically update the metadata version in the Kafka cluster using Kafka Admin API to the default version corresponding to the new Kafka version.
+The operator will not change the `Kafka.spec.kafka.metadataVersion` field - it will remain unset.
 And the Kafka upgrade will be complete with this.
 
 In case the `Kafka.spec.kafka.metadataVersion` field is set, it will just check the Kafka cluster has the desired metadata version as in any other reconciliation.
@@ -143,7 +144,7 @@ The upgrades will be supported to skip multiple Strimzi and Kafka versions in si
 For example, to upgrade from Strimzi 1.1.0 / Kafka 4.1.0 to Strimzi 1.5.0 / Kafka 4.4.0 (the exact versions are for demonstration purposes only).
 The exact number of versions a user can skip during the upgrade might be limited by other changes in Strimzi and by Apache Kafka itself.
 
-#### Downgrades 
+#### Downgrade procedure
 
 Downgrade can happen only in one situation: when user requests Kafka downgrade by changing `Kafka.spec.kafka.version`.
 
@@ -167,7 +168,7 @@ In both cases, the operator will:
 
 _Note:_
 _This corresponds to what Strimzi supports today for ZooKeeper-based clusters._
-_Today, the users are responsible for downgrading the `inter.bvroker.protocol.version` before the Kafka downgrade by updating their `Kafka` CR._
+_Today, the users are responsible for downgrading the `inter.broker.protocol.version` before the Kafka downgrade by updating their `Kafka` CR._
 _Similarly, even today they have to downgrade Strimzi versions step by step in the same way as described in this section._
 
 #### (Stretch goal) Downgrade of Kafka after Strimzi Cluster Operator downgrade
