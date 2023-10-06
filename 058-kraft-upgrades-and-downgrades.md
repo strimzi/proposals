@@ -184,6 +184,13 @@ And if the validation passes, it will automatically roll all Kafka pods to use t
 If the validation fails, it will be up to the user to address the issue.
 This might require moving back to the original Strimzi and Kafka version.
 
+#### Example YAML files
+
+Given the current limitations when downgrading the metadata versions, it seems reasonable for users to prefer managing the metadata manually rather then to have them changed automatically.
+So we should encourage users to set the `Kafka.spec.kafka.metadataVersion` by having it set in our KRaft example YAML files.
+It will be set there to the metadata version corresponding to the Kafka version the example files use.
+This would also correspond to the current ZooKeeper-based examples that have the `inter.broker.protocol.version` set.
+
 #### Risks
 
 Kafka provides APIs to manage the `metadata.version`.
