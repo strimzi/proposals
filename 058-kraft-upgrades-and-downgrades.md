@@ -45,7 +45,7 @@ Strimzi should follow the Apache Kafka [procedure for upgrading / downgrading](h
 
 The Apache Kafka [KRaft upgrade procedure](https://kafka.apache.org/documentation/#upgrade_350_kraft) consists of 2 different steps:
 1. Roll out the new Kafka version and verify everything is working fine.
-2. Update the `metadata.version` using the `kafka-reafutres.sh` command line tool (or using the Kafka Admin API).
+2. Update the `metadata.version` using the `kafka-features.sh` command line tool (or using the Kafka Admin API).
    Unlike updating the `inter.broker.protocol.version`, updating the `metadata.version` does not require a rolling update of all Kafka nodes.
 
 Downgrade is possible as well:
