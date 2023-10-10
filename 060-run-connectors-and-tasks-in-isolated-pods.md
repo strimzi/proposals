@@ -24,24 +24,74 @@ The upcoming Kafka Connect Static Assignments feature allows each worker in a cl
 This allows an external orchestration framework (e.g. Strimzi) to control resource allocations and job scheduling.
 This functionality will be added to Apache Kafka in [KIP-987](https://cwiki.apache.org/confluence/display/KAFKA/KIP-987%3A+Connect+Static+Assignments) and released in vX.Y.
 
+Adopting this feature in Strimzi means that operators of Kafka Connect clusters can apply resource limits to individual connectors and tasks, preventing them from disrupting one another.
+It will also mean that they are better able to characterize their workload's resource usage, optimize resource provisioning, and plan capacity investments.
+
 ## Proposal
 
 In addition to the default shared-JVM deployment mode, Strimzi should also support a isolated-JVM deployment mode.
 This mode will use the Static Assignments feature to assign connectors and tasks each to their own worker.
 This will be opt-in, and able to be performed as a live migration to an existing cluster.
 
-A KafkaConnectorSpec will accept a new optional ConnectorResourceRequirements field, to be used for the Connector instance.
+A KafkaConnectorSpec will accept a new optional connectorResources field, to be used for the Connector instance.
 When not specified, the Strimzi operator will let the Connect cluster control scheduling of the Connector instance.
 When specified, the Strimzi operator will create a pod for that Connector instance with the specified resources applied to the pod.
+The pod name will be prefixed with the connector name.
 
-A KafkaConnectorSpec will also accept a new optional TaskResourceRequirements field, to be used for the Task instances.
-The TaskResourceRequirements will contain a Default field, which contains the resources to apply to a task if no override is specified.
-Additionally, TaskResourceRequirements will contain an Override list, which contains a list of resource requirements to apply to the tasks, 0-indexed.
-If the list of overrides is shorter than the list of tasks, each task without a requirement will use the Default requirements.
-For each task with either an Override or Default requirement, the Strimzi operator will create a pod for that Task instance with the specified resources applied to that pod.
+A KafkaConnectorSpec will also accept a new optional defaultTaskResources field, which contains the resources to apply to a task if no override is specified.
+Additionally, KafkaConnectorSpec will also contain an overrideTaskResources list, which contains a list of resource requirements to apply to the tasks.
+Each override will specify a task number, and the resource requirements to apply to that task index.
+For each task with either an override or default requirement, the Strimzi operator will create a pod for that Task instance with the specified resources applied to that pod.
+The pod name will be prefixed with the task ID, including the task index.
 
-The Strimzi operator will regularly poll the REST API for the number of tasks, and create corresponding pods for those tasks.
-If a pod is assigned for a connector or task which no longer exists in the REST API, the corresponding pod is removed.
+For example the following configuration would generate the following pods:
+```yaml
+kind: KafkaConnector
+metadata:
+   name: my-connector-name
+spec:
+  class: org.apache.kafka.connect.file.FileStreamSinkConnector
+  tasksMax: 2
+  config:
+    topics: test-topic
+  connectorResources:
+    requests:
+      memory: "64Mi"
+      cpu: "250m"
+    limits:
+      memory: "128Mi"
+      cpu: "500m"
+  defaultTaskResources:
+     requests:
+        memory: "512Mi"
+        cpu: "1"
+     limits:
+        memory: "1024Mi"
+        cpu: "1"
+  overrideTaskResources:
+     - task: 1
+       resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "1"
+          limits:
+            memory: "1546Mi"
+            cpu: "1"
+```
+
+```shell
+NAME                                          READY   STATUS      RESTARTS   AGE
+my-connector-name-69bc4bc47c-tvjzh            1/1     Running     0          74s
+my-connector-name-0-69bc4bc47c-aysjq          1/1     Running     0          21s
+my-connector-name-1-69bc4bc47c-ilaky          1/1     Running     0          24s
+my-connect-cluster-connect-build              0/1     Completed   0          2m2s
+```
+
+Note that the resource requirements specified in the KafkaConnector include the overhead of the JVM and worker background tasks.
+There will be some practical minimum resources that must be assigned to all connectors and tasks in a KafkaConnect cluster.
+
+The Strimzi operator will regularly poll the Connect REST API for the number of tasks, and create corresponding pods for those tasks.
+If a pod is assigned for a connector or task which no longer exists in the Connect REST API, the corresponding pod is removed.
 
 For a cluster which has ResourceRequirements for all KafkaConnectors, the shared workers will typically be empty, functioning as hot standby instances.
 Hot-standby workers are assigned connectors and tasks which do not have a live static worker, either because that pod is offline or Strimzi has not created it yet.
@@ -74,12 +124,13 @@ For existing clusters that wish to migrate to using isolated instances, an upgra
 
 ### Downgrades
 
-On downgrade, clusters using isolated instances may experience resource exhaustion.
+On downgrade of the Kafka Connect version, clusters using isolated instances may experience resource exhaustion.
+This will appear as KafkaConnectors failing, and/or the isolated pods crashing.
 If resources are specified for a connector or task, the version downgrade will cause static assignments to be ignored.
 If the connector/task ResourceRequirements are less than the KafkaConnect ResourceRequirements, the cluster will potentially over-assign the lower-resource workers.
 KafkaConnector resource requirements should be removed and the number of replicas increased again, before downgrading the cluster to a version which does not support Static Assignments.
 
-KafkaConnector resource requirements should also be removed before downgrading Strimzi to a version which does not include it, as the added ResourceRequirement fields will not be valid in earlier versions.
+KafkaConnector resource requirements should also be removed before downgrading Strimzi to a version which does not include it, as the names of the pods managed by the operator are different.
 
 ## Rejected alternatives
 
@@ -109,3 +160,8 @@ By starting up two pods with a static assignment for a single task, one of those
 This would avoid the task joining the shared worker pool, and maintain resource isolation at the cost of a much higher resource cost.
 
 This can be added later as an extension, but is omitted due to its poor operating cost tradeoff as compared to shared standby workers.
+
+### Adopt a different computation model/framework
+
+This is an alternative for users, but not for operators who have users that have already selected Kafka Connect.
+The goal of this feature is to make kafka Connect more reliable to operate, through the resource management idioms already familiar to Kubernetes users.
