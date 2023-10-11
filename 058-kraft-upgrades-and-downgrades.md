@@ -87,7 +87,7 @@ The default value of this field when not set will be the metadata version corres
 The default version corresponding to a given Kafka version will be stored in `kafka-versions.yaml` in the same way we today store the default `inter.broker.protocol.version` and `log.message.format.version`.
 
 The operator will use this field to set the metadata version in the Kafka cluster.
-In the initial deployment of the Kafka cluster, it will be set using the `kafka-storage.sh` tool.
+In the initial deployment of the Kafka cluster, it will be set using the `kafka-storage.sh` tool (check the _Configuring the initial metadata version_ section for more details about why `kafka-storage.sh` needs to be used for new clusters).
 In existing Kafka clusters, it will be queried and changed using the Kafka Admin API.
 
 The current metadata version will be tracked in the `.status` section of the Kafka CR in `.status.kafkaMetadataVersion`.
@@ -116,7 +116,8 @@ Users who decide they want to do the unsafe downgrade can do so manually:
 
 Normally, when a new Kafka cluster is deployed, it will use its default metadata version.
 If a user wants to start a new Kafka cluster with an older metadata version, it has to be specified using the `--release-version` option of the `kafka-storage.sh` script when preparing the storage of the new cluster.
-Strimzi will use this mechanism to allow users deploy new Kafka clusters with older metadata versions as well.
+Without using this tool, the Kafka cluster will start with its default metadata version and downgrade to the older one might not be possible anymore.
+To avoid this, Strimzi will use this mechanism to allow users deploy new Kafka clusters with older metadata versions as well.
 
 Users will specify the desired metadata version as usually in `Kafka.spec.kafka.metadataVersion`.
 Internally, Strimzi will store the desired `metadata.version` in the per-broker configuration Config Map. 
