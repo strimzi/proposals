@@ -24,6 +24,7 @@ Downgrading ZooKeeper-based clusters involves a multi-stage process:
    This step has to be done manually by the user by setting the version in `Kafka.spec.kafka.config`.
    The Cluster Operator will roll the Kafka brokers to set the new value but will still use the container images of the newer Kafka version.
    Strimzi validates the `inter.broker.protocol.version` and does not proceed with the next steps until a version compatible with the older Kafka version is used.
+   Kafka allows downgrading the `inter.broker.protocol.version`, but does not guarantee full functionality for all versions.
 2. Next, ZooKeeper nodes are rolled to use the new container image with the older Kafka version and possibly also the older ZooKeeper version (if the older Kafka version uses the older ZooKeeper version).
 3. Finally, the Kafka brokers are rolled one more time to use the container image with the older Kafka version.
 
@@ -55,6 +56,7 @@ Downgrade is possible as well:
 Changes to the metadata formats - that are defined by the `metadata.version` - might not be backwards compatible.
 As a result, the first step of the downgrade procedure - downgrading the `metadata.version` - can be done safely without any metadata loss only for selected metadata versions.
 For other versions, the downgrade will be possible only as an _unsafe_ downgrade that might result in losing some metadata information, which might have a negative impact on the cluster.
+This is similar to how the `inter.broker.protocol.version` works today, as it also doesn't offer any guarantees of full compatibility when downgrading it.
 
 #### Existing downgrade limitations
 
@@ -76,7 +78,7 @@ Strimzi will follow the same approach to upgrading / downgrading a KRaft cluster
 #### Configuring the metadata version
 
 In ZooKeeper-based clusters, the `inter.broker.protocol.version` is stored in the Kafka configuration (`Kafka.spec.kafka.config`).
-The `metadata.version` is not part of the Kafka configuration and cannot be managed declaratively.
+The `metadata.version` is not part of the Kafka configuration.
 To allow users to configure it in our Kafka custom resource, a new String-type field named `metadataVersion` will be added to `Kafka.spec.kafka`.
 This field will be validated by the operator to contain a valid Kafka metadata version.
 
@@ -93,7 +95,7 @@ This field will be used for validations and to track if upgrade / downgrade can 
 
 ##### Upgrading metadata version
 
-When upgrading the metadata version, the operator will validate the desired version and check if it is expected to work with the used Kafka version (e.g. is not higher than `metadata.version` supported by the Kafka version).
+When upgrading the metadata version, the operator will validate the desired version and check if it is expected to work with the used Kafka version (e.g. is not higher than `metadata.version` supported by the Kafka version specified in `Kafka.spec.kafka.version` or its default value).
 If it passes the validation, the Kafka Admin API will be used to upgrade the metadata.
 If the validation fails, the existing metadata version will be used and an error will be raised in the log and in the `.status` section of the Kafka CR.
 
@@ -112,9 +114,13 @@ Users who decide they want to do the unsafe downgrade can do so manually:
 
 ##### Configuring the initial metadata version
 
-When creating a new Kafka cluster, the initial metadata version can be configured using the `--release-version` option of the `kafka-storage.sh` script.
-To allow users to deploy Kafka clusters with an older metadata version, Strimzi will also store the desired `metadata.version` in the per-broker configuration Config Map. 
-The value will be mounted into the Kafka pods and used when formatting the storage of a new Kafka cluster.
+Normally, when a new Kafka cluster is deployed, it will use its default metadata version.
+If a user wants to start a new Kafka cluster with an older metadata version, it has to be specified using the `--release-version` option of the `kafka-storage.sh` script when preparing the storage of the new cluster.
+Strimzi will use this mechanism to allow users deploy new Kafka clusters with older metadata versions as well.
+
+Users will specify the desired metadata version as usually in `Kafka.spec.kafka.metadataVersion`.
+Internally, Strimzi will store the desired `metadata.version` in the per-broker configuration Config Map. 
+The value will be mounted into the Kafka pods and used when formatting the storage of a new Kafka cluster using the `kafka-storage.sh` utility.
 That way - unlike when using environment variables - we will not need to roll the Pod every time the `metadata.version` changes (since in such cases we can update it dynamically without rolling the pods).
 
 #### Upgrade procedure
@@ -127,6 +133,7 @@ Upgrade can happen in two situations:
 
 In both cases, the Strimzi Cluster Operator will:
 1. Validate that the metadata version currently used is compatible with the new Kafka version (it will check that it is lower than the new Kafka version).
+   This validation will be done based on the `kafka-versions.yaml` file and by comparing the versions.
    This check is expected to pass for upgrades since a Kafka cluster that would not pass it would be invalid already before the upgrade.
 2. Roll all Kafka pods to use the containers with the new Kafka version.
 
