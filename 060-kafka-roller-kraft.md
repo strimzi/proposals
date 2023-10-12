@@ -36,7 +36,7 @@ The KafkaRoller considers the following in order to determine if it is ok to res
  5. Does not restart a broker if doing so would take the in-sync replicas count below `min.insync.replicas` for any topic hosted on that broker
 
 #### Unready pod
-If pod is unready, KafkaRoller awaits its readiness until the operational timeout is reached before doing anything. If it hasn't become ready still, it checks whether it is stuck. A pod is considered stuck if it is in one of following states:
+If pod is unready but not stuck, KafkaRoller awaits its readiness until the operational timeout is reached before doing anything. A pod is considered stuck if it is in one of following states:
 - `CrashLoopBackOff`
 - `ImagePullBackOff`
 - `ContainerCreating`
