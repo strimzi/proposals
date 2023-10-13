@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 61  | [KRaft upgrades and downgrades](./061-kraft-upgrades-and-downgrades.md) |
 | 60  | [Kafka Roller KRaft Support](./060-kafka-roller-kraft.md) |
 | 59  | [ZooKeeper to KRaft migration](./059-zk-kraft-migration.md) |
 | 58  | [Deprecate and remove EnvVarConfigProvider](./058-deprecate-and-remove-envvar-config-provider.md) |
