@@ -105,7 +105,7 @@ When downgrading the `metadata.version` in Kafka, the operator will always try t
 And if the safe downgrade fails, it will report an error (in the log and in the `.status` section of the Kafka CR) and continue reconciliation without changing the metadata version.
 
 In case the safe downgrade is not supported, an _unsafe_ downgrade can be attempted (as explained in one of the earlier sections, the _unsafe_ downgrade is not implemented in current Kafka versions, but it is planned to be supported in the future).
-Unsafe upgrade might result in metadata loss that might cause various problems to the Kafka cluster.
+Unsafe downgrade might result in metadata loss that might cause various problems to the Kafka cluster.
 Users who decide they want to do the unsafe downgrade can do so manually:
 * Pause the reconciliation of the Kafka CR
 * Update the Kafka CR to the updated metadata version (to avoid the operator upgrading it back immediately after the reconciliation is unpaused)
