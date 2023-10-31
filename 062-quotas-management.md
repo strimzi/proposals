@@ -130,11 +130,15 @@ The `type: strimzi` quotas API will support the following fields:
 Other options might be configured directly by the user in `.spec.kafka.config` section of the `Kafka` CR.
 
 Based on this configuration, the operator will:
-* Set the `client.quota.callback.class` field in Kafka configuration to `io.strimzi.kafka.quotas.StaticQuotaCallback`
-* Set the configuration on how to connect to the Kafka broker as a client using the `client.quota.callback.static.kafka.admin.` options
-* Configures the default produce and fetch quota (`client.quota.callback.static.produce` and `client.quota.callback.static.fetch`)
-* Configure the minimal available disk space per-volume using the `client.quota.callback.static.storage.per.volume.limit.min.available.bytes` and `client.quota.callback.static.storage.per.volume.limit.min.available.ratio` options
-* Set the excluded users for that the quotas will not be applied using the `client.quota.callback.static.excluded.principal.name.list` option
+* Set the `client.quota.callback.class` field in Kafka configuration to `io.strimzi.kafka.quotas.StaticQuotaCallback`.
+* Set the configuration on how to connect to the Kafka broker as a client using the `client.quota.callback.static.kafka.admin.` options.
+* Configures the default produce and fetch quota (`client.quota.callback.static.produce` and `client.quota.callback.static.fetch`).
+* Configure the minimal available disk space per-volume using the `client.quota.callback.static.storage.per.volume.limit.min.available.bytes` and `client.quota.callback.static.storage.per.volume.limit.min.available.ratio` options.
+* Set the excluded users for that the quotas will not be applied using the `client.quota.callback.static.excluded.principal.name.list` option. 
+  The list of excluded users will also automatically (regardless whether user specified some custom excluded users or not) include the internal users used by Topic Operator and Cruise Control to not block them as they might be useful to resolve the disk space issue:
+  * Topic Operator by changing the retention of the existing topics. 
+    (Producing / fetching messages is required only by the Bidirectional Topic Operator. So the TO user can be removed only BTO is not supported anymore.)
+  * Cruise Control by rebalancing the topics between the brokers to address the disk space shortage.
 
 The quota plugin configuration will not be set a forbidden configuration.
 When the new `.spec.kafka.quotas` API would be not set at all, Strimzi will keep the default Kafka configuration (which is the default built-in quotas plugin).
