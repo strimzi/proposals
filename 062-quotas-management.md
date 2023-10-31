@@ -139,6 +139,7 @@ Based on this configuration, the operator will:
 The quota plugin configuration will not be set a forbidden configuration.
 When the new `.spec.kafka.quotas` API would be not set at all, Strimzi will keep the default Kafka configuration (which is the default built-in quotas plugin).
 Or - in case the user customized the quota plugin configuration in the `.spec.kafka.config` section - Strimzi will pass this configuration to Kafka.
+That means that the Apache Kafka `client.quota.callback.class` will not be marked as forbidden option.
 
 That helps to ensure backwards compatibility.
 Any users who current use the default plugin or any custom plugin would not be required to start using the `.spec.kafka.quotas` section immediately.
@@ -155,7 +156,7 @@ There is no change to the Strimzi User Operator or the `KafkaUser` custom resour
 ## Backwards compatibility
 
 This proposal is fully backwards compatible.
-When the new `.spec.kafka.quotas` APi is not set, the operator handles the quotas configuration exactly as in previous Strimzi versions.
+When the new `.spec.kafka.quotas` API is not set, the operator handles the quotas configuration exactly as in previous Strimzi versions.
 
 ## Rejected alternatives
 
