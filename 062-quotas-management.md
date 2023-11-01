@@ -140,10 +140,9 @@ Based on this configuration, the operator will:
     Therefore, the Topic Operator user can be removed if support for the Bidirectional Topic Operator is discontinued.
   * Cruise Control rebalances topics among brokers to address disk space shortages.
 
-The quota plugin configuration will not be set a forbidden configuration.
 If the new `.spec.kafka.quotas` API is not set at all, Strimzi will keep the default Kafka configuration (which is Apache Kafka's built-in Quota plugin).
 Or - in case the user customized the quota plugin configuration in the `.spec.kafka.config` section - Strimzi will pass this configuration to Kafka.
-That means that the Apache Kafka `client.quota.callback.class` will not be marked as forbidden option.
+That means that the Apache Kafka `client.quota.callback.class` will not be marked as a forbidden Apache Kafka configuration option.
 
 That helps to ensure backwards compatibility.
 Any users who currently use the default plugin or any custom plugin would not be required to start using the `.spec.kafka.quotas` section immediately.
