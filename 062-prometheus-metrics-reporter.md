@@ -69,6 +69,8 @@ This proposal will produce an implementation for each type of metrics reporter.
 - `KafkaPrometheusMetricsReporter` usable on brokers (for Kafka metrics) and on clients (including Connect and Streams)
 - `YammerPrometheusMetricsReporter` usable on brokers (for Yammer metrics)
 
+The Prometheus metrics registry is a singleton and the HTTP server will also be a singleton. This will allow applications to start multiple instances of the reporter (for example in applications containing multiple Kafka clients like Streams, Connect, Strimzi HTTP bridge, or in application loading plugins like the OAuth plugin that instance their own reporter instances), and still collect all metrics via a single HTTP endpoint per JVM. 
+
 The reporter for Kafka metrics will be usable outside of Strimzi by clients. To do so they will need to set the `metric.reporters` configuration to `KafkaPrometheusMetricsReporter` and set the reporter configurations accordingly.
 
 ## Affected/not affected projects
