@@ -6,8 +6,7 @@ From 3.6.0, Apache Kafka supports tiered storage (as early access currently). We
 
 ## Motivation
 
-This proposal provides a readily available approach to manage tiered storage feature through Strimzi, so existing Strimzi customer can use the described approach to add custom plugin and easily turn on tiered storage feature in Kafka.  
-Strimzi also supports downgrades of ZooKeeper-based Kafka clusters.
+This proposal provides a readily available approach to manage tiered storage feature through Strimzi, so existing Strimzi customer can use the described approach to add custom plugin and easily turn on tiered storage feature in Kafka.
 
 ## Proposal
 
