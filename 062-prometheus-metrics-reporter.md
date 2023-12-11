@@ -11,11 +11,11 @@ Metrics are a critical aspect of monitoring Kafka. Today, this is the way metric
 - a home grown library, `org.apache.kafka.common.metrics`. We’ll refer to metrics created via this as _KafkaMetrics_. This is used on the client side and for common metrics on the server side too.
 - Yammer, `com.yammer.metrics.metrics-core`. This library is the predecessor of [Dropwizard](https://metrics.dropwizard.io/). We’ll refer to metrics created via this as _YammerMetrics_. This is only used on the broker side.
 
-For each type of metrics, Kafka exposes a reporter interface to expose metrics to monitoring systems. KafkaMetrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/35/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and YammerMetrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
+For each type of metrics, Kafka exposes a reporter interface to expose metrics to monitoring systems. KafkaMetrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/36/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and YammerMetrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
 
 At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
 
-![Current Situation](images/052-current.png)
+![Current Situation](images/062-current.png)
 
 - `org.apache.kafka.common.metrics.JmxReporter` is the reporter implementation for the Kafka Metrics.
 - `org.apache.kafka.server.metrics.FilteringJmxReporter` is the reporter implementation for the Yammer Metrics. It’s named `FilteringJmxReporter` because it extends the JmxReporter class from the Yammer library and adds an option to select the metrics to report.
@@ -26,16 +26,16 @@ At the moment Strimzi relies on these default JMX reporters and uses [jmx_export
 I propose updating the metrics collection pipeline for the following reasons:
 
 1. The current metrics collection pipeline is pretty convoluted. We have metrics reporters first exposing metrics via JMX before using a Java agent to expose them again via HTTP. Using metrics reporters to directly expose metrics to Prometheus would significantly simplify it by removing JMX from the picture and removing jmx_exporter.
-1. Each component along the pipeline has its own configurations and specificities. For example, since Kafka 3.4.0, it’s possible to disable the JmxReporter for KafkaMetrics by setting [auto.include.jmx.reporter](https://kafka.apache.org/documentation/#brokerconfigs_auto.include.jmx.reporter) to `false`. It is currently not possible to disable `FilteringJmxReporter` (it’s something I plan to address in the near future). Also both jmx_exporter and the built-in reporter allow selecting metrics to collect. 
-1. The jmx_exporter Java agent supports complex metrics mapping rules. These rules allow renaming metrics and it can make it hard to investigate issues as metrics could have different names. This prevents using metrics like an API, whether this is to build grafana dashboards or for the operator to rely on metrics.
-1. Due to the complex rules, it performs badly when there’s a very large number of metrics due to a lot of topic/partitions.
+2. Each component along the pipeline has its own configurations and specificities. For example, since Kafka 3.4.0, it’s possible to disable the JmxReporter for KafkaMetrics by setting [auto.include.jmx.reporter](https://kafka.apache.org/documentation/#brokerconfigs_auto.include.jmx.reporter) to `false`. It is currently not possible to disable `FilteringJmxReporter` (it’s something I plan to address in the near future). Also both jmx_exporter and the built-in reporter allow selecting metrics to collect.
+3. The jmx_exporter Java agent supports complex metrics mapping rules. These rules allow renaming metrics and it can make it hard to investigate issues as metrics could have different names. This prevents using metrics like an API, whether this is to build grafana dashboards or for the operator to rely on metrics.
+4. Due to the complex rules, it performs badly when there’s a very large number of metrics due to a lot of topic/partitions.
 
 
 ## Proposal
 
 The proposal is to build metrics reporters that directly exposes metrics via an HTTP endpoint in the Prometheus format. This will be a new project/repository under the Strimzi organization.
 
-![Proposal](images/052-proposal.png)
+![Proposal](images/062-proposal.png)
 
 Today to enable jmx_exporter, users use:
 ```
@@ -56,32 +56,58 @@ metricsConfig:
 ```
 
 Reporters will expose the following configurations:
-- `prometheus.metrics.reporter.port`: The HTTP port to expose the metrics. Default: `8080`
-- `prometheus.metrics.reporter.allowlist`: A comma separated list of regex patterns to specify the metrics to collect. Default: `.*`. The patterns must match the metric names emitted by the reporter.
+- `prometheus.metrics.reporter.port`: The HTTP port to expose the metrics. Default: `8080`. When set to `-1`, the reporter will not start the HTTP endpoint, this can be useful for applications embedding Kafka clients and that have their own mechanism to export metrics.
+- `prometheus.metrics.reporter.allowlist`: A comma separated list of regex patterns to specify the metrics to collect. Default: `.*`. Only metrics matching at least one of the patterns in the list will be emitted.
 
-Strimzi should set the port to 9404 to make the migration from jmx_exporter easy.
+Strimzi should set the port to 9404 to make the migration from jmx_exporter easy. It also helps to avoid conflicts with the Strimzi Kafka Agent currently using port 8080.
 
-The reporter will also export JVM metrics similar to the ones exported by jmx_exporter. These are provided by the [Hotspot exports](io.prometheus.client.hotspot) from the Prometheus Java client.
+The reporters will also export JVM metrics similar to the ones exported by jmx_exporter. These are provided by the [Hotspot exports](io.prometheus.client.hotspot) from the Prometheus Java client.
 
-This proposal ignores supporting HTTPS as today Strimzi does not allow configuring it with jmx_exporter. Note that jmx_exporter 0.19.0 added support for HTTPS. If needed we can add it now or later to the reporter.
+This proposal ignores supporting HTTPS as today Strimzi does not allow configuring it with jmx_exporter. Note that jmx_exporter 0.19.0 added support for HTTPS. If needed we can add it later to the reporters.
 
 This proposal will produce an implementation for each type of metrics reporter.
-- `KafkaPrometheusMetricsReporter` usable on brokers (for Kafka metrics) and on clients (including Connect and Streams)
+- `KafkaPrometheusMetricsReporter` usable on brokers (for Kafka metrics) and on Kafka clients (including Connect and Streams)
 - `YammerPrometheusMetricsReporter` usable on brokers (for Yammer metrics)
 
-The Prometheus metrics registry is a singleton and the HTTP server will also be a singleton. This will allow applications to start multiple instances of the reporter (for example in applications containing multiple Kafka clients like Streams, Connect, Strimzi HTTP bridge, or in application loading plugins like the OAuth plugin that instance their own reporter instances), and still collect all metrics via a single HTTP endpoint per JVM. 
+The Prometheus metrics registry is a singleton and the HTTP server will also be a singleton. This will allow applications to start multiple instances of the reporter (for example in applications containing multiple Kafka clients like Streams, Connect), and still collect all metrics via a single HTTP endpoint per JVM.
 
-The reporter for Kafka metrics will be usable outside of Strimzi by clients. To do so they will need to set the `metric.reporters` configuration to `KafkaPrometheusMetricsReporter` and set the reporter configurations accordingly.
+The reporter for Kafka metrics will be usable outside of Strimzi by applications using Kafka clients. To do so applications will need to set the `metric.reporters` configuration to `KafkaPrometheusMetricsReporter` and set the reporter configurations accordingly for each Kafka client they instantiate.
+
+### Handling of non-numeric metrics
+
+Out of all the metrics emitted by Kafka brokers and clients, a few of them have non-numeric values. Prometheus only supports numeric values for metrics. When using jmx_exporter it is possible to write rules that move the non-numeric value to a label. For example we do it in [kafka-connect-metrics](https://github.com/strimzi/strimzi-kafka-operator/blob/main/packaging/examples/metrics/kafka-connect-metrics.yaml#L103-L111) for the `status` metrics which has a string value.
+
+I propose to do this automatically in the reporters. For example a metric named: `kafka.connect:type=connector-task-metrics,connector="{connector}",task="{task}"<>status` with the value `running` will be converted into `kafka_connect_connector_task_metrics_status{connector="heartbeats",task="0",status="running"}` and its value will be set to `1.0`.
 
 ## Affected/not affected projects
 
-This affects `strimzi-kafka-operator `. Reporters are not usable with ZooKeeper and currently don't work well with client side application like Kafka Connect, MirrorMaker and the HTTP bridge. So Strimzi should keep support for jmx_exporter. We may reconsider dropping support once ZooKeeper is not supported anymore and if improvements in Apache Kafka make reporters usable with client side applications.
+The reporter will be a new project, `strimzi-metrics-reporter`. It will be used by Strimzi components but should also be usable without Strimzi, for example in client side applications.
 
-The reporter will be a new project and should be usable without Strimzi. As it's new code, it should be first release as a preview feature (disabled by default). Once KRaft becomes the preferred deployment option, we should make the reporter the recommended option to expose metrics for brokers and controllers.
+### strimzi-kafka-operator
 
-In `strimzi-kafka-operator`, we will need new examples demonstrating how to use the reporter, new grafana dashboards with metric names from the reporter.
+Reporters are not usable with ZooKeeper so Strimzi should keep support for jmx_exporter while it also supports ZooKeeper. As it's new code, reporters should first be released as a preview feature and disabled by default. Once KRaft becomes the preferred deployment option and the, we should make the reporter the recommended and default option to collect metrics over jmx_exporter.
 
-The OAuth plugin can be updated to rely on this reporter. Note that this will still be a workaround (like the current mechanism it uses to exports its metrics today) and that a much better approach for plugins to expose metrics will be provided by [KIP-877](https://cwiki.apache.org/confluence/display/KAFKA/KIP-877%3A+Mechanism+for+plugins+and+connectors+to+register+metrics).
+We will need new examples demonstrating how to use the reporters, new grafana dashboards with metric names from the reporters.
+
+### strimzi-kafka-oauth
+
+The OAuth plugin exposes the `strimzi.oauth.metric.reporters` configuration to let users specify a metrics reporter. Today the OAuth plugin automatically uses `org.apache.kafka.common.metrics.JmxReporter` if that configuration is not set. To switch to the new reporter, users should set `strimzi.oauth.metric.reporters` to `KafkaPrometheusMetricsReporter`. Once the reporter becomes the preferred option, the OAuth plugin should be updated to automatically use `KafkaPrometheusMetricsReporter` if no metrics reporters are set by users.
+
+Note that directly instantiating metric reporters in the plugin is a workaround as Kafka currently does not provide a way for plugins to register metrics. [KIP-877](https://cwiki.apache.org/confluence/display/KAFKA/KIP-877%3A+Mechanism+for+plugins+and+connectors+to+register+metrics), currently in discussion, aims at solving this issue. Once this KIP is accepted, we should update the plugin to use this mechanism.
+
+### strimzi-kafka-bridge
+
+To function, the bridge instantiates Kafka clients. Today it has its own custom mechanism to retrieve metrics from the Kafka clients via JMX and expose them to Prometheus.
+
+We can update the bridge to use metric reporters to retrieve metrics from Kafka clients and still keep it's own mechanism to expose them to Prometheus (as it's also exposing its own metrics). To switch behavior, I propose introducing a new configuration to the bridge `metricsMode`/`KAFKA_BRIDGE_METRICS_MODE` which would initially default to `jmx` to keep the current behavior. If set to `reporter`, the bridge would set the `metric.reporters` configuration to all Kafka clients it starts to `KafkaPrometheusMetricsReporter` and retrieve their metrics via the Prometheus metrics registry. It should also set `prometheus.metrics.reporter.port` to `-1` so `KafkaPrometheusMetricsReporter` instances don't start their own HTTP endpoint.
+
+### kafka-quotas-plugin
+
+This plugin creates metrics by using the Yammer metrics library. `com.yammer.metrics.Metrics` registers metrics in the default Yammer registry and automatically exports metrics via JMX.
+
+Like strimzi-kafka-oauth, this plugin should be updated once [KIP-877](https://cwiki.apache.org/confluence/display/KAFKA/KIP-877%3A+Mechanism+for+plugins+and+connectors+to+register+metrics) is available in Kafka. 
+
+In the meantime, `YammerPrometheusMetricsReporter` will retrieve metrics from both the Kafka Yammer registry and the default Yammer registry to get all Yammer metrics.
 
 ## Compatibility
 
@@ -89,7 +115,7 @@ Differences with jmx_exporter metrics:
 
 - The reporter does not compute 1/5/15 minute rate, mean, max, min, stddev metrics. It's preferable to compute them in Prometheus instead of on the client side.
 - The reporter is missing the `kafka_server_app_info_starttimems` metric with the client/broker id label. (Due to [KAFKA-15186](https://issues.apache.org/jira/browse/KAFKA-15186))
-- Kafka expose some non-numeric metrics. Prometheus only supports numeric values for metrics. Using jmx_exporter it's possible with rules to move the values into labels and still retrieve them in prometheus. With this proposal non-numeric metrics will be ignored and not exposed. I plan to raise a KIP in Kafka to provide alternative to non-numeric metrics. For example there is already [KIP-972](https://cwiki.apache.org/confluence/display/KAFKA/KIP-972%3A+Add+the+metric+of+the+current+running+version+of+kafka) in progress to address some of them.
+- Kafka exposes some non-numeric metrics. Prometheus only supports numeric values for metrics. Using jmx_exporter it's possible with rules to move the values into labels and still retrieve them in prometheus. With this proposal non-numeric metrics will be ignored and not exposed. I plan to raise a KIP in Kafka to provide alternative to non-numeric metrics. For example there is already [KIP-972](https://cwiki.apache.org/confluence/display/KAFKA/KIP-972%3A+Add+the+metric+of+the+current+running+version+of+kafka) in progress to address some of them.
 
 Assuming jmx_exporter does not have any rules, this is the other main metric change:
 
@@ -122,7 +148,7 @@ If we also remove the values, doing a diff highlights the following differences:
     ```
     This is expected as JMX is not used with the reporter.
 
-- Via JMX a number of `java_lang` metrics are emitted. These are not retrieved by Prometheus Hotspot exports.
+- With JMX a number of `java_lang` metrics are emitted. These are not retrieved by Prometheus Hotspot exports.
 
 - The `PerSec` suffix is removed by jmx_exporter rules so a few metrics have slightly different names, for example:
     ```
