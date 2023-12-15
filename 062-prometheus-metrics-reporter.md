@@ -13,7 +13,7 @@ Metrics are a critical aspect of monitoring Kafka. Today, this is the way metric
 
 For each type of metrics, Kafka exposes a reporter interface to expose metrics to monitoring systems. KafkaMetrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/36/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and YammerMetrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
 
-At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
+At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the Prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
 
 ![Current Situation](images/062-current.png)
 
@@ -115,7 +115,7 @@ Differences with jmx_exporter metrics:
 
 - The reporter does not compute 1/5/15 minute rate, mean, max, min, stddev metrics. It's preferable to compute them in Prometheus instead of on the client side.
 - The reporter is missing the `kafka_server_app_info_starttimems` metric with the client/broker id label. (Due to [KAFKA-15186](https://issues.apache.org/jira/browse/KAFKA-15186))
-- Kafka exposes some non-numeric metrics. Prometheus only supports numeric values for metrics. Using jmx_exporter it's possible with rules to move the values into labels and still retrieve them in prometheus. With this proposal non-numeric metrics will be ignored and not exposed. I plan to raise a KIP in Kafka to provide alternative to non-numeric metrics. For example there is already [KIP-972](https://cwiki.apache.org/confluence/display/KAFKA/KIP-972%3A+Add+the+metric+of+the+current+running+version+of+kafka) in progress to address some of them.
+- Kafka exposes some non-numeric metrics. Prometheus only supports numeric values for metrics. Using jmx_exporter it's possible with rules to move the values into labels and still retrieve them in Prometheus. With this proposal non-numeric metrics will be ignored and not exposed. I plan to raise a KIP in Kafka to provide alternative to non-numeric metrics. For example there is already [KIP-972](https://cwiki.apache.org/confluence/display/KAFKA/KIP-972%3A+Add+the+metric+of+the+current+running+version+of+kafka) in progress to address some of them.
 
 Assuming jmx_exporter does not have any rules, this is the other main metric change:
 
