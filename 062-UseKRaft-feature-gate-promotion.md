@@ -37,10 +37,10 @@ This proposal proposes the following timeline for the graduation of the `UseKRaf
 
 It is worth noting that:
 * In addition to the `UseKRaft` feature gate, the KRaft clusters are enabled / disabled using the `strimzi.io/kraft` annotation.
-  As a result, moving the `UseKRaft`` feature gate to _beta_ or _GA_ does not mean that all new Kafka clusters have to use KRaft or that this has any impact on existing ZooKeeper based clusters.
+  As a result, moving the `UseKRaft` feature gate to _beta_ or _GA_ does not mean that all new Kafka clusters have to use KRaft or that this has any impact on existing ZooKeeper based clusters.
   KRaft will be applied only to the Kafka clusters with the right annotation.
 * Moving the `UseKRaft` feature to beta or GA does not mean we will drop support for ZooKeeper-based clusters.
-  While moving the `UseKRaft` feature gate to _GA_ defines the earliest moment when support for ZooKeeper based clusters can be dropped, it is currently not expected to happen in Strimzi 0.42 and this proposal does not establish any such plan.
+  While moving the `UseKRaft` feature gate to _GA_ defines the earliest moment when support for ZooKeeper based clusters can be dropped, it is currently not expected to happen right after Strimzi 0.42 and this proposal does not establish any such plan.
 
 Moving the `UseKRaft` feature gate to _beta_ or _GA_ serves mainly the following purpose:
 * Indicate the progress in Kraft implementation and improved production-readiness.
