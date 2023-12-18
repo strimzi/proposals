@@ -69,7 +69,7 @@ For KRaft based clusters, a warning will be raised when `.spec.zookeeper` sectio
 ### Safety check for existing clusters
 
 For existing clusters, a safety check will be implemented to prevent users from switching existing ZooKeeper-based clusters to Kraft-based cluster (or vice-versa) by mistake.
-This check will used the `.status.metadataState` field in the `Kafka` custom resource to prevent any undesired switching between ZooKeeper-based and Kraft-based clusters (that has to be done via the migration process).
+This check will used the `.status.kafkaMetadataState` field in the `Kafka` custom resource to prevent any undesired switching between ZooKeeper-based and Kraft-based clusters (that has to be done via the migration process).
 This field is already defined in [Strimzi Proposal #59 - ZooKeeper to KRaft migration](https://github.com/strimzi/proposals/blob/main/059-zk-kraft-migration.md).
 The check will compare the desired cluster type with existing type and if they do not match, it will throw an exception and end the reconciliation.
 It will be implemented as part of the migration work if it is shipped in Strimzi 0.40.0.
