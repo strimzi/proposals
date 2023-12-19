@@ -8,21 +8,20 @@ Kafka introduced tiered storage feature since 3.6. The feature is in early stage
 
 Supporting tiered storage via Strimzi allow Strimzi users to enable tiered storage natively with Strimzi config. By allowing to config custom configuration for RemoteStorageManager and RemoteLogMetadataManager, users are able to adopt tiered storage feature on Strimzi easily.
 
-It should also be noted that, it’s on the end-user to ensure that their tiered storage setup works with Strimzi; the operator itself is strictly responsible for pushing down the necessary config to the broker pods.
+This proposal focuses on tiered storage support with a custom plugin brought in by the user. Other proposals in the future might add some built-in support for selected storage implementations such as S3. It should also be noted that, it’s on the end-user to ensure that their tiered storage setup works with Strimzi; the operator itself is strictly responsible for pushing down the necessary config to the broker pods.
 
 ## Proposal
 
 ### RemoteStorage
 
-Add a RemoteStorage class under storage config (under https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaClusterSpec-schema-reference), which would support configuration for all tiered storage related configuration.
+Add a `tieredStorage` config under KafkaClusterSpec, which would support configuration for all tiered storage related configuration.
 
-The RemoteStorage class contains configuration for various aspects, including system config, RSM specific config, RLMM specific config.
+The CustomTieredStorage class contains configuration for various aspects, including RLM config, RSM specific config, RLMM specific config. 
 
 ```
 kafka:
-  storage:
-    remote:
-      enabled: true
+  tieredStorage:
+      type: custom
       rlm:
         # See below detail
       rsm:
@@ -86,8 +85,6 @@ The TopicBasedRemoteLogMetadataManager class has a internal Kafka client, talkin
       rlmm:
         type:topicBased
         impl.prefix: rlmm.config.
-        class.name:
-        class.path:
         reader.threads:
         reader.max.pending.tasks:
         metadata.common.client.config:
@@ -98,6 +95,57 @@ The TopicBasedRemoteLogMetadataManager class has a internal Kafka client, talkin
           ...
 ```
 
+## Example configuration
+
+The below config define a sample configuration for tiered storage setup, using a `custom` RSM type and `topicBased` type RLMM config.
+```
+kafka:
+  tieredStorage:
+      type: custom
+      rlm:
+        threadPoolSize: 10
+        reader.threads: 10
+        reader.maxPendingTasks: 100
+      rsm:
+        type: custom
+        class.name: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
+        class.path:  /opt/kafka/plugins/tiered-storage-s3/*
+        impl.prefix: rsm.config.
+        config:
+          s3.bucket.name: my-bucket
+          s3.region: us-west-2
+          s3.fetch.pool.size: 10
+          s3.upload.pool.size: 10
+      rlmm:
+        type:topicBased
+        impl.prefix: rlmm.config.
+        reader.threads: 10
+        reader.max.pending.tasks: 100
+        metadata.topic.num.partitions: 50
+        metadata.common.client.config:
+          bootstrap.servers: broker-bootstrap.example.com:9091
+          security.protocol: SSL
+          ssl.endpoint.identification.algorithm: ""
+```
+
+The configuration above will get translated to the below Kafka broker config:
+```
+remote.log.storage.system.enable: true
+remote.log.reader.threads: 10
+remote.log.reader.max.pending.tasks: 100
+remote.log.manager.thread.pool.size: 10
+remote.log.storage.manager.class.name: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
+remote.log.storage.manager.class.path: /opt/kafka/plugins/tiered-storage-s3/*
+remote.log.storage.manager.impl.prefix: rsm.config.
+remote.log.metadata.manager.impl.prefix: rlmm.config.
+remote.log.metadata.manager.class.name: org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManager
+remote.log.metadata.topic.num.partitions: 50
+rlmm.config.remote.log.reader.threads: 10
+rlmm.config.remote.log.reader.max.pending.tasks: 100
+rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.example.com:9091
+rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
+rlmm.config.remote.log.metadata.common.client.ssl.endpoint.identification.algorithm: ""
+```
 ## Testing strategy
 
 Unit tests will be added to validate all the RLM,RSM, RLMM changes are propagated through.
