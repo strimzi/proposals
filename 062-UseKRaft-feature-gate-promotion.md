@@ -2,8 +2,9 @@
 
 The `UseKRaft` feature gate allows users and developers of the Strimzi operator to deploy and manage a KRaft-based Kafka cluster.
 It was originally introduced in May 2022 in the [Strimzi Proposal #36 - KRaft support: ZooKeeper-less Kafka](https://github.com/strimzi/proposals/blob/main/036-kraft-mode.md).
-When it was introduced, there were still a significant limitations to the KRaft mode both in Apache Kafka as well as in Strimzi.
-Therefore it did not introduced any timeline for the graduation of the feature gate and till today it is in the _alpha_ stage and disabled by default.
+When introduced, KRaft mode in both Apache Kafka and Strimzi had significant limitations.
+Consequently, no specific timeline was established for the graduation of the feature gate.
+Currently, the feature gate remains in the _alpha_ stage and is disabled by default.
 While there are still some remaining limitations in Apache Kafka and Strimzi, they are less significant than they were when the original proposal was written.
 This proposal aims to create a plan for the graduation of the `UseKraft` feature gate and the changes related to it.
 
@@ -27,24 +28,24 @@ The current support for KRaft in Strimzi (and Apache Kafka) has the following ma
 * JBOD support
   * Tracked in [strimzi/strimzi-kafka-operator#9437](https://github.com/strimzi/strimzi-kafka-operator/issues/9437)
   * Expected to be implemented in Apache Kafka 3.7.0.
-    The Strimzi implementation fill follow the release of Kafka 3.7.0 in Strimzi 0.40 or 0.41.
+    The Strimzi implementation will follow the release of Kafka 3.7.0 in Strimzi 0.40 or 0.41.
 
 ## Proposed timeline
 
-This proposal proposes the following timeline for the graduation of the `UseKRaft` feature gate:
+This proposal outlines the following timeline for the graduation of the `UseKRaft` feature gate:
 * Move to _beta_ phase and be enabled by default in Strimzi 0.40.0
 * Move to _GA_ phase and be permanently enabled in Strimzi 0.42.0
 
 It is worth noting that:
 * In addition to the `UseKRaft` feature gate, the KRaft clusters are enabled / disabled using the `strimzi.io/kraft` annotation.
-  As a result, moving the `UseKRaft` feature gate to _beta_ or _GA_ does not mean that all new Kafka clusters have to use KRaft or that this has any impact on existing ZooKeeper based clusters.
+  As a result, moving the `UseKRaft` feature gate to _beta_ or _GA_ does not mean that all new Kafka clusters have to use KRaft or that this has any impact on existing ZooKeeper-based clusters.
   KRaft will be applied only to the Kafka clusters with the right annotation.
 * Moving the `UseKRaft` feature to beta or GA does not mean we will drop support for ZooKeeper-based clusters.
   While moving the `UseKRaft` feature gate to _GA_ defines the earliest moment when support for ZooKeeper based clusters can be dropped, it is currently not expected to happen right after Strimzi 0.42 and this proposal does not establish any such plan.
 
-Moving the `UseKRaft` feature gate to _beta_ or _GA_ serves mainly the following purpose:
-* Indicate the progress in Kraft implementation and improved production-readiness.
-* Make it easier to run KRaft clusters without the need to enable any feature gate.
+Moving the `UseKRaft` feature gate to _beta_ or _GA_ serves mainly the following objectives:
+* Signify the progress of the KRaft implementation and improvements in production-readiness.
+* Simplify running KRaft clusters by eliminating the need to enable any feature gate.
 
 ## Proposed changes
 
@@ -60,16 +61,18 @@ As part of promoting the `UseKRaft` feature gate to _beta_ stage, we will make t
 In addition, the KRaft clusters do not need the ZooKeeper configuration.
 So the `.spec.zookeeper` section will be made optional as well.
 
-For ZooKeeper clusters, the validation of these fields will be done inside the Strimzi operator.
+For ZooKeeper-based Kafka clusters, the validation of these fields will be done inside the Strimzi operator.
 Additionally, CEL validation rules will be considered as they might allow us to do additional validation on the Kubernetes level.
+The validation will check if the cluster is ZooKeeper-based and in that case require the fields mentioned above.
 
 For Kafka clusters using the node pools, a warning will be raised by the operator when the ignored `.spec.kafka.replicas` and `.spec.kafka.storage` fields are used.
-For KRaft based clusters, a warning will be raised when `.spec.zookeeper` section is used.
+For KRaft-based clusters, a warning will be raised when `.spec.zookeeper` section is used.
 
 ### Safety check for existing clusters
 
 For existing clusters, a safety check will be implemented to prevent users from switching existing ZooKeeper-based clusters to Kraft-based cluster (or vice-versa) by mistake.
-This check will used the `.status.kafkaMetadataState` field in the `Kafka` custom resource to prevent any undesired switching between ZooKeeper-based and Kraft-based clusters (that has to be done via the migration process).
+This check will use the `.status.kafkaMetadataState` field in the `Kafka` custom resource to prevent any unintentional switching between ZooKeeper-based and Kraft-based clusters. 
+Switching cluster management modes must be performed through a migration process.
 This field is already defined in [Strimzi Proposal #59 - ZooKeeper to KRaft migration](https://github.com/strimzi/proposals/blob/main/059-zk-kraft-migration.md).
 The check will compare the desired cluster type with existing type and if they do not match, it will throw an exception and end the reconciliation.
 It will be implemented as part of the migration work if it is shipped in Strimzi 0.40.0.
