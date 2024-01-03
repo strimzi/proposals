@@ -62,7 +62,7 @@ In addition, the KRaft clusters do not need the ZooKeeper configuration.
 So the `.spec.zookeeper` section will be made optional as well.
 
 For ZooKeeper-based Kafka clusters, the validation of these fields will be done inside the Strimzi operator.
-Additionally, CEL validation rules will be considered as they might allow us to do additional validation on the Kubernetes level.
+Additionally, [CEL validation rules](https://kubernetes.io/docs/reference/using-api/cel/) will be considered as they might allow us to do additional validation on the Kubernetes level.
 The validation will check if the cluster is ZooKeeper-based and in that case require the fields mentioned above.
 
 For Kafka clusters using the node pools, a warning will be raised by the operator when the ignored `.spec.kafka.replicas` and `.spec.kafka.storage` fields are used.
