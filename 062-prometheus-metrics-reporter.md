@@ -85,13 +85,17 @@ The reporter will be a new project, `strimzi-metrics-reporter`. It will be used 
 
 ### strimzi-kafka-operator
 
-Reporters are not usable with ZooKeeper so Strimzi should keep support for jmx_exporter while it also supports ZooKeeper. As it's new code, reporters should first be released as a preview feature and disabled by default. Once KRaft becomes the preferred deployment option and the, we should make the reporter the recommended and default option to collect metrics over jmx_exporter.
+Reporters are not usable with ZooKeeper so Strimzi should keep support for jmx_exporter while it also supports ZooKeeper. The transition would happen in 3 stages:
 
-We will need new examples demonstrating how to use the reporters, new grafana dashboards with metric names from the reporters.
+1. The new reporters are added as an additional options to the Strimzi custom resource, but we keep supporting the JMX Exporter and use it in our examples as the main thing (with possibly some new examples of CRs and dashboards prepared as well, but not as the main thing)
+
+2. We switch to the new reporters as the main example. We keep supporting JMX Exporter but deprecate it.
+
+3. Later, once ZooKeeper is not supported anymore, we might decide to drop the JMX Exporter support completely.
 
 ### strimzi-kafka-oauth
 
-The OAuth plugin exposes the `strimzi.oauth.metric.reporters` configuration to let users specify a metrics reporter. Today the OAuth plugin automatically uses `org.apache.kafka.common.metrics.JmxReporter` if that configuration is not set. To switch to the new reporter, users should set `strimzi.oauth.metric.reporters` to `KafkaPrometheusMetricsReporter`. Once the reporter becomes the preferred option, the OAuth plugin should be updated to automatically use `KafkaPrometheusMetricsReporter` if no metrics reporters are set by users.
+The OAuth plugin exposes the `strimzi.oauth.metric.reporters` configuration to let users specify a metrics reporter. Today the OAuth plugin automatically uses `org.apache.kafka.common.metrics.JmxReporter` if that configuration is not set. To switch to the new reporter, users should set `strimzi.oauth.metric.reporters` to `KafkaPrometheusMetricsReporter`.
 
 Note that directly instantiating metric reporters in the plugin is a workaround as Kafka currently does not provide a way for plugins to register metrics. [KIP-877](https://cwiki.apache.org/confluence/display/KAFKA/KIP-877%3A+Mechanism+for+plugins+and+connectors+to+register+metrics), currently in discussion, aims at solving this issue. Once this KIP is accepted, we should update the plugin to use this mechanism.
 
