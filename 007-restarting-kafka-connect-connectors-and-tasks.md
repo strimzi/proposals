@@ -159,7 +159,7 @@ In the `KafkaMirrorMaker2` resource, the field is named `autoRestartConnectorsAn
 
 ```
 apiVersion: strimzi.io/v1alpha1
-kind: KafkaConnector
+kind: KafkaMirrorMaker2
 ...
 status:
   autoRestartConnectorsAndTasks:
