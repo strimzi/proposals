@@ -21,12 +21,10 @@ The `tieredStorage` config contains configuration for some selected configuratio
 ```
 kafka:
   tieredStorage:
-      type: custom
-      rsm:
-        type: custom
-        class.name:
-        class.path:  
-        impl.prefix: rsm.config.
+    type: custom
+    rsm.className:
+    rsm.classPath:
+    rsm.impl.prefix: rsm.config.
 ```
 
 ### RemoteStorageManager (RSM)
@@ -39,18 +37,23 @@ Because the `RemoteStorageManager` dependency is provided by Kafka plugin, the i
 
 For simplicity, the proposal doesn't add customization for RemoteLogMetadataManager. If tiered storage is enabled, the default implementation using `TopicBasedRemoteLogMetadataManager` will be used, and corresponding configuration will be appended. 
 
+Since the default RLMM will create an internal Kafka client to talk to the server, there might be some additional configuration needed, like the SSL related setting. Those config can be put in `.spec.kafka.config` directly using the `rlmm.config.` prefix. Example can be found below.
+
 ## Example configuration
 
 The below config define a sample configuration for tiered storage setup, using a `custom` RSM type.
 ```
 kafka:
   tieredStorage:
-      type: custom
-      rsm:
-        type: custom
-        class.name: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
-        class.path:  /opt/kafka/plugins/tiered-storage-s3/*
-        impl.prefix: rsm.config.
+    type: custom
+    rsm.className: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
+    rsm.classPath:  /opt/kafka/plugins/tiered-storage-s3/*
+    rsm.impl.prefix: rsm.config.
+
+  config:
+    ...
+    rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
+    rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 ```
 
 The configuration above will get translated to the below Kafka broker config:
@@ -62,6 +65,9 @@ remote.log.storage.manager.impl.prefix: rsm.config.
 # The RLMM config will be added by default
 remote.log.metadata.manager.impl.prefix: rlmm.config.
 remote.log.metadata.manager.class.name: org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManager
+# The RLMM config below are passed down from kafka config spec.
+rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
+rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 ```
 ## Testing strategy
 
