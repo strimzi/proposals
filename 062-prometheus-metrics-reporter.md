@@ -51,15 +51,17 @@ To enable metric reporters, they will instead use this for example:
 ```
 metricsConfig:
   type: strimziMetricsReporter
-  config:
-    allowList: ".*"
+  valueFrom:
+    configMapKeyRef:
+      name: kafka-metrics
+      key: metrics-reporter-config.yml
 ```
 
 Reporters will expose the following configurations:
-- `prometheus.metrics.reporter.port`: The HTTP port to expose the metrics. Default: `8080`. When set to `-1`, the reporter will not start the HTTP endpoint, this can be useful for applications embedding Kafka clients and that have their own mechanism to export metrics.
+- `prometheus.metrics.reporter.listener`: The listener to expose the metrics in the format `http://<HOST>:<PORT>`, or set to `disabled` to not expose an endpoint. If the `<HOST>` part if empty the listener binds to the default interface, if it is set to `0.0.0.0`, the listener binds to all interfaces. If the `<PORT>` part is set to `0`, a random port is picked. Default: `http://:8080`.
 - `prometheus.metrics.reporter.allowlist`: A comma separated list of regex patterns to specify the metrics to collect. Default: `.*`. Only metrics matching at least one of the patterns in the list will be emitted.
 
-Strimzi should set the port to 9404 to make the migration from jmx_exporter easy. It also helps to avoid conflicts with the Strimzi Kafka Agent currently using port 8080.
+Strimzi should set the listener to `http://:9404` to make the migration from jmx_exporter easy. It also helps to avoid conflicts with the Strimzi Kafka Agent currently using port 8080.
 
 The reporters will also export JVM metrics similar to the ones exported by jmx_exporter. These are provided by the [Hotspot exports](io.prometheus.client.hotspot) from the Prometheus Java client.
 
@@ -103,7 +105,7 @@ Note that directly instantiating metric reporters in the plugin is a workaround 
 
 To function, the bridge instantiates Kafka clients. Today it has its own custom mechanism to retrieve metrics from the Kafka clients via JMX and expose them to Prometheus.
 
-We can update the bridge to use metric reporters to retrieve metrics from Kafka clients and still keep it's own mechanism to expose them to Prometheus (as it's also exposing its own metrics). To switch behavior, I propose introducing a new configuration to the bridge `metricsMode`/`KAFKA_BRIDGE_METRICS_MODE` which would initially default to `jmx` to keep the current behavior. If set to `reporter`, the bridge would set the `metric.reporters` configuration on all Kafka clients it starts to `KafkaPrometheusMetricsReporter` and retrieve their metrics via the Prometheus metrics registry. It should also set `prometheus.metrics.reporter.port` to `-1` so `KafkaPrometheusMetricsReporter` instances don't start their own HTTP endpoint.
+We can update the bridge to use metric reporters to retrieve metrics from Kafka clients and still keep it's own mechanism to expose them to Prometheus (as it's also exposing its own metrics). To switch behavior, I propose introducing a new configuration to the bridge `metricsMode`/`KAFKA_BRIDGE_METRICS_MODE` which would initially default to `jmx` to keep the current behavior. If set to `reporter`, the bridge would set the `metric.reporters` configuration on all Kafka clients it starts to `KafkaPrometheusMetricsReporter` and retrieve their metrics via the Prometheus metrics registry. It should also set `prometheus.metrics.reporter.listener` to `disabled` so `KafkaPrometheusMetricsReporter` instances don't start their own HTTP endpoint.
 
 ### kafka-quotas-plugin
 
