@@ -69,6 +69,18 @@ remote.log.metadata.manager.class.name: org.apache.kafka.server.log.remote.metad
 rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
 rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 ```
+## Docker image
+
+This proposal doesn't include built in plugin support in any Strimzi built Kafka image. Users need to specify the path via the config, and customize the docker image to include the library.
+
+An example to build such custom image is via a custom Dockerfile:
+
+```
+FROM quay.io/strimzi/kafka:latest-kafka-3.6.0
+ARG REMOTE_PLUGIN_PATH
+COPY ${REMOTE_PLUGIN_PATH} /opt/kafka/plugins/tiered-storage-s3/
+```
+
 ## Testing strategy
 
 Unit tests will be added to validate all the RLM,RSM, RLMM changes are propagated through.
