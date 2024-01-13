@@ -39,7 +39,7 @@ For simplicity, the proposal doesn't add customization for RemoteLogMetadataMana
 
 Since the default RLMM will create an internal Kafka client to talk to the server, there might be some additional configuration needed, like the SSL related setting. Those config can be put in `.spec.kafka.config` directly using the `rlmm.config.` prefix. Example can be found below.
 
-## Example configuration
+### Example configuration
 
 The below config define a sample configuration for tiered storage setup, using a `custom` RSM type.
 ```
@@ -69,7 +69,20 @@ remote.log.metadata.manager.class.name: org.apache.kafka.server.log.remote.metad
 rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
 rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 ```
-## Docker image
+
+### Validation
+
+There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Tiered+Storage+Early+Access+Release+Notes) for tiered storage enabled cluster.
+
+With Strimzi operator, we can validate the configuration before apply the change. Here are some validations we can apply:
+
+* Tiered storage should not be disabled at cluster level when there is any existing topic enabled tiered storage.
+
+* Tiered storage should not be enabled on a cluster with JBOD.
+
+* Tiered storage should not be applied for compact topic.
+
+### Docker image
 
 This proposal doesn't include built in plugin support in any Strimzi built Kafka image. Users need to specify the path via the config, and customize the docker image to include the library.
 
