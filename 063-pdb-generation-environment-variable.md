@@ -26,7 +26,7 @@ The Strimzi operator automatically creates PDBs to ensure high availability and 
 ## Proposal Details
 
 1. **Environment Variable Introduction:** Implement `STRIMZI_POD_DISRUPTION_BUDGET_GENERATION` with a default value of `true`.
-2. **Disabling PDB Generation:** When set to `false`, the operator will skip PDB creation for all Strimzi components.
+2. **Disabling PDB Generation:** When set to `false`, the operator will skip PDB operations for all Strimzi components. It will not create, modify or delete any PDB.
 3. **Documentation and Guidance:** Update Strimzi documentation to include instructions and implications of disabling PDB generation.
 4. **Scope:** This change affects only the Pod Disruption Budget aspect and does not alter any other functionalities of the Strimzi operator.
 
