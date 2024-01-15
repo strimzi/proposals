@@ -10,18 +10,17 @@ Introduce a new environment variable in Strimzi, [similar to the one for Network
 
 ## Rationale
 
-- **Flexibility:** Some users operate in environments with strict policies that prevent the creation of PDBs. Providing an option to disable PDB generation caters to these scenarios.
-- **Consistency:** This approach is consistent with existing features, such as the Network Policy Generation Environment Variable.
-- **Simplicity:** A global setting avoids the complexity of configuring this setting for each custom resource.
+- **Operational Constraints:** In environments where the creation of Pod Disruption Budgets (PDBs) is not permitted, users face significant challenges in deploying Strimzi effectively. This limitation can hinder the adoption and utility of Strimzi in such environments.
+
+- **Configuration Flexibility:** Users require the flexibility to configure their Strimzi deployments in accordance with their specific operational policies and constraints. A rigid approach that mandates the creation of PDBs may not be compatible with all operational environments.
+
+- **Consistency with Existing Features:** Implementing this feature as an environment variable aligns with the existing approach used for Network Policy Generation in Strimzi. This consistency simplifies the understanding and adoption of the feature by existing users.
+
+- **Simplicity and Ease of Use:** Offering a global setting to disable PDB generation avoids the complexity and repetitive configuration that would be required if this setting was to be managed at the individual custom resource level.
 
 ## Current Implementation
 
 The Strimzi operator automatically creates PDBs to ensure high availability and minimize disruptions. However, this feature does not accommodate environments where PDB creation is restricted.
-
-## Motivation
-
-- **Operational Constraints:** In environments where PDB creation is not permitted, users are unable to deploy Strimzi effectively.
-- **Configuration Flexibility:** Users need the ability to configure their Strimzi deployments to align with their specific operational policies and constraints.
 
 ## Proposal Details
 
