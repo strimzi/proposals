@@ -18,7 +18,7 @@ At the moment Strimzi relies on these default JMX reporters and uses [jmx_export
 ![Current Situation](./images/063-current.png)
 
 - `org.apache.kafka.common.metrics.JmxReporter` is the reporter implementation for the Kafka metrics.
-- `org.apache.kafka.server.metrics.FilteringJmxReporter` is the reporter implementation for the Yammer Metrics. It’s named `FilteringJmxReporter` because it extends the JmxReporter class from the Yammer library and adds an option to select the metrics to report.
+- `org.apache.kafka.server.metrics.FilteringJmxReporter` is the reporter implementation for the Yammer metrics. It’s named `FilteringJmxReporter` because it extends the `JmxReporter` class from the Yammer library and adds an option to select the metrics to report.
 
 
 ## Motivation
