@@ -36,7 +36,7 @@ I propose updating the metrics collection pipeline for the following reasons:
 The proposal is to build metrics reporters that directly exposes metrics via an HTTP endpoint in the Prometheus format. This will be a new project/repository under the Strimzi organization.
 
 Reporters will expose the following configurations:
-- `prometheus.metrics.reporter.listener`: The listener to expose the metrics in the format `http://<HOST>:<PORT>`, or set to `disabled` to not expose an endpoint. If the `<HOST>` part if empty the listener binds to the default interface, if it is set to `0.0.0.0`, the listener binds to all interfaces. If the `<PORT>` part is set to `0`, a random port is picked. Default: `http://:8080`.
+- `prometheus.metrics.reporter.listener`: The listener to expose the metrics in the format `http://<HOST>:<PORT>`, or set to `disabled` to not expose an endpoint. If the `<HOST>` part is empty the listener binds to the default interface, if it is set to `0.0.0.0`, the listener binds to all interfaces. If the `<PORT>` part is set to `0`, a random port is picked. Default: `http://:8080`.
 - `prometheus.metrics.reporter.allowlist`: A comma separated list of regex patterns to specify the metrics to collect. Default: `.*`. Only metrics matching at least one of the patterns in the list will be emitted.
 
 The reporters will also export JVM metrics similar to the ones exported by jmx_exporter. These are provided by the [Hotspot exports](io.prometheus.client.hotspot) from the Prometheus Java client.
