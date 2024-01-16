@@ -15,7 +15,7 @@ For each type of metrics, Kafka exposes a reporter interface to expose metrics t
 
 At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the Prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
 
-![Current Situation](images/062-current.png)
+![Current Situation](./images/063-current.png)
 
 - `org.apache.kafka.common.metrics.JmxReporter` is the reporter implementation for the Kafka Metrics.
 - `org.apache.kafka.server.metrics.FilteringJmxReporter` is the reporter implementation for the Yammer Metrics. It’s named `FilteringJmxReporter` because it extends the JmxReporter class from the Yammer library and adds an option to select the metrics to report.
@@ -36,7 +36,7 @@ I propose updating the metrics collection pipeline for the following reasons:
 The proposal is to build metrics reporters that directly exposes metrics via an HTTP endpoint in the Prometheus format. This will be a new project/repository under the Strimzi organization.
 
 Reporters will expose the following configurations:
-- `prometheus.metrics.reporter.listener`: The listener to expose the metrics in the format `http://<HOST>:<PORT>`, or set to `disabled` to not expose an endpoint. If the `<HOST>` part is empty the listener binds to the default interface, if it is set to `0.0.0.0`, the listener binds to all interfaces. If the `<PORT>` part is set to `0`, a random port is picked. Default: `http://:8080`.
+- `prometheus.metrics.reporter.listener`: The listener to expose the metrics in the format `http://<HOST>:<PORT>`, or set to `disabled` to not expose an endpoint. If the `<HOST>` part if empty the listener binds to the default interface, if it is set to `0.0.0.0`, the listener binds to all interfaces. If the `<PORT>` part is set to `0`, a random port is picked. Default: `http://:8080`.
 - `prometheus.metrics.reporter.allowlist`: A comma separated list of regex patterns to specify the metrics to collect. Default: `.*`. Only metrics matching at least one of the patterns in the list will be emitted.
 
 The reporters will also export JVM metrics similar to the ones exported by jmx_exporter. These are provided by the [Hotspot exports](io.prometheus.client.hotspot) from the Prometheus Java client.
@@ -51,7 +51,7 @@ The Prometheus metrics registry is a singleton and the HTTP server will also be 
 
 The reporter for Kafka metrics will be usable outside of Strimzi by applications using Kafka clients. To do so applications will need to set the `metric.reporters` configuration to `KafkaPrometheusMetricsReporter` and set the reporter configurations accordingly for each Kafka client they instantiate.
 
-![Proposal](images/062-proposal.png)
+![Proposal](./images/063-proposal.png)
 
 Today to enable jmx_exporter, Strimzi users use:
 ```
