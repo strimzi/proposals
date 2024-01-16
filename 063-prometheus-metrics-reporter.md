@@ -164,7 +164,7 @@ If we also remove the values, doing a diff highlights the following differences:
     kafka_network_requestmetrics_errors_total{request="UpdateMetadata",error="NONE",}        # jmx_exporter
     kafka_network_requestmetrics_errorspersec_total{request="UpdateMetadata",error="NONE",}  # reporter
     ```
-    This is due these [mapping rules](https://github.com/strimzi/strimzi-kafka-operator/blob/main/examples/metrics/kafka-metrics.yaml#L136-L150). 
+    This is due to [mapping rules](https://github.com/strimzi/strimzi-kafka-operator/blob/main/examples/metrics/kafka-metrics.yaml#L136-L150). 
 
 - An underscore `_` is added in front of the `percent` suffix by jmx_exporter rules so a few metrics have slightly different names, for example:
     ```
