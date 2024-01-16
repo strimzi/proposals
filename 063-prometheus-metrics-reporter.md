@@ -171,7 +171,7 @@ If we also remove the values, doing a diff highlights the following differences:
     kafka_network_processor_idle_percent{networkProcessor="0",} # jmx_exporter
     kafka_network_processor_idlepercent{networkProcessor="0",}  # reporter
     ```
-    This is due these [mapping rules](https://github.com/strimzi/strimzi-kafka-operator/blob/main/examples/metrics/kafka-metrics.yaml#L127-L135). 
+    This is due to [mapping rules](https://github.com/strimzi/strimzi-kafka-operator/blob/main/examples/metrics/kafka-metrics.yaml#L127-L135). 
 
 - The `count` suffix is used instead of `total` for some Counters by jmx_exporter:
     ```
