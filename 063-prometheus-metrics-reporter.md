@@ -194,7 +194,7 @@ If we also remove the values, doing a diff highlights the following differences:
     I'm guessing this is done to support paths containing special characters. In the context of Strimzi I don't think this is necessary.
 
 
-In terms of performance, in my very limited testing the reporter is much faster than jmx_exporter. This is not a benchmark or rigorous by any means, I've simply been running `time curl --head http://localhost:{PORT}/metrics` against a single broker on my laptop with both the reporter (on port 8080) and jmx_exporter (on port 9090) running. Since each partition has metrics, I used the number of partition as a proxy to increase the total number of metrics.
+In terms of performance, in my very limited testing the reporter is much faster than jmx_exporter. This is not a benchmark or rigorous by any means, I've simply been running `time curl --head http://localhost:{PORT}/metrics` against a single broker on my laptop with both the reporter (on port 8080) and jmx_exporter (on port 9090) running. Since each partition has metrics, I used the number of partitions as a proxy to increase the total number of metrics.
 
 | # of partitions | jmx_exporter | reporter |
 | --- | --- | --- |
