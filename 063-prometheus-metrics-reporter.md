@@ -53,7 +53,7 @@ The reporter for Kafka metrics will be usable outside of Strimzi by applications
 
 ![Proposal](./images/063-proposal.png)
 
-Today to enable jmx_exporter, Strimzi users use:
+Strimzi users currently enable jmx_exporter with the following configuration:
 ```
 metricsConfig:
   type: jmxPrometheusExporter
