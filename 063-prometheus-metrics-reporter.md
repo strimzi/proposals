@@ -63,7 +63,7 @@ metricsConfig:
       key: kafka-metrics-config.yml
 ```
 
-To enable metric reporters, they will instead use this for example:
+To enable metric reporters, Strimzi users would use a configuration like the following:
 ```
 metricsConfig:
   type: strimziMetricsReporter
