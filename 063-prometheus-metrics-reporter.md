@@ -77,7 +77,7 @@ Strimzi will only allow users to set the `prometheus.metrics.reporter.allowlist`
 
 ### Handling of non-numeric metrics
 
-Out of all the metrics emitted by Kafka brokers and clients, a few of them have non-numeric values. Prometheus only supports numeric values for metrics. When using jmx_exporter it is possible to write rules that move the non-numeric value to a label. For example we do it in [kafka-connect-metrics](https://github.com/strimzi/strimzi-kafka-operator/blob/main/packaging/examples/metrics/kafka-connect-metrics.yaml#L103-L111) for the `status` metrics which has a string value.
+Out of all the metrics emitted by Kafka brokers and clients, a few of them have non-numeric values. Prometheus only supports numeric values for metrics. When using jmx_exporter it is possible to write rules that move the non-numeric value to a label. For example we do it in [kafka-connect-metrics](https://github.com/strimzi/strimzi-kafka-operator/blob/main/packaging/examples/metrics/kafka-connect-metrics.yaml#L103-L111) for the `status` metric which has a string value.
 
 I propose to do this automatically in the reporters. For example a metric named: `kafka.connect:type=connector-task-metrics,connector="{connector}",task="{task}"<>status` with the value `running` will be converted into `kafka_connect_connector_task_metrics_status{connector="heartbeats",task="0",status="running"}` and its value will be set to `1.0`.
 
