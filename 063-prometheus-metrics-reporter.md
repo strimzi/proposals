@@ -7,9 +7,9 @@ PoC: https://github.com/mimaison/prometheus-metrics-reporter
 
 ## Current situation
 
-Metrics are a critical aspect of monitoring Kafka. Today, this is the way metrics from Kafka are collected. First Kafka creates metrics objects in memory. For historical reasons Kafka uses two different libraries for metrics:
-- a home grown library, `org.apache.kafka.common.metrics`. We’ll refer to metrics created via this as _KafkaMetrics_. This is used on the client side and for common metrics on the server side too.
-- Yammer, `com.yammer.metrics.metrics-core`. This library is the predecessor of [Dropwizard](https://metrics.dropwizard.io/). We’ll refer to metrics created via this as _YammerMetrics_. This is only used on the broker side.
+Efficient monitoring of Kafka relies on the accurate collection metrics data. For historical reasons, Kafka uses two distinct libraries for metrics:
+- `org.apache.kafka.common.metrics` creates _Kafka metrics_ on the client side and common metrics on the server side.
+- `com.yammer.metrics.metrics-core` is the predecessor of [Dropwizard](https://metrics.dropwizard.io/) and creates _Yammer metrics_ on the broker side.
 
 For both types of metric, Kafka exposes a reporter interface to expose metrics to monitoring systems. Kafka metrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/36/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and Yammer metrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
 
@@ -121,7 +121,6 @@ Differences with jmx_exporter metrics:
 
 - The reporter does not compute 1/5/15 minute rate, mean, max, min, stddev metrics. It's preferable to compute them in Prometheus instead of on the client side.
 - The reporter is missing the `kafka_server_app_info_starttimems` metric with the client/broker id label. (Due to [KAFKA-15186](https://issues.apache.org/jira/browse/KAFKA-15186))
-- Kafka exposes some non-numeric metrics. Prometheus only supports numeric values for metrics. Using jmx_exporter it's possible with rules to move the values into labels and still retrieve them in Prometheus. With this proposal non-numeric metrics will be ignored and not exposed. I plan to raise a KIP in Kafka to provide alternative to non-numeric metrics. For example there is already [KIP-972](https://cwiki.apache.org/confluence/display/KAFKA/KIP-972%3A+Add+the+metric+of+the+current+running+version+of+kafka) in progress to address some of them.
 
 Assuming jmx_exporter does not have any rules, this is the other main metric change:
 
@@ -205,4 +204,4 @@ In terms of performance, in my very limited testing the reporter is much faster 
 
 ## Rejected alternatives
 
-- I considered using [Micrometer](https://micrometer.io/) in the reporter. The benefit is that it would allow exporting metrics to different monitoring systems. The issue is that it requires converting the Kafka and Yammer metrics into the Micrometer format and then have Micrometer export that to Prometheus. As each metric library has its own characteristics, chaining several conversions can lead to slightly different semantics. Finally Prometheus seems to be the leading monitoring solution in the Kubernetes ecosystem, and I expect most other monitoring tools to integrate this it. For these reasons I decided to not use Micrometer. Ideally Kafka would export its metrics via Micrometer. It's something I've started to explore but it is definitively a very difficult task.
+- I considered using [Micrometer](https://micrometer.io/) in the reporter. The benefit is that it would allow exporting metrics to different monitoring systems. The issue is that it requires converting the Kafka and Yammer metrics into the Micrometer format and then have Micrometer export that to Prometheus. As each metric library has its own characteristics, chaining several conversions can lead to slightly different semantics. Finally Prometheus seems to be the leading monitoring solution in the Kubernetes ecosystem, and I expect most other monitoring tools to integrate with it. For these reasons I decided to not use Micrometer. Ideally Kafka would export its metrics via Micrometer. It's something I've started to explore but it is definitively a very difficult task.
