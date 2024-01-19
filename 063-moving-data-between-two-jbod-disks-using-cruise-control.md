@@ -19,7 +19,7 @@ This feature will also allow us to remove the disks without the loss of data.
 
 Cruise Control provides `remove_disks` HTTP REST endpoint to move replicas from a specified disk to other disks of the same broker.
 This endpoint allows to trigger a rebalancing operation by moving replicas in a round-robin manner to the remaining disks, from the largest to the smallest, while checking the following constraint:
-```shell
+```sh
 1 - (remainingUsageAfterRemoval / remainingCapacity) > errorMargin
 ```
 where:
