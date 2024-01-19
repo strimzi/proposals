@@ -41,7 +41,7 @@ This proposal pertains solely to the [Strimzi Kafka Operator](https://github.com
 ## Rejected Alternatives
 
 1. **CRD-based Option for PDB Disabling:** Initially considered, this was rejected for increasing complexity and requiring repetitive configuration.
-2. **Global Disabling via Command-Line Flag:** Although an alternative, a command-line flag was deemed less flexible and consistent compared to an environment variable.
+2. **Global Disabling via Command-Line Flag in Strimzi Image Entrypoint:** Initially considered as an alternative, using a flag in the entrypoint command of the Strimzi image was ultimately deemed less flexible and consistent compared to an environment variable. This approach, while feasible, does not align as seamlessly with the configuration practices commonly used in Strimzi deployments.
 
 ## Conclusion
 
