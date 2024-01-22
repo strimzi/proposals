@@ -2,11 +2,11 @@
 
 ## Current situation
 
-Kafka introduced tiered storage feature since 3.6. The feature is in early stage and it’s nice to support tiered storage configuration natively via Strimzi.
+Kafka introduced tiered storage feature since 3.6. The feature is in early stage and it’s nice to support tiered storage configuration natively in Strimzi.
 
 ## Motivation
 
-Supporting tiered storage via Strimzi allow Strimzi users to enable tiered storage natively with Strimzi config. By allowing to config custom configuration for `RemoteStorageManager`, users are able to adopt tiered storage feature on Strimzi easily.
+Supporting tiered storage in Strimzi would allow Strimzi users to enable tiered storage natively with Strimzi config. By allowing to config custom configuration of Kafka's `RemoteStorageManager` interface, Strimzi users would be able to easily adopt the tiered storage feature on Strimzi easily. More details about RemoteStorageManager can be found in [KIP405](https://cwiki.apache.org/confluence/display/KAFKA/KIP-405%3A+Kafka+Tiered+Storage).
 
 For simplicity, the proposal doesn't add support to customize `RemoteLogMetadataManager`. If tiered storage is enabled, the default implementation class `TopicBasedRemoteLogMetadataManager` in Kafka will be used.
 
@@ -33,11 +33,11 @@ kafka:
 
 The RSM config only supports custom type. The config allows users to specify the RSM class information.
 
-Because the `RemoteStorageManager` dependency is provided by Kafka plugin, the implementation could vary case by case. It’s important to allow user to pass in additional configuration values within the supplied prefix range. The custom configuration can be supplied via  `spec.kafka.config` with the predefined prefix.
+Because the `RemoteStorageManager` dependency is provided by a Kafka plugin, the implementation could vary case by case. It’s important to allow users to pass in additional configuration values within the supplied prefix range. The custom configuration can be supplied via  `spec.kafka.config` with the predefined prefix.
 
 ### RemoteLogMetadataManager (RLMM)
 
-For simplicity, the proposal doesn't add customization for RemoteLogMetadataManager. If tiered storage is enabled, the default implementation using `TopicBasedRemoteLogMetadataManager` will be used, and corresponding configuration will be appended. 
+For simplicity, the proposal doesn't add customization for `RemoteLogMetadataManager`. If tiered storage is enabled, the default implementation using `TopicBasedRemoteLogMetadataManager` will be used, and corresponding configuration will be appended.
 
 The Strimzi Cluster Operator will automatically configure any required configurations for the RLMM such as the basic thread pool configs required to create the internal Kafka client and talk to the brokers.
 
@@ -55,7 +55,7 @@ kafka:
     className: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
     classPath: /opt/kafka/plugins/tiered-storage-s3/*
     config:
-    # A map with String keys and String values. Keys will be automatically prefixed with `rsm.config.`.
+    # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
       storage.bucket.name: my-bucket
   config:
     ...
@@ -83,9 +83,9 @@ rlmm.config.remote.log.metadata.topic.replication.factor: 1
 
 ### Validation
 
-There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Tiered+Storage+Early+Access+Release+Notes) for tiered storage enabled cluster.
+There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Tiered+Storage+Early+Access+Release+Notes) for a tiered storage enabled cluster.
 
-We choose not to validate the error conditions at Strimzi operator layer because:
+We choose not to validate the error conditions at the Strimzi operator layer because:
 
 * At least some of them are expected to be removed in the future
 * Validating them might be quite complex (for example, IIRC, the compacted topics can be set in the topic itself as well as in the broker defaults)
@@ -103,12 +103,17 @@ ARG REMOTE_PLUGIN_PATH
 COPY ${REMOTE_PLUGIN_PATH} /opt/kafka/plugins/tiered-storage-s3/
 ```
 
+An image with plugin library can be built with the following command:
+
+```
+docker build -t docker.example.com/tierstorage/kafka:0.40.0-kafka-3.6.0-plugin-1 . -build-arg REMOTE_PLUGIN_PATH=./s3/build/install/s3/*
+```
 ## Testing strategy
 
-Unit tests will be added to validate all the RLM,RSM, RLMM changes are propagated through.
+Unit tests will be added to validate that all the RLM, RSM, and RLMM changes are propagated through.
 Because the RSM and RLMM are typically provided by user and there is no built in support for any third party cloud provider, there won’t be any integration tests covering the cloud provider interaction. It’s the user’s responsibility to ensure the RSM and RLMM works with the intended cloud provider.
 
-For testing purpose, an integration test with LocalTieredStorage implementation can be added to ensure end to end functionality.
+For testing purposes, an integration test with `LocalTieredStorage` implementation can be added to ensure end-to-end functionality.
 
 ## Affected Projects
 
@@ -116,7 +121,7 @@ Strimzi operator will be affected with the change.
 
 ## Compatibility
 
-This proposal only add new configuration and API, so there is no backward compatibility issue for existing APIs.
+This proposal adds a new API and configuration, so there are no backward compatibility issues with the existing APIs.
 
 ## Alternate consideration
 
