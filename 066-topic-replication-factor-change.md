@@ -45,6 +45,8 @@ This is a non exhaustive list of use cases that will become significantly easier
 - Set a lower replication factor to deal with resource shortage (trade-off between fault-tolerance and resource utilization).
 - Set a higher replication factor for critical topics to improve durability and fault tolerance.
 
+A tighter integration with Cruise Control is also one of the long term goals of the Strimzi project. 
+
 ## Proposal
 
 The replication factor change feature can be implemented by integrating the Topic Operator with Cruise Control.
@@ -112,7 +114,7 @@ $ curl -vv -X POST -H "Content-Type: application/json" -d '{replication_factor:{
   ...
 ```
 
-The `skip_rack_awareness_check` parameter configures whether to skip the rack awareness sanity check or not (disabled by default).
+The `skip_rack_awareness_check` parameter configures whether to skip the rack awareness sanity check or not (default to false).
 In case of a single-rack deployment, the Topic Operator automatically enables `skip_rack_awareness_check` to allow replication factor changes.
 
 The `goals` parameter is a comma separated list of goals used to generate the automatic cluster rebalance for the replication factor change.
@@ -171,7 +173,7 @@ During the whole replicas change process the KafkaTopic remains in a Ready state
 A replicas change is executed asynchronously, and takes more than one reconciliation to complete.
 
 A new optional KafkaTopicStatus subsection called `replicasChange` is used to update the user, and keep track of the replicas change state.
-At any given time, the replicas change can be pending, ongoing, or completed.
+The replicas change state can be pending or ongoing, and it can contains a message in case of failure.
 
 - **Pending**: Not in Cruise Control's task queue (not yet sent or request error).
   ```sh
@@ -182,7 +184,8 @@ At any given time, the replicas change can be pending, ongoing, or completed.
       type: Ready
     observedGeneration: 2
     replicasChange:
-      completed: false
+      replicas: 2
+      state: pending
     topicName: my-topic
   ```
 
@@ -195,7 +198,8 @@ At any given time, the replicas change can be pending, ongoing, or completed.
       type: Ready
     observedGeneration: 3
     replicasChange:
-      completed: false
+      replicas: 2
+      state: ongoing
       userTaskId: 1aa418ca-53ed-4b93-b0a4-58413c4fc0cb
     topicName: my-topic
   ```
@@ -211,13 +215,28 @@ At any given time, the replicas change can be pending, ongoing, or completed.
     topicName: my-topic
   ```
 
+- **Failed**: Cruise Control's request failed, the change remains pending, and it is periodically retried.
+  ```sh
+  status:
+    conditions:
+    - lastTransitionTime: "2024-01-18T16:13:58.490918232Z"
+      status: "True"
+      type: Ready
+    observedGeneration: 4
+    replicasChange:
+      message: Change request failed, Cluster model not ready
+      replicas: 2
+      state: pending
+    topicName: my-topic
+  ```
+
 ### Reconciliation logic
 
 At runtime, the Topic Operator watches and periodically reconciles the configuration of all managed and unpaused KafkaTopic resources.
 Among the other configurations, the reconciliation logic detects `KafkaTopic.spec.replicas` changes by comparing with the topic replication factor value in Kafka.
 
 A ReplicasChangeClient is used to isolate the logic required to call the Cruise Control REST API from the rest of the reconciliation logic.
-The ReplicasChangeClient supports sending multiple replicas changes at the same time.
+The ReplicasChangeClient supports sending multiple replicas changes with a single request, and checking multiple tasks with a single request.
 
 On every reconciliation loop, when Cruise Control integration is enabled and replicas changes are detected, the BatchingTopicController uses the ReplicasChangeClient for the following operations:
 
@@ -240,8 +259,9 @@ Cruise Control allows to scale down the replication factor under the `min.insync
 When this happens, the Topic Operator logs a warning but continues with the replicas change, because the KafkaRoller ignores topics with RF < minISR, and they don't event show up as under replicated.
 The target replication factor should also be less than or equal to the number of available brokers, but this is enforced directly by Cruise Control.
 
-When a manged KafkaTopic with replicas change is deleted in Kubernetes, the Topic Operator also deletes the topic in Kafka, but the task execution continues in Cruise Control.
+When a managed KafkaTopic with replicas change is deleted in Kubernetes, the Topic Operator also deletes the topic in Kafka, but the task execution continues in Cruise Control.
 There is little benefit in using the `stop_proposal_execution` endpoint, because most replicas change tasks will have only one batch that can't be stopped.
+No task will remain hanging, the only problem is that Cruise Control does some unnecessary work executing a batch for a topic that has been deleted.
 
 When a manged topic with replicas change is deleted in Kafka, the Topic Operator recreates the topic with the target replication factor.
 
@@ -250,7 +270,7 @@ The ongoing state includes the `userTaskId`, which is the unique identifier of a
 
 When Cruise Control is restarted, all active tasks are lost, as there is no persistent memory.
 The Topic Operator detects this event when the ongoing replicas changes check returns no tasks for a known `userTaskId`.
-All pending and ongoing replicas changes are still stored in KafkaTopic status, and can be recovered as soon as Cruise Control becomes Ready.
+All pending and ongoing replicas changes are still stored in KafkaTopic status, and new tasks can be created as soon as Cruise Control becomes Ready.
 
 ## Affected/not affected projects
 
