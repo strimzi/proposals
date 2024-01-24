@@ -134,7 +134,7 @@ This proposal adds a new API and configuration, so there are no backward compati
 
 A simple way is to set everything via Helm chart config: https://github.com/strimzi/proposals/pull/98
 
-That option is not favored because it's not applicable to usage without helm chart. It might also not be able to guarantee compatibility with future Stirmzi versions.
+That option is not favored because it's not applicable to usage without Helm chart. It might also not be able to guarantee compatibility with future Strimzi versions.
 
 A optional idea during review discussion is to consider adding a feature gate to protect the Tiered Storage feature:
 
