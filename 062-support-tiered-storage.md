@@ -22,11 +22,11 @@ The `tieredStorage` config contains configuration for some selected configuratio
 kafka:
   tieredStorage:
     type: customRemoteStorageManager
-    className:
-    classPath:
+    className: <ClassName>
+    classPath: <ClassPath>
     config:
-    # A map with String keys and String values. Keys will be automatically prefixed with `rsm.config.`.
-
+      # A map with String keys and String values. Keys will be automatically prefixed with `rsm.config.`.
+      <key>: <value>
 ```
 
 ### RemoteStorageManager (RSM)
@@ -55,7 +55,7 @@ kafka:
     className: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
     classPath: /opt/kafka/plugins/tiered-storage-s3/*
     config:
-    # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
+      # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
       storage.bucket.name: my-bucket
   config:
     ...
@@ -83,7 +83,14 @@ rlmm.config.remote.log.metadata.topic.replication.factor: 1
 
 ### Validation
 
-There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Tiered+Storage+Early+Access+Release+Notes) for a tiered storage enabled cluster.
+There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Tiered+Storage+Early+Access+Release+Notes) for a tiered storage enabled cluster. At the time of this proposal writing, these are the known limitations:
+* Tiered storage is not supported on clusters utilizing the multiple Log directories on a broker (JBOD feature).
+* Currently, tiered storage is not available for compacted topics.
+* Once Tiered Storage is enabled for a topic, it becomes a permanent configuration and cannot be disabled.
+* Disabling Tiered Storage for the entire cluster requires manual deletion of all topics using Tiered Storage.
+* All Kafka clients, regardless of their version, can continue to produce and consume records from topics utilizing Tiered Storage. However, clients with versions earlier than 3.0 are limited in performing administrative actions, such as enabling Tiered Storage on a topic
+
+All the limitations above except the client compatibility are expected to be fixed before it is production-ready in Kafka.
 
 We choose not to validate the error conditions at the Strimzi operator layer because:
 
@@ -113,7 +120,7 @@ docker build -t docker.example.com/tierstorage/kafka:0.40.0-kafka-3.6.0-plugin-1
 Unit tests will be added to validate that all the RLM, RSM, and RLMM changes are propagated through.
 Because the RSM and RLMM are typically provided by user and there is no built in support for any third party cloud provider, there won’t be any integration tests covering the cloud provider interaction. It’s the user’s responsibility to ensure the RSM and RLMM works with the intended cloud provider.
 
-For testing purposes, an integration test with `LocalTieredStorage` implementation can be added to ensure end-to-end functionality.
+For testing purposes, a system test with `LocalTieredStorage` implementation can be added to ensure end-to-end functionality.
 
 ## Affected Projects
 
@@ -127,5 +134,12 @@ This proposal adds a new API and configuration, so there are no backward compati
 
 A simple way is to set everything via Helm chart config: https://github.com/strimzi/proposals/pull/98
 
-That option is not favored because it's not applicable to usage without helm chart.
+That option is not favored because it's not applicable to usage without helm chart. It might also not be able to guarantee compatibility with future Stirmzi versions.
 
+A optional idea during review discussion is to consider adding a feature gate to protect the Tiered Storage feature:
+
+* If it is disabled, the tieredStorage section from the Kafka CR will be essentially ignored
+By enabling it, users confirm they understand the limitations
+* Once it moves out of early access in Kafka and the limitations are fixed, we can enable the feature gate by default.
+
+This idea is not included in this proposal because having the feature config setup assume the users to be familiar with the feature and its limitation. Having another feature gate doesn't add much value.
