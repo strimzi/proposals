@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 63  | [Pod Disruption Budget Generation Environment Variable](./063-pdb-generation-environment-variable.md) |
 | 62  | [Promotion of the `UseKRaft` feature gate](./062-UseKRaft-feature-gate-promotion.md) |
 | 61  | [KRaft upgrades and downgrades](./061-kraft-upgrades-and-downgrades.md) |
 | 60  | [Kafka Roller KRaft Support](./060-kafka-roller-kraft.md) |
