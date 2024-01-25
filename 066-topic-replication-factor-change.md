@@ -166,7 +166,7 @@ A replicas change is executed asynchronously, and takes more than one reconcilia
 
 A new optional KafkaTopicStatus subsection called `replicasChange` is used to update the user, and keep track of the replicas change state.
 The `replicasChange` can be in a pending or ongoing `state`, and it can contains a `message` in case of failure.
-Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and `replicas`, which reflects the target replicas value (this may be different from .spec.replicas when the state is ongoing).
+Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and `targetReplicas`, which reflects the target replicas value (this may be different from .spec.replicas when the state is ongoing).
 
 - **Pending**: Not in Cruise Control's task queue (not yet sent or request error).
   Cruise Control's task states: None.
@@ -178,8 +178,8 @@ Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and
       type: Ready
     observedGeneration: 2
     replicasChange:
-      replicas: 2
       state: pending
+      targetReplicas: 2
     topicName: my-topic
   ```
 
@@ -193,9 +193,9 @@ Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and
       type: Ready
     observedGeneration: 3
     replicasChange:
-      replicas: 2
       sessionId: 1aa418ca-53ed-4b93-b0a4-58413c4fc0cb
       state: ongoing
+      targetReplicas: 2
     topicName: my-topic
   ```
 
@@ -222,8 +222,8 @@ Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and
     observedGeneration: 4
     replicasChange:
       message: Change request failed, Cluster model not ready
-      replicas: 2
       state: pending
+      targetReplicas: 2
     topicName: my-topic
   ```
 
