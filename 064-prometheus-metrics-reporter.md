@@ -15,7 +15,7 @@ For both types of metrics, Kafka exposes a reporter interface to expose metrics 
 
 At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the Prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
 
-![Current Situation](./images/063-current.png)
+![Current Situation](./images/064-current.png)
 
 - `org.apache.kafka.common.metrics.JmxReporter` is the reporter implementation for the Kafka metrics.
 - `org.apache.kafka.server.metrics.FilteringJmxReporter` is the reporter implementation for the Yammer metrics. It’s named `FilteringJmxReporter` because it extends the `JmxReporter` class from the Yammer library and adds an option to select the metrics to report.
@@ -52,7 +52,7 @@ The Prometheus metrics registry is a singleton and the HTTP server will also be 
 
 The reporter for Kafka metrics will be usable outside of Strimzi by applications using Kafka clients. To do so applications will need to set the `metric.reporters` configuration to `KafkaPrometheusMetricsReporter` and set the reporter configurations accordingly for each Kafka client they instantiate.
 
-![Proposal](./images/063-proposal.png)
+![Proposal](./images/064-proposal.png)
 
 Strimzi users currently enable jmx_exporter with the following configuration:
 ```
