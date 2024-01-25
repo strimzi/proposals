@@ -11,7 +11,7 @@ Efficient monitoring of Kafka relies on the accurate collection of metrics data.
 - `org.apache.kafka.common.metrics` creates _Kafka metrics_ on the client side and common metrics on the server side.
 - `com.yammer.metrics.metrics-core` is the predecessor of [Dropwizard](https://metrics.dropwizard.io/) and creates _Yammer metrics_ on the broker side.
 
-For both types of metric, Kafka exposes a reporter interface to expose metrics to monitoring systems. Kafka metrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/36/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and Yammer metrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
+For both types of metrics, Kafka exposes a reporter interface to expose metrics to monitoring systems. Kafka metrics use [org.apache.kafka.common.metrics.MetricsReporter](https://kafka.apache.org/36/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) and Yammer metrics use `kafka.metrics.KafkaMetricsReporter` which is not officially part of the public API. Kafka has built-in metrics reporter implementations for JMX for both types.
 
 At the moment Strimzi relies on these default JMX reporters and uses [jmx_exporter](https://github.com/prometheus/jmx_exporter) which is a Java agent that retrieves metrics via JMX and exposes them over an HTTP endpoint in the Prometheus format. Then Prometheus is configured to scrape that endpoint to retrieve the Kafka metrics.
 
