@@ -25,7 +25,7 @@ kafka:
     className: <ClassName>
     classPath: <ClassPath>
     config:
-      # A map with String keys and String values. Keys will be automatically prefixed with `rsm.config.`.
+      # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
       <key>: <value>
 ```
 
@@ -75,7 +75,7 @@ remote.log.storage.manager.class.name: com.example.kafka.tiered.storage.s3.S3Rem
 remote.log.storage.manager.class.path: /opt/kafka/plugins/tiered-storage-s3/*
 remote.log.storage.manager.impl.prefix: rsm.config.
 rsm.config.storage.bucket.name=my-bucket
-# # Custom RLMM configs
+# Custom RLMM configs
 rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
 rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 rlmm.config.remote.log.metadata.topic.replication.factor: 1
