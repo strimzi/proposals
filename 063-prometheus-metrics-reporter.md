@@ -7,7 +7,7 @@ PoC: https://github.com/mimaison/prometheus-metrics-reporter
 
 ## Current situation
 
-Efficient monitoring of Kafka relies on the accurate collection metrics data. For historical reasons, Kafka uses two distinct libraries for metrics:
+Efficient monitoring of Kafka relies on the accurate collection of metrics data. For historical reasons, Kafka uses two distinct libraries for metrics:
 - `org.apache.kafka.common.metrics` creates _Kafka metrics_ on the client side and common metrics on the server side.
 - `com.yammer.metrics.metrics-core` is the predecessor of [Dropwizard](https://metrics.dropwizard.io/) and creates _Yammer metrics_ on the broker side.
 
