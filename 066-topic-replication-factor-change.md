@@ -147,22 +147,17 @@ $ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-3
 The Topic Operator needs to authenticate and send HTTP requests to the Cruise Control's REST API.
 The following environment variables are set by the Cluster Operator for consumption by the Topic Operator when Cruise Control is configured in Kafka resource, or manually by the user in case of standalone deployment:
 
-| Name                                   | Type    | Default | Description                                                   |
-|:---------------------------------------|---------|---------|---------------------------------------------------------------|
-| STRIMZI_CRUISE_CONTROL_ENABLED         | Boolean | false   | Whether Cruise Control integration is enabled                 |
-| STRIMZI_CRUISE_CONTROL_HOSTNAME        | String  | ""      | Cruise Control hostname                                       |
-| STRIMZI_CRUISE_CONTROL_PORT            | Integer | 9090    | Cruise Control port                                           |
-| STRIMZI_CRUISE_CONTROL_SSL_ENABLED     | Boolean | false   | Whether SSL encryption is enabled                             |
-| STRIMZI_CRUISE_CONTROL_AUTH_ENABLED    | Boolean | false   | Whether Basic authentication is enabled                       |
-| STRIMZI_CRUISE_CONTROL_RACK_ENABLED    | Boolean | false   | Whether rack awareness is enabled in the target Kafka cluster |
-| STRIMZI_CRUISE_CONTROL_SECRET_NAME     | String  | ""      | Secret name containing the truststore                         |
-| STRIMZI_CRUISE_CONTROL_API_SECRET_NAME | String  | ""      | Secret name containing the API credentials                    |
+| Name                                  | Type    | Default | Description                                                   |
+|:--------------------------------------|---------|---------|---------------------------------------------------------------|
+| STRIMZI_CRUISE_CONTROL_ENABLED        | Boolean | false   | Whether Cruise Control integration is enabled                 |
+| STRIMZI_CRUISE_CONTROL_RACK_ENABLED   | Boolean | false   | Whether rack awareness is enabled in the target Kafka cluster |
+| STRIMZI_CRUISE_CONTROL_HOSTNAME       | String  | ""      | Cruise Control hostname                                       |
+| STRIMZI_CRUISE_CONTROL_PORT           | Integer | 9090    | Cruise Control port                                           |
+| STRIMZI_CRUISE_CONTROL_SSL_ENABLED    | Boolean | false   | Whether SSL encryption is enabled                             |
+| STRIMZI_CRUISE_CONTROL_AUTH_ENABLED   | Boolean | false   | Whether Basic authentication is enabled                       |
 
-With Cluster Operator deployment, a dedicated admin user is automatically created for the Topic Operator.
-With standalone deployment, the Cluster Operator expects two secrets that needs to be created by the user:
-
-- A secret with `cruise-control.p12` key containing the truststore in PKCS12 format, and `cruise-control.password` key containing the truststore password.
-- A secret with `cruise-control.apiToAdminUsername` key containing the API username with admin role, and `cruise-control.apiToAdminPassword` key containing the user password.
+With the Cluster Operator deployment, the certificate chain in PEM format and the admin user credentials for the Cruise Control REST API are automatically mounted in the Topic Operator container.
+Instead, with the standalone deployment, the user has to mount the certificate chain under `/etc/tls-sidecar/cluster-ca-certs/ca.crt`, and credentials under `/etc/eto-cc-api/cruise-control.apiToAdminUsername` and `/etc/eto-cc-api/cruise-control.apiToAdminPassword`.
 
 ### KafkaTopic CRD changes
 
