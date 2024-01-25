@@ -64,7 +64,7 @@ The [`topic_configuration`](https://github.com/linkedin/cruise-control/wiki/REST
 Once accepted, the replication factor change is put into the Cruise Control's task queue and executed asynchronously.
 
 The two required parameters for this endpoint are `topic` (regular expression to specify subject topics) and `replication_factor` (target replication factor).
-In order to group multiple changes in the same request to Cruise Control, the Topic Operator uses a JSON payload containing topics grouped by their replication factor.
+In order to group multiple changes in the same request to Cruise Control, the Topic Operator uses a JSON payload containing topics grouped by their replication factor, which replaces the required parameters.
 
 This is useful with bulk replicas change, which can happen in some edge cases.
 A potentially big backlog of messages may be created when the Topic Operator is not running, or there is an issue with Cruise Control or Kafka.
