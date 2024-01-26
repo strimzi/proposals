@@ -47,7 +47,7 @@ The absence of a dedicated API for quota management in the `Kafka` CR currently 
    While it can be used by users, it does not follow Strimzi's basic idea of declarative management.
    Having a dedicated API for quota configuration as part of the `Kafka` CR would make it much easier to configure the default quotas.
 2. The initial releases of the Strimzi Quota Plugin were simple, preventing users from producing messages directly to a broker running out of disk space. 
-   However, these versions did not address the issue of replicated messages produced on other brokers in the Kafka cluster, which could still fill up the disk space of the destination broker."
+   However, these versions did not address the issue of replicated messages produced on other brokers in the Kafka cluster, which could still fill up the disk space of the destination broker.
    They also didn't support many useful features, such as JBOD storage.
    Because the initial releases were so simple, it was possible to configure them in the `.spec.kafka.config` section of the `Kafka` CR.
    The next - not yet released - version of the Strimzi Quota plugin brings many improvements.
