@@ -8,7 +8,7 @@ When the Kafka cluster is healthy and a broker is down, another one can serve th
 A tradeoff is that each topic partition will take up an amount of storage equal to its size times the replication factor value.
 The cluster `default.replication.factor` configuration is used when a new topic is created without specifying the replication factor.
 
-When new messages arrives, they are first written into the operating system's page cache, and then flushed to disk asynchronously.
+When new messages arrive, they are first written into the operating system's page cache, and then flushed to disk asynchronously.
 If the Kafka JVM crashes for whatever reason, recent messages are still in the page cache, and can be flushed by the operating system.
 However, this doesn't protect from data loss when the machine crashes, and this is why enabling topic replication is important.
 To further improve fault tolerance, a rack-aware Kafka cluster can be used to distribute topic replicas evenly across data centers in the same geographic region.
@@ -70,7 +70,7 @@ In order to group multiple changes in the same request to Cruise Control, the To
 This JSON contains a list of replication factor values, each one associated with a regex expression of the form `topic1|topic2|topic3` matching all topics with that target replication factor.
 
 This is useful with bulk replicas change, which can happen in some edge cases.
-A potentially big backlog of messages may be created when the Topic Operator is not running, or there is an issue with Cruise Control or Kafka.
+A potentially big backlog of changes may be created when the Topic Operator is not running, or there is an issue with Cruise Control or Kafka.
 Another example is a GitOps pipeline delivering many replicas changes at the same time to reduce the storage occupation of non-critical topics.
 
 ```sh
@@ -264,7 +264,7 @@ When a managed KafkaTopic with replicas change is deleted in Kubernetes, the Top
 There is little benefit in using the `stop_proposal_execution` endpoint, because most replicas change tasks have only one batch that can't be stopped.
 No task remains hanging, the only problem is that Cruise Control does some unnecessary work executing a batch for a topic that has been deleted.
 
-When a manged topic with replicas change is deleted in Kafka, the Topic Operator will recreate the topic with the target replication factor.
+When a managed topic with replicas change is deleted in Kafka, the Topic Operator will recreate the topic with the target replication factor.
 
 When Topic Operator is restarted, both pending and ongoing replicas changes will be recovered from the KafkaTopic status.
 The ongoing state will include a `sessionId`, which is the unique identifier of a Cruise Control task, which includes one or more replicas changes.
