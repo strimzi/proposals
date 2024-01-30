@@ -59,8 +59,6 @@ kafka:
       storage.bucket.name: my-bucket
   config:
     ...
-    rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
-    rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
     rlmm.config.remote.log.metadata.topic.replication.factor: 1
 ```
 
@@ -70,14 +68,20 @@ The configuration above will get translated to the below Kafka broker config:
 remote.log.storage.system.enable: true
 remote.log.metadata.manager.impl.prefix: rlmm.config.
 remote.log.metadata.manager.class.name: org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManager
+remote.log.metadata.manager.listener.name=REPLICATION-9091
+rlmm.config.remote.log.metadata.common.client.security.protocol=SSL
+rlmm.config.remote.log.metadata.common.client.ssl.keystore.location=/tmp/kafka/cluster.keystore.p12
+rlmm.config.remote.log.metadata.common.client.ssl.keystore.password=${CERTS_STORE_PASSWORD}
+rlmm.config.remote.log.metadata.common.client.ssl.keystore.type=PKCS12
+rlmm.config.remote.log.metadata.common.client.ssl.truststore.location=/tmp/kafka/cluster.truststore.p12
+rlmm.config.remote.log.metadata.common.client.ssl.keystore.password=${CERTS_STORE_PASSWORD}
+rlmm.config.remote.log.metadata.common.client.ssl.truststore.type=PKCS12
 #RSM configs set by the operator and by the user
 remote.log.storage.manager.class.name: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
 remote.log.storage.manager.class.path: /opt/kafka/plugins/tiered-storage-s3/*
 remote.log.storage.manager.impl.prefix: rsm.config.
 rsm.config.storage.bucket.name=my-bucket
 # Custom RLMM configs
-rlmm.config.remote.log.metadata.common.client.bootstrap.servers: broker-bootstrap.com:9091
-rlmm.config.remote.log.metadata.common.client.security.protocol: SSL
 rlmm.config.remote.log.metadata.topic.replication.factor: 1
 ```
 
