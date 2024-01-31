@@ -115,7 +115,7 @@ $ curl -vv -X POST -H "Content-Type: application/json" -d '{replication_factor:{
 ```
 
 The `skip_rack_awareness_check` parameter configures whether to skip the rack awareness sanity check or not (default to false).
-In case of a single-rack deployment, the Topic Operator automatically enables `skip_rack_awareness_check` to allow replication factor changes.
+If rack awareness is not enabled in Strimzi, the `skip_rack_awareness_check` will be set to true.
 
 The `goals` parameter is a comma separated list of goals used to generate the automatic cluster rebalance for the replication factor change.
 This is configurable for all endpoints in `Kafka.spec.cruiseControl.config` using the `default.goals` property.
@@ -275,10 +275,16 @@ All pending and ongoing replicas changes will still be stored in KafkaTopic stat
 
 ## Affected/not affected projects
 
-The following components will be affected by this proposal:
+### Topic Operator
 
-- Topic Operator: this component will drive the whole replication factor change process.
-- Cluster Operator: this component will be responsible to initialize the Cruise Control environment variables.
+This component will drive the whole replication factor change process.
+The Cruise Control integration logic will be isolated in a new ReplicasChangeClient object.
+
+### Cluster Operator
+
+This component will be responsible to generate a new Cruise Control admin user for the Topic Operator, and initialize the environment variables, and mount the Cruise Control API secret.
+The Cruise Control component will be reconciled just before the Entity Operator, so that the Cruise Control API secret will be available when the Entity Operator pod starts.
+When Cruise Control integration is enabled, the Entity Operator reconciler will detect any Cruise Control API secret change, and restart the Entity Operator pod to load the new API credentials.
 
 ## Compatibility
 
