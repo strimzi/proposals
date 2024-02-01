@@ -63,7 +63,7 @@ A completed task is retained for `completed.user.task.retention.time.ms`, which 
 ### Topic configuration
 
 The [`topic_configuration`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#change-kafka-topic-configuration) endpoint will be used to request replication factor changes.
-Once accepted, the replication factor change is put into the Cruise Control's task queue and executed asynchronously.
+Once accepted, the replication factor change is put into the Cruise Control's task queue and executed asynchronously with respect to the sending of the HTTP response to the request that initiated the change.
 
 The two required parameters for this endpoint are `topic` (regular expression to specify subject topics) and `replication_factor` (target replication factor).
 In order to group multiple changes in the same request to Cruise Control, the Topic Operator uses a [JSON payload](https://github.com/linkedin/cruise-control/wiki/Change-topic-replication-factor-through-Cruise-Control#instruction), which replaces the required parameters.
@@ -126,10 +126,10 @@ This is configurable for all endpoints in `Kafka.spec.cruiseControl.config` usin
 ### User tasks
 
 The [`user_tasks`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-user-request-result) endpoint will be used to periodically check the state of requested tasks.
-The only required parameter is the `User-Task-ID`, which is returned by the `topic_configuration` response.
+The only required parameter is the `user_task_ids`, which is a comma separated list of `User-Task-ID` returned by the topic configuration requests.
 
 ```sh
-$ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-351f-4565-8d0f-9aade00e053d&json=true" | jq
+$ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-351f-4565-8d0f-9aade00e053d,8911ca89-351f-888-8d0f-9aade00e098h&json=true" | jq
 {
   "userTasks": [
     {
@@ -138,6 +138,13 @@ $ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-3
       "RequestURL": "POST /kafkacruisecontrol/topic_configuration?topic=my-topic&replication_factor=2&skip_rack_awareness_check=true&dryrun=false&json=true",
       "UserTaskId": "5344ca89-351f-4565-8d0f-9aade00e053d",
       "StartMs": "1701961135978"
+    },
+    {
+      "Status": "Active",
+      "ClientIdentity": "127.0.0.1",
+      "RequestURL": "POST /kafkacruisecontrol/topic_configuration?topic=my-topic&replication_factor=3&skip_rack_awareness_check=true&dryrun=false&json=true",
+      "UserTaskId": "8911ca89-351f-888-8d0f-9aade00e098h",
+      "StartMs": "1701961136014"
     }
   ],
   "version": 1
@@ -203,6 +210,7 @@ Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and
   ```
 
 - **Completed**: Cruise Control's task execution completed (target replication factor reconciled).
+  This is characterised by the absence of a `replicasChange` status.
   Cruise Control's task states: Completed.
   ```sh
   status:
@@ -247,8 +255,7 @@ The result of these operations will be used to update the KafkaTopic status.
 
 ### Error handling
 
-In case of error, the replicas change will remain pending or ongoing (no status update), and will be indefinitely retried by the periodic reconciliation.
-All errors will be written in the Topic Operator logs and in the KafkaTopic status.
+In case of error, the error message will be added to the KafkaTopic status and printed in logs, but the replicas change will remain pending or ongoing, and will be indefinitely retried by the periodic reconciliation.
 
 In Cruise Control, there is no way to differentiate between temporary errors (resolve by themself) from permanent errors (require some action).
 For example, the `NotEnoughValidWindowsException` can be raised when Cruise Control has just started and the cluster model is still building, but also when there is a configuration error which prevents broker metrics collection.
@@ -282,9 +289,13 @@ The Cruise Control integration logic will be isolated in a new ReplicasChangeCli
 
 ### Cluster Operator
 
-This component will be responsible to generate a new Cruise Control admin user for the Topic Operator, and initialize the environment variables, and mount the Cruise Control API secret.
-The Cruise Control component will be reconciled just before the Entity Operator, so that the Cruise Control API secret will be available when the Entity Operator pod starts.
-When Cruise Control integration is enabled, the Entity Operator reconciler will detect any Cruise Control API secret change, and restart the Entity Operator pod to load the new API credentials.
+This component will be responsible to initialize the environment variables, and mount the Cruise Control API secret.
+
+Mounting the existing Cruise Control API secret into the Topic Operator would require to always deploy Cruise Control before the Topic Operator, creating a strong dependency between these two components.
+To avoid that, the Topic Operator will create it's own API secret containing a dedicated admin username and password, while Cruise Control will add the secret content to its API credentials store.
+This logic will be triggered only when they are both part of the KafkaTopic resource.
+
+The Entity Operator reconciler will detect any API secret change, and restart the Entity Operator pod to load the new credentials.
 
 ## Compatibility
 
