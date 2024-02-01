@@ -21,12 +21,13 @@ The `tieredStorage` config contains configuration for some selected configuratio
 ```
 kafka:
   tieredStorage:
-    type: customRemoteStorageManager
-    className: <ClassName>
-    classPath: <ClassPath>
-    config:
-      # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
-      <key>: <value>
+    type: custom
+    remoteStorageManager:
+      className: <ClassName>
+      classPath: <ClassPath>
+      config:
+        # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
+        <key>: <value>
 ```
 
 ### RemoteStorageManager (RSM)
@@ -51,12 +52,13 @@ The below config define a sample configuration for tiered storage setup, using a
 ```
 kafka:
   tieredStorage:
-    type: customRemoteStorageManager
-    className: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
-    classPath: /opt/kafka/plugins/tiered-storage-s3/*
-    config:
-      # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
-      storage.bucket.name: my-bucket
+    type: custom
+    remoteStorageManager:
+      className: com.example.kafka.tiered.storage.s3.S3RemoteStorageManager
+      classPath: /opt/kafka/plugins/tiered-storage-s3/*
+      config:
+        # A map with String keys and String values. Key fields will be automatically prefixed with `rsm.config.` and appended to Kafka broker config.
+        storage.bucket.name: my-bucket
   config:
     ...
     rlmm.config.remote.log.metadata.topic.replication.factor: 1
@@ -147,3 +149,5 @@ By enabling it, users confirm they understand the limitations
 * Once it moves out of early access in Kafka and the limitations are fixed, we can enable the feature gate by default.
 
 This idea is not included in this proposal because having the feature config setup assume the users to be familiar with the feature and its limitation. Having another feature gate doesn't add much value.
+
+Another idea is to open the customization for RLMM in the config as well. This is not included right now because in most cases the `TopicBasedRemoteStorageMetadataManager` is the default choice. In the future if such requirement comes, we can easily extend the API to allow custom RLMM implementation.
