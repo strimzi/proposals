@@ -57,7 +57,7 @@ A task is first created in the Active state, then moves to InExecution, and fina
 At most `max.active.user.tasks` tasks can be Active at the same time (5 by default), and only one task can be InExecution at any given time.
 
 During the execution, a task is divided in one or more batches, which are then executed one after the other.
-A task may affect multiple topics, which complete or fail altogether.
+If any batch fails then the task becomes `CompletedWithError` potentially leaving some topics in a changed state and others unchanged.
 A completed task is retained for `completed.user.task.retention.time.ms`, which defaults to 24 hours.
 
 ### Topic configuration
@@ -267,9 +267,8 @@ Cruise Control allows to scale down the replication factor under the `min.insync
 When this happens, the Topic Operator won't block the operation, but will just log a warning, because the KafkaRoller ignores topics with RF < minISR, and they don't even show up as under replicated in Kafka metrics.
 The target replication factor should also be less than or equal to the number of available brokers, but this is enforced directly by Cruise Control.
 
-When a managed KafkaTopic with replicas change is deleted in Kubernetes, the Topic Operator will also delete the topic in Kafka, but the task execution will continue in Cruise Control.
-There is little benefit in using the `stop_proposal_execution` endpoint, because most replicas change tasks have only one batch that can't be stopped.
-No task remains hanging, the only problem is that Cruise Control does some unnecessary work executing a batch for a topic that has been deleted.
+When a managed KafkaTopic with replicas change is deleted in Kubernetes, the Topic Operator will also delete the topic in Kafka, but the current batch execution will continue in Cruise Control.
+There is little benefit in using the `stop_proposal_execution` endpoint, because most replicas change tasks have only one batch.
 
 When a managed topic with replicas change is deleted in Kafka, the Topic Operator will recreate the topic with the target replication factor.
 
@@ -293,7 +292,7 @@ This component will be responsible to initialize the environment variables, and 
 
 Mounting the existing Cruise Control API secret into the Topic Operator would require to always deploy Cruise Control before the Topic Operator, creating a strong dependency between these two components.
 To avoid that, the Topic Operator will create it's own API secret containing a dedicated admin username and password, while Cruise Control will add the secret content to its API credentials store.
-This logic will be triggered only when they are both part of the KafkaTopic resource.
+This logic will be triggered only when they are both enabled in the Kafka resource.
 
 The Entity Operator reconciler will detect any API secret change, and restart the Entity Operator pod to load the new credentials.
 
