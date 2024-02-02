@@ -167,7 +167,7 @@ The following environment variables will be set by the Cluster Operator for cons
 | STRIMZI_CRUISE_CONTROL_AUTH_ENABLED   | Boolean | false   | Whether Basic authentication is enabled                       |
 
 With the Cluster Operator deployment, the certificate chain in PEM format and the admin user credentials for the Cruise Control REST API will be automatically mounted in the Topic Operator container.
-Instead, with the standalone deployment, the user will have to mount: certificate chain in `/etc/tls-sidecar/cluster-ca-certs/ca.crt`, credentials in `/etc/eto-cc-api/cruise-control.apiToAdminUsername` and `/etc/eto-cc-api/cruise-control.apiToAdminPassword`.
+Instead, with the standalone deployment, the user will have to mount: certificate chain in `/etc/tls-sidecar/cluster-ca-certs/ca.crt`, credentials in `/etc/eto-cc-api/topic-operator.apiAdminName` and `/etc/eto-cc-api/topic-operator.apiAdminPassword`.
 
 ### KafkaTopic CRD changes
 
