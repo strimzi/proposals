@@ -96,8 +96,6 @@ There are certain [limitations](https://cwiki.apache.org/confluence/display/KAFK
 * Disabling Tiered Storage for the entire cluster requires manual deletion of all topics using Tiered Storage.
 * All Kafka clients, regardless of their version, can continue to produce and consume records from topics utilizing Tiered Storage. However, clients with versions earlier than 3.0 are limited in performing administrative actions, such as enabling Tiered Storage on a topic
 
-All the limitations above except the client compatibility are expected to be fixed before it is production-ready in Kafka.
-
 We choose not to validate the error conditions at the Strimzi operator layer because:
 
 * At least some of them are expected to be removed in the future
