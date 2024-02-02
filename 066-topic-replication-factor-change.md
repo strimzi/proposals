@@ -4,24 +4,24 @@ In Kafka, the unit of replication is the topic partition.
 The total number of partition replicas, including the leader, constitutes the replication factor.
 
 The replication factor is configured at the topic level, and can be used to enable strong durability and fault tolerance.
-When the Kafka cluster is healthy and a broker is down, another one can serve the data of topics with replication factor greater than one.
-A tradeoff is that each topic partition will take up an amount of storage equal to its size times the replication factor value.
-The cluster `default.replication.factor` configuration is used when a new topic is created without specifying the replication factor.
+When the Kafka cluster is healthy and a broker is down, another broker can serve the data of topics with a replication factor greater than one.
+A tradeoff of replication is that each topic partition will take up an amount of storage equal to its size multiplied by the replication factor value.
+The cluster-wide `default.replication.factor` configuration is used when a new topic is created without specifying a replication factor at the topic level.
 
 When new messages arrive, they are first written into the operating system's page cache, and then flushed to disk asynchronously.
 If the Kafka JVM crashes for whatever reason, recent messages are still in the page cache, and can be flushed by the operating system.
 However, this doesn't protect from data loss when the machine crashes, and this is why enabling topic replication is important.
 To further improve fault tolerance, a rack-aware Kafka cluster can be used to distribute topic replicas evenly across data centers in the same geographic region.
 
-Once a topic is created, it is possible to change its replication factor using a command line tool.
-This operation is quite complicated on busy clusters with thousands of partitions, because the user have to decide leader and partition movements without causing cluster unbalance.
+Once a topic is created, it is possible to change its replication factor using a command line tool, but not directly through the topic configuration.
+This operation is quite complicated on busy clusters with thousands of partitions, because the user has to decide leader and partition movements without causing a cluster unbalance.
 
-The goal of this proposal is to allow Strimzi users to change the topic replication factor by simply updating the KafkaTopic resource.
-Unless specified, we always refer to the Unidirectional Topic Operator implementation.
+The goal of this proposal is to allow Strimzi users to change the topic replication factor by simply updating the KafkaTopic resource, which is managed by the Topic Operator.
+Unless otherwise stated in this proposal, all references to the Topic Operator assume the Unidirectional implementation.
 
 ## Current situation
 
-When the user change the `.spec.replicas` field of a KafkaTopic, the Topic Operator fails the reconciliation, and the resource becomes not ready. 
+When users change the `.spec.replicas` property of a KafkaTopic, the Topic Operator fails the reconciliation process and the status of the KafkaTopic resource changes to _not ready_.
 An error is reported in Topic Operator logs and KafkaTopic resource status.
 
 > Replication factor change not supported, but required for partitions\
@@ -69,7 +69,7 @@ The two required parameters for this endpoint are `topic` (regular expression to
 In order to group multiple changes in the same request to Cruise Control, the Topic Operator uses a [JSON payload](https://github.com/linkedin/cruise-control/wiki/Change-topic-replication-factor-through-Cruise-Control#instruction), which replaces the required parameters.
 This JSON contains a list of replication factor values, each one associated with a regex expression of the form `topic1|topic2|topic3` matching all topics with that target replication factor.
 
-This is useful with bulk replicas change, which can happen in some edge cases.
+This is useful with bulk replicas changes, which can happen in some edge cases.
 A potentially big backlog of changes may be created when the Topic Operator is not running, or there is an issue with Cruise Control or Kafka.
 Another example is a GitOps pipeline delivering many replicas changes at the same time to reduce the storage occupation of non-critical topics.
 
@@ -117,7 +117,7 @@ $ curl -vv -X POST -H "Content-Type: application/json" -d '{replication_factor:{
 The `skip_rack_awareness_check` parameter configures whether to skip the rack awareness sanity check or not (default to false).
 If rack awareness is not enabled in Strimzi, the `skip_rack_awareness_check` will be set to true.
 
-The `goals` parameter is a comma separated list of goals used to generate the automatic cluster rebalance for the replication factor change.
+The `goals` parameter is a comma-separated list of goals used to generate the automatic cluster rebalance for the replication factor change.
 This is configurable for all endpoints in `Kafka.spec.cruiseControl.config` using the `default.goals` property.
 
 The `replication_throttle` parameter is an upper bound on the bandwidth used to move replicas (bytes per second).
@@ -126,7 +126,7 @@ This is configurable for all endpoints in `Kafka.spec.cruiseControl.config` usin
 ### User tasks
 
 The [`user_tasks`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-user-request-result) endpoint will be used to periodically check the state of requested tasks.
-The only required parameter is the `user_task_ids`, which is a comma separated list of `User-Task-ID` returned by the topic configuration requests.
+The only required parameter is the `user_task_ids`, which is a comma-separated list of `User-Task-ID` values returned by the topic configuration requests.
 
 ```sh
 $ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-351f-4565-8d0f-9aade00e053d,8911ca89-351f-888-8d0f-9aade00e098h&json=true" | jq
@@ -155,7 +155,7 @@ $ curl -s "localhost:9090/kafkacruisecontrol/user_tasks?user_task_ids=5344ca89-3
 
 The Topic Operator will need to authenticate and send HTTP requests to the Cruise Control's REST API.
 A new admin user will be provisioned for the Topic Operator, separate from the credentials used by the KafkaRebalanceOperator.
-The following environment variables will be set by the Cluster Operator for consumption by the Topic Operator when Cruise Control is configured in Kafka resource, or manually by the user in case of standalone deployment:
+The following environment variables will be set by the Cluster Operator for consumption by the Topic Operator when Cruise Control is configured in the Kafka resource, or manually by the user in case of standalone deployment:
 
 | Name                                  | Type    | Default | Description                                                   |
 |:--------------------------------------|---------|---------|---------------------------------------------------------------|
@@ -167,7 +167,7 @@ The following environment variables will be set by the Cluster Operator for cons
 | STRIMZI_CRUISE_CONTROL_AUTH_ENABLED   | Boolean | false   | Whether Basic authentication is enabled                       |
 
 With the Cluster Operator deployment, the certificate chain in PEM format and the admin user credentials for the Cruise Control REST API will be automatically mounted in the Topic Operator container.
-Instead, with the standalone deployment, the user will have to mount: certificate chain in `/etc/tls-sidecar/cluster-ca-certs/ca.crt`, credentials in `/etc/eto-cc-api/topic-operator.apiAdminName` and `/etc/eto-cc-api/topic-operator.apiAdminPassword`.
+Whereas in the standalone deployment, the user will have to mount: certificate chain in `/etc/tls-sidecar/cluster-ca-certs/ca.crt`, credentials in `/etc/eto-cc-api/topic-operator.apiAdminName`, and `/etc/eto-cc-api/topic-operator.apiAdminPassword`.
 
 ### KafkaTopic CRD changes
 
@@ -176,7 +176,7 @@ A replicas change will be executed asynchronously, taking more than one reconcil
 
 A new optional KafkaTopicStatus subsection called `replicasChange` will be used to update the user, and keep track of the replicas change state.
 The `replicasChange` can be in a pending or ongoing `state`, and it can contain a `message` in case of failure.
-Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and `targetReplicas`, which reflects the target replicas value (this may be different from .spec.replicas when the state is ongoing).
+Other fields are `sessionId`, which maps to Cruise Control's `User-Task-ID`, and `targetReplicas`, which reflects the target replicas value (this may be different from `.spec.replicas` when the state is ongoing).
 
 - **Pending**: Not in Cruise Control's task queue (not yet sent or request error).
   Cruise Control's task states: None.
@@ -246,7 +246,7 @@ Among the other configurations, the reconciliation logic detects `.spec.replicas
 A ReplicasChangeClient will be used to isolate the logic required to call the Cruise Control REST API from the rest of the reconciliation logic.
 The ReplicasChangeClient will support sending multiple replicas changes with a single request, and checking multiple tasks with a single request.
 
-On every reconciliation loop, when Cruise Control integration will be enabled and replicas changes are detected, the BatchingTopicController will use the ReplicasChangeClient for the following operations:
+On every reconciliation loop, when Cruise Control integration is enabled and replicas changes are detected, the BatchingTopicController will use the ReplicasChangeClient for the following operations:
 
 1. Request pending replicas changes (uses `topic_configuration` endpoint, and returns topics with pending and ongoing changes).
 2. Check ongoing replicas changes (uses `user_tasks` endpoint, and returns topics with completed changes).
@@ -257,23 +257,23 @@ The result of these operations will be used to update the KafkaTopic status.
 
 In case of error, the error message will be added to the KafkaTopic status and printed in logs, but the replicas change will remain pending or ongoing, and will be indefinitely retried by the periodic reconciliation.
 
-In Cruise Control, there is no way to differentiate between temporary errors (resolve by themself) from permanent errors (require some action).
+In Cruise Control, there is no way to differentiate between temporary errors (resolve by themselves) and from permanent errors (require some action).
 For example, the `NotEnoughValidWindowsException` can be raised when Cruise Control has just started and the cluster model is still building, but also when there is a configuration error which prevents broker metrics collection.
 A similar example is the `OptimizationFailureException` raised when some hard goal is violated, which can be temporary if the configured network capacity is less than the real network capacity and there is a traffic peak.
-Instead, the `OngoingExecutionException` is clearly temporary, and it means that a task execution was attempted while there is already one that is being executed by Cruise Control.
+The `OngoingExecutionException` is clearly temporary, and it means that a task execution was attempted while there is already one that is being executed by Cruise Control.
 Another temporary example is the `RuntimeException` when Cruise Control's task queue is full.
 
-Cruise Control allows to scale down the replication factor under the `min.insync.replicas` value, and this can cause disruption to producers with `acks=all`.
+Cruise Control allows scale down of the replication factor under the `min.insync.replicas` value, which can cause disruption to producers with `acks=all`.
 When this happens, the Topic Operator won't block the operation, but will just log a warning, because the KafkaRoller ignores topics with RF < minISR, and they don't even show up as under replicated in Kafka metrics.
 The target replication factor should also be less than or equal to the number of available brokers, but this is enforced directly by Cruise Control.
 
-When a managed KafkaTopic with replicas change is deleted in Kubernetes, the Topic Operator will also delete the topic in Kafka, but the current batch execution will continue in Cruise Control.
-There is little benefit in using the `stop_proposal_execution` endpoint, because most replicas change tasks have only one batch.
+When a managed KafkaTopic with a replicas change is deleted in Kubernetes, the Topic Operator will also delete the topic in Kafka, but the current batch execution will continue in Cruise Control.
+There is little benefit in using the `stop_proposal_execution` endpoint, because most tasks to change replicas have only one batch.
 
-When a managed topic with replicas change is deleted in Kafka, the Topic Operator will recreate the topic with the target replication factor.
+When a managed topic with a replicas change is deleted in Kafka, the Topic Operator will recreate the topic with the target replication factor.
 
-When Topic Operator is restarted, both pending and ongoing replicas changes will be recovered from the KafkaTopic status.
-The ongoing state will include a `sessionId`, which is the unique identifier of a Cruise Control task, which includes one or more replicas changes.
+When the Topic Operator is restarted, both pending and ongoing replicas changes will be recovered from the KafkaTopic status.
+The ongoing state will include a `sessionId`, which serves as the unique identifier for a Cruise Control task involving one or more replica changes.
 
 When Cruise Control is restarted, all active tasks are lost because there is no persistent memory.
 The Topic Operator will detect this event when the ongoing changes check returns no tasks for a known `sessionId`.
@@ -288,9 +288,9 @@ The Cruise Control integration logic will be isolated in a new ReplicasChangeCli
 
 ### Cluster Operator
 
-This component will be responsible to initialize the environment variables, and mount the Cruise Control API secret.
+This component will be responsible for initializing the environment variables and mounting the Cruise Control API secret.
 
-Mounting the existing Cruise Control API secret into the Topic Operator would require to always deploy Cruise Control before the Topic Operator, creating a strong dependency between these two components.
+Mounting the existing Cruise Control API secret into the Topic Operator would require deploying Cruise Control before the Topic Operator, creating a strong dependency between these two components.
 To avoid that, the Topic Operator will create it's own API secret containing a dedicated admin username and password, while Cruise Control will add the secret content to its API credentials store.
 This logic will be triggered only when they are both enabled in the Kafka resource.
 
