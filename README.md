@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 65  | [Support custom tiered storage plugins](./065-support-tiered-storage.md) |
 | 64  | [Prometheus Metrics Reporter](./064-prometheus-metrics-reporter.md) |
 | 63  | [Pod Disruption Budget Generation Environment Variable](./063-pdb-generation-environment-variable.md) |
 | 62  | [Promotion of the `UseKRaft` feature gate](./062-UseKRaft-feature-gate-promotion.md) |
