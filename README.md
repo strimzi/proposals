@@ -78,6 +78,6 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 ---
 
-Strimzi is a <a href="http://cncf.io">Cloud Native Computing Foundation</a> sandbox project.
+Strimzi is a <a href="http://cncf.io">Cloud Native Computing Foundation</a> incubating project.
 
 ![CNCF ><](./logo/cncf-color.png)
