@@ -6,7 +6,7 @@ This proposal introduces JBOD support to KRaft-based Apache Kafka clusters power
 
 ## Current situation
 
-Strimzi understands two different things under JBOD storage:
+Strimzi distinguishes two aspects of JBOD storage:
 
 1. The `type: jbod` storage is a part of the `Kafka` custom resource API and allows users to define one or more disks in the form of a YAML list.
    The Strimzi storage type is not directly part of the configuration of the Apache Kafka nodes.
@@ -17,7 +17,7 @@ Strimzi understands two different things under JBOD storage:
    If the `log.dirs` configuration option contains more than one directory, JBOD storage is used.
    If it contains only one directory, JBOD storage is not used regardless of whether the `Kafka` CR uses `type: jbod` storage or not.
 
-Until version 3.7.0, Apache Kafka nodes do not support the use of JBOD storage in KRaft mode.
+Prior to version 3.7.0, Apache Kafka nodes did not support JBOD storage in KRaft mode.
 When running Apache Kafka in KRaft mode with Strimzi, we support using the `type: jbod` storage, but only with one data volume present.
 
 ## Motivation
