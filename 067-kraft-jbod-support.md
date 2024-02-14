@@ -8,7 +8,7 @@ This proposal introduces JBOD support to KRaft-based Apache Kafka clusters power
 
 Strimzi understands two different things under JBOD storage:
 
-1. The `type: jbod` storage is a part of the `Kafka` custom resource API and allows users to define one or more disks in the form of an YAML list.
+1. The `type: jbod` storage is a part of the `Kafka` custom resource API and allows users to define one or more disks in the form of a YAML list.
    The Strimzi storage type is not directly part of the configuration of the Apache Kafka nodes.
    It is only used as a basis to generate the value of the `log.dirs` configuration option that will contain one or more directories depending on the number of volumes defined in the `Kafka` CR.
    As a result, the Kafka nodes are not aware of the Strimzi storage type used in the `Kafka` CR.
@@ -58,13 +58,13 @@ These challenges are addressed in the next sections.
 
 ### API changes
 
-A new optional field named `kraftMetadata` will be added to the volume definition in the Strimzi Kafka custom resource API.
-This field will have an Enum value and the supported values will be:
+A new optional property named `kraftMetadata` will be added to the volume definition in the Strimzi `Kafka` custom resource API.
+This property will have an Enum value and the supported values will be:
 * `null` (or not set)
 * `shared`
 
 The volume marked with `kraftMetadata: shared` will be used to store the metadata log.
-Only one volume in a `type: jbod` storage will be allowed set the `kraftMetadata` field to `shared`.
+In a `type: jbod` storage configuration, only one volume will be permitted to have the `kraftMetadata` property set to `shared`.
 This will be validated in the Cluster Operator and when it is set for multiple volumes at the same time, an `InvalidResourceException` will be thrown.
 It is also possible to not set this option for any volume as well.
 In that case, the operator will decide which volume should be used for the metadata log on its own.
@@ -95,27 +95,28 @@ spec:
         kraftMetadata: shared
 ```
 
-The reason why the `kraftMetadata` field is not just a boolean is to make it possible to extend the support in the future.
-One such option would be a support for dedicated metadata volumes discussed in a separate section.
+The reason why the `kraftMetadata` property is not just a boolean is to make it possible to extend the support in the future.
+One such possibility would be to support dedicated metadata volumes, which is discussed in a separate section.
 
-The `kraftMetadata` option will be ignored when used with ZooKeeper based clusters.
+The `kraftMetadata` option will be ignored when used with ZooKeeper-based clusters.
 
 ### Kafka configuration
 
-In the Kafka configuration, the `logs.dir` option will be configured in the same way as in the past.
+In the Kafka configuration, the `logs.dir` option will be configured in the same way as present.
 In addition to that, we will also configure the `metadata.log.dir` option that we do not use today.
 This option will be configured only for KRaft clusters.
 It will be set to the volume marked as `kraftMetadata: shared`.
 Or - if the flag is not set for any of the volumes - it will be set to the node with the lowest configured volume ID.
 
 The currently used `metadata.log.dir` will be also stored in an annotation on the `StrimziPodSet` representing the node pool.
-This annotation will be used to detect changes to the metadata log volume and used to log such event.
-In the future - if needed - it can be also used to for example prevent the change or _reassign_ the metadata log in some other way (this is however not planned by this proposal).
+This annotation will be used to detect changes to the metadata log volume and used to log such events.
+In the future, if necessary, it could also be used, for example, to prevent changes or to reassign the metadata log in a different way.
+However, such functionality is not planned as part of this proposal.
 
 ### Changing the metadata log directory / volume
 
 The volume / directory used for the metadata log might change in several situations:
-* When user changes the `kraftMetadata` flag and moves it to another volume
+* When a user changes the `kraftMetadata` flag and moves it to another volume
 * When the volume originally used for the metadata is removed
 * When a new volume with lower volume ID is added to the JBOD list
 
@@ -127,7 +128,7 @@ The scripts will do the following:
 3) If the locations differ, the old metadata log will be deleted
 4) The broker is started and either continues to use the existing metadata log or creates a new one and syncs it from the (other) controller nodes
 
-This is a similar to a situation when a new node is started after a scale-up or to recovering from a storage failure.
+This is a similar to a situation when a new node is started after a scale-up or to recover from a storage failure.
 
 ### JBOD usage in controller-only nodes
 
@@ -146,7 +147,7 @@ In some situations, this might not be desired as the metadata log might compete 
 Technically, it is possible to use a different data volume for the metadata log and for the regular Kafka logs.
 However, it is not expected that this would be a common configuration because:
 * Clusters sensitive to performance are expected to use dedicated controller-only nodes.
-  And on the controllers-only nodes, there are no regular partition-replicas.
+  And on the controller-only nodes, there are no regular partition-replicas.
   So the metadata log has its own dedicated volume even without any special support for it.
 * On broker-only nodes, the impact of shared volumes for data and metadata is expected to be small.
   And using a dedicated volume just for a metadata is not expected to be very efficient in terms of the utilization of the dedicated disk.
@@ -168,7 +169,7 @@ The examples YAML files will be adapted to cover the API changes:
 ### Gating
 
 The JBOD storage will be supported only for KRaft clusters running Kafka 3.7.0 and newer with KRaft metadata set to at least `3.7`.
-Since the JBOD support is expected to be become GA in Kafka 3.8.0, there is no plan to introduce a feature gate for it.
+Since the JBOD support is expected to be GA in Kafka 3.8.0, there is no plan to introduce a feature gate for it.
 Documentation and the YAML examples will warn users that JBOD storage is only in early access in Kafka 3.7.0.
 
 #### Risks
@@ -176,7 +177,7 @@ Documentation and the YAML examples will warn users that JBOD storage is only in
 The JBOD storage is in early access only in Kafka 3.7.0.
 The testing of it in the 3.7.0 release candidates discovered several bugs.
 It is also not guaranteed that there will be no changes to how it works in Kafka 3.8.0 (for example required to address the bugs etc.).
-However, as JBOD if one of the last remaining missing features and since Kafka 3.8.0 is expected to be the last version with ZooKeeper support, we cannot delay the implementation of the JBOD support only until after Kafka 3.8.0 is released with the final implementation.
+However, as JBOD support is one of the last missing KRaft features, and since Kafka 3.8.0 is expected to be the last version with ZooKeeper support, we cannot delay the implementation of the JBOD support until Kafka 3.8.0 is released with the final implementation.
 
 ## Affected projects
 
@@ -201,9 +202,9 @@ Adding a new feature gate for the JBOD support was considered.
 It might be useful to protect users from unintentionally using JBOD storage with Kafka 3.7.0 without being aware that it is an early access only.
 However, this idea was rejected because:
 * The feature gate would be very short-lived as the JBOD storage is expected to GA in the next Kafka version
-* The feature gate does not address the different levels of support in the different Kafka versions
-    * It would not prevent use of JBOD storage Kafka 3.6 that does not support JBOD storage at all
-    * Once the feature gate is enabled by default after support for Kafka 3.8.0 is added, it would not prevent anymore the Kafka 3.7.0 users from using JBOD storage without knowing that it is early access only
+* The feature gate does not address the different levels of support across different Kafka versions
+    * It would not prevent use of JBOD storage in Kafka 3.6, which lacks support for JBOD storage entirely
+    * Once the feature gate is enabled by default after support for Kafka 3.8.0 is added, it would not prevent Kafka 3.7.0 users from using JBOD storage without knowing that it is early access only
 
 ### Supporting JBOD storage only with Kafka 3.8.0
 
