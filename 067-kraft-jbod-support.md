@@ -102,7 +102,8 @@ The `kraftMetadata` option will be ignored when used with ZooKeeper-based cluste
 
 ### Kafka configuration
 
-In the Kafka configuration, the `logs.dir` option will be configured in the same way as present.
+Currently, we only use the `log.dirs` option to configure the log directories.
+With this proposal, the `log.dirs` option will be configured in the same way as present.
 In addition to that, we will also configure the `metadata.log.dir` option that we do not use today.
 This option will be configured only for KRaft clusters.
 It will be set to the volume marked as `kraftMetadata: shared`.
@@ -118,7 +119,7 @@ However, such functionality is not planned as part of this proposal.
 The volume / directory used for the metadata log might change in several situations:
 * When a user changes the `kraftMetadata` flag and moves it to another volume
 * When the volume originally used for the metadata is removed
-* When a new volume with lower volume ID is added to the JBOD list
+* When a new volume with lower volume ID is added to the JBOD list and the `kraftMetadata` flag is not set
 
 Changes to the `metadata.log.dir` always require rolling update of the affected Kafka nodes.
 The change of the directory will be handled in the Kafka start-up scripts in our container image.
