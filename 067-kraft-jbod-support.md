@@ -17,14 +17,14 @@ Strimzi understands two different things under JBOD storage:
    If the `log.dirs` configuration option contains more than one directory, JBOD storage is used.
    If it contains only one directory, JBOD storage is not used regardless of whether the `Kafka` CR uses `type: jbod` storage or not.
 
-Until version 3.7.0, Apache Kafka nodes do not support the use of JBOD storage.
+Until version 3.7.0, Apache Kafka nodes do not support the use of JBOD storage in KRaft mode.
 When running Apache Kafka in KRaft mode with Strimzi, we support using the `type: jbod` storage, but only with one data volume present.
 
 ## Motivation
 
 In version 3.7.0, Apache Kafka introduces support for JBOD storage in KRaft as _early-access_.
 It is expected to be GA in Apache Kafka 3.8.0.
-Use of JBOD storage one of the popular features among Strimzi (and Apache Kafka) users and we want to support it.
+Use of JBOD storage is one of the popular features among Strimzi (and Apache Kafka) users and we want to support it.
 This proposal defines how the support will be added to Strimzi.
 It focuses on new KRaft-based Apache Kafka clusters.
 If needed, a separate proposal might cover any changes related to the migration process of ZooKeeper-based Kafka clusters using JBOD storage to KRaft.
@@ -152,7 +152,7 @@ However, it is not expected that this would be a common configuration because:
   And using a dedicated volume just for a metadata is not expected to be very efficient in terms of the utilization of the dedicated disk.
 
 Based on the above, there will be no support for dedicated metadata log volumes.
-This should help us to safe unnecessary effort on the development and testing of this feature.
+This should help us to save unnecessary effort on the development and testing of this feature.
 
 However, if needed, the support for it can be added later if we see the demand for it:
 * Update the API and add a new valid value `dedicated` to the `kraftMetadata` field in the storage definition
@@ -167,7 +167,7 @@ The examples YAML files will be adapted to cover the API changes:
 
 ### Gating
 
-The JBOD storage will be supported only for KRaft clusters running Kafka 3.7.0 and newer.
+The JBOD storage will be supported only for KRaft clusters running Kafka 3.7.0 and newer with KRaft metadata set to at least `3.7`.
 Since the JBOD support is expected to be become GA in Kafka 3.8.0, there is no plan to introduce a feature gate for it.
 Documentation and the YAML examples will warn users that JBOD storage is only in early access in Kafka 3.7.0.
 
