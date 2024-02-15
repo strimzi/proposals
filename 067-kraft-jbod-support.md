@@ -107,7 +107,7 @@ With this proposal, the `log.dirs` option will be configured in the same way as 
 In addition to that, we will also configure the `metadata.log.dir` option that we do not use today.
 This option will be configured only for KRaft clusters.
 It will be set to the volume marked as `kraftMetadata: shared`.
-Or - if the flag is not set for any of the volumes - it will be set to the node with the lowest configured volume ID.
+Or - if the flag is not set for any of the volumes - it will be set to the volume with the lowest configured ID.
 
 The currently used `metadata.log.dir` will be also stored in an annotation on the `StrimziPodSet` representing the node pool.
 This annotation will be used to detect changes to the metadata log volume and used to log such events.
