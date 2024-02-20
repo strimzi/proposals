@@ -126,7 +126,7 @@ The change of the directory will be handled in the Kafka start-up scripts in our
 The scripts will do the following:
 1) Try to find the existing metadata log
 2) Compare the current location of the metadata log with the desired location
-3) If the locations differ, the old metadata log will be deleted
+3) If the locations differ, the old metadata log will be deleted (Only the `__cluster-metadata-0` partition and related files - the regular message logs will not be touched)
 4) The broker is started and either continues to use the existing metadata log or creates a new one and syncs it from the (other) controller nodes
 
 This is a similar to a situation when a new node is started after a scale-up or to recover from a storage failure.
@@ -161,11 +161,13 @@ However, if needed, the support for it can be added later if we see the demand f
 * Configure this volume only as the `metadata.log.dir` and do not use it in `log.dirs`
 * Add a validation to prevent changing of an existing volume used for regular logs to metadata-only log without all partition-replicas being moved to other volumes first.
 
-### Example YAML files
+### Example YAML files and documentation
 
 The examples YAML files will be adapted to cover the API changes:
 * A new KRaft JBOD example will be added with multiple disks and the `kraftMetadata` used for one of them
 * The existing KRaft example with a single persistent volume will be adapted to add the `kraftMetadata: shared` option to the custom resource
+
+The documentation would suggest to Strimzi users to mark one of the volumes for being used for the metadata as that should help to make it more clear where the metadata are stored and might also help while helping users etc.
 
 ### Gating
 
