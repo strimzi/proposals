@@ -167,7 +167,8 @@ The examples YAML files will be adapted to cover the API changes:
 * A new KRaft JBOD example will be added with multiple disks and the `kraftMetadata` used for one of them
 * The existing KRaft example with a single persistent volume will be adapted to add the `kraftMetadata: shared` option to the custom resource
 
-The documentation would suggest to Strimzi users to mark one of the volumes for being used for the metadata as that should help to make it more clear where the metadata are stored and might also help while helping users etc.
+The documentation would recommend that Strimzi users designate one of the volumes specifically for storing metadata. 
+This would make the storage location for metadata clear, and might help with tasks such as maintenance.
 
 ### Gating
 
