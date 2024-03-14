@@ -3,7 +3,7 @@
 Providing support in the Strimzi Kubernetes Operator for following properties supported in the Strimzi HTTP Kafka Bridge:
 * `http.timeoutSeconds`   - For deleting inactive consumers after a timeout (disabled by default).
 * `http.consumer.enabled` - To enable/disable the HTTP consumer part (enabled by default).
-* `http.producer.enabled` - To enable/disable the HTTP producer part (enabled by default.
+* `http.producer.enabled` - To enable/disable the HTTP producer part (enabled by default).
 
 ## Current situation
 
