@@ -1,5 +1,3 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Enhance KafkaBridge resource with consumer inactivity timeout and HTTP consumer/producer parts enablement
 
 Providing support in the Strimzi Kubernetes Operator for following properties supported in the Strimzi HTTP Kafka Bridge:
@@ -17,62 +15,60 @@ Raised in the discussion here: https://github.com/strimzi/strimzi-kafka-operator
 
 ## Proposal
 
-Proposal is implemented here: https://github.com/strimzi/strimzi-kafka-operator/pull/9820, both Paolo and Jakub suggested to raise a proposal for the implementation of `http.consumer.enabled` and `http.producer.enabled` specifically, as it can be done in two ways, motivated here: https://github.com/strimzi/strimzi-kafka-operator/pull/9820#discussion_r1523500115.
+Proposal is implemented here: https://github.com/strimzi/strimzi-kafka-operator/pull/9820, both Paolo and Jakub suggested to raise a proposal for the implementation of `http.consumer.enabled` and `http.producer.enabled` specifically, as it can be done in two ways, current status is that you can just enable/disable the usage of consumer or producer on the HTTP side, which means being or not being able to use HTTP to producer and/or consume (so by using the corresponding Kafka part).
+Question is whether the enablement should be located as part of the `http` properties, or in each of the corresponding `consumer` or `producer` properties.
 
 ### Version 1 (which is currently implemented):
 
 Adding dedicated section under the `http` properties for defining enablement of producer and consumer:
 ```yaml
+apiVersion: "kafka.strimzi.io/v1beta2"
+kind: "KafkaBridge"
+metadata:
+  name: "test-kafka-bridge"
 spec:
+  replicas: 1
+  image: "my-test-image"
+  bootstrapServers: "my-cluster-kafka:9092"
   http:
-    type: object
-    properties:
-      timeoutSeconds:
-        type: integer
-        description: The timeout in seconds for deleting inactive consumers.
-      producer:
-        type: object
-        properties:
-          enabled:
-            type: boolean
-            description: Whether the HTTP producer should be enabled or disabled.
-        description: Configurations for the HTTP Producer.
-      consumer:
-        type: object
-        properties:
-          enabled:
-            type: boolean
-            description: Whether the HTTP consumer should be enabled or disabled.
-        description: Configurations for the HTTP Consumer.
+    timeoutSeconds: 60
+    producer:
+      enabled: false
+    consumer:
+      enabled: true
+  consumer:
+    config:
+      foo: "bar"
+  producer:
+    config:
+      foo: "buz"
+  enableMetrics: false
 ```
 
 ### Version 2:
 
 Adding enablement of producer and consumer to their own sections, example:
 ```yaml
+apiVersion: "kafka.strimzi.io/v1beta2"
+kind: "KafkaBridge"
+metadata:
+  name: "test-kafka-bridge"
 spec:
+  replicas: 1
+  image: "my-test-image"
+  bootstrapServers: "my-cluster-kafka:9092"
+  http:
+    timeoutSeconds: 60
   consumer:
-    type: object
-    properties:
-      enabled:
-        type: boolean
-        description: Whether the HTTP consumer should be enabled or disabled.
-      config:
-        x-kubernetes-preserve-unknown-fields: true
-        type: object
-        description: "The Kafka consumer configuration used for consumer instances created by the bridge. Properties with the following prefixes cannot be set: ssl., bootstrap.servers, group.id, sasl., security. (with the exception of: ssl.endpoint.identification.algorithm, ssl.cipher.suites, ssl.protocol, ssl.enabled.protocols)."
-    description: Kafka consumer related configuration.
+    enabled: true
+    config:
+      foo: "bar"
   producer:
-    type: object
-    properties:
-      enabled:
-        type: boolean
-        description: Whether the HTTP producer should be enabled or disabled.
-      config:
-        x-kubernetes-preserve-unknown-fields: true
-        type: object
-        description: "The Kafka producer configuration used for producer instances created by the bridge. Properties with the following prefixes cannot be set: ssl., bootstrap.servers, sasl., security. (with the exception of: ssl.endpoint.identification.algorithm, ssl.cipher.suites, ssl.protocol, ssl.enabled.protocols)."
-    description: Kafka producer related configuration.```
+    enabled: false
+    config:
+      foo: "buz"
+  enableMetrics: false
+```
 
 ## Affected/not affected projects
 
