@@ -109,8 +109,8 @@ spec:
   kafka:
     quotas:
       type: strimzi
-      produceQuota: 1000000
-      fetchQuota: 1000000
+      producerByteRate: 1000000
+      consumerByteRate: 1000000
       minAvailableBytesPerVolume: 5368709120
       excludedPrincipals:
         - my-special-user
@@ -119,8 +119,8 @@ spec:
 ```
 
 The `type: strimzi` quotas API will support the following fields:
-* `produceQuota` for setting the default produce quota
-* `fetchQuota` for setting the default fetch quota
+* `producerByteRate` for setting the default produce quota
+* `consumerByteRate` for setting the default fetch quota
 * `minAvailableBytesPerVolume` for setting the minimal required free space per volume as number of bytes (this field can be configured only when `minAvailableRatioPerVolume`is not set)
 * `minAvailableRatioPerVolume` for setting the minimal required free space per volume as percentage of the overall volume size (this field can be configured only when `minAvailableBytesPerVolume`is not set)
 * `excludedPrincipals` for setting a list of users to be excluded from the applied quotas
