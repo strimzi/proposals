@@ -91,6 +91,21 @@ The above code will be supplied with unit tests and documentation explaining how
 the new authorizer using Azure Active Directory B2C as an example.
 The setup will be similar for other identity providers, with the main difference being the configuration of the identity provider itself and the `acls` field.
 
+## Scalability
+
+This solution is intended for small to medium-sized clients.
+In practice the permissions that are granted to a client are usually at most a few dozen.
+In most cases in microservices, even less than ten as the client is usually designed to perform a single task,
+i.e., read from a single topic (or a few) and write to a single topic.
+If a client has hundreds of permissions it is likely that architecture is flawed or
+the client performs too many tasks, which is again a sign of a flawed architecture.
+
+10s of permissions in the JWT would be very little overhead.
+If the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
+
+Passing 100s of permissions would be too much of an overhead, so it is advised against.
+Passing 1000s of permissions is not feasible.
+
 ## Analysis of more popular identity providers
 
 Adding custom attributes/roles/groups to the token works as follows in the different auth solutions:
