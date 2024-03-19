@@ -34,7 +34,7 @@ Therefore, in this proposal we allow the ACLs to be passed as either.
 e.g. for a list of strings:
 ```json
 {
-  "<acls>": [
+  "acls": [
     "cluster_x:topic_1:read",
     ":topic2:write"
   ]
@@ -44,37 +44,52 @@ e.g. for a list of strings:
 and for a string:
 ```json
 {
-  "<acls>": "cluster_x:topic_1:read,topic2:write"
+  "acls": "cluster_x:topic_1:read,topic2:write"
 }
 ```
 
 The field name is configurable with default value `acls`.
 
-The new authorizer will be implemented as a new class, extending the
-[AclAuthorizer](https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/security/authorizer/AclAuthorizer.scala).
+The new authorizer will be implemented as a new class, similarly to
+[KeycloakAuthorizer](https://github.com/strimzi/strimzi-kafka-oauth/blob/229daee85b096804d16e2904c8c0f1add599cc99/oauth-keycloak-authorizer/src/main/java/io/strimzi/kafka/oauth/server/authorizer/KeycloakAuthorizer.java),
+making use of the [KeycloakRBACAuthorizer](https://github.com/strimzi/strimzi-kafka-oauth/blob/229daee85b096804d16e2904c8c0f1add599cc99/oauth-keycloak-authorizer/src/main/java/io/strimzi/kafka/oauth/server/authorizer/KeycloakRBACAuthorizer.java).
+This is in order to support both KRaft and Zookeeper.
 
 ```java
-public class JWTKafkaAuthorizer extends AclAuthorizer {
+public class JWTAuthorizer implements ClusterMetadataAuthorizer {
+    private StandardAuthorizer delegate;
+    private KeycloakRBACAuthorizer singleton;
+
     @Override
     public void configure(Map<String, ?> configs) {
-        // ... parse acls
+        // ...
     }
 
     @Override public List<AuthorizationResult> authorize(AuthorizableRequestContext requestContext, List<Action> actions) {
-        // ... get JWT from requestContext
+        KafkaPrincipal principal = requestContext.principal();
+        if (!(principal instanceof OAuthKafkaPrincipal)) {
+          // simple ACL delegation
+        }
+        BearerTokenWithPayload token = ((OAuthKafkaPrincipal) principal).getJwt();
+        // check token validity
+        BearerTokenWithPayload jwt = principal.getJwt();
+        ObjectNode payload = jwt.getClaimsJSON();
+        // get the acls from the payload
         // for each access request
         //   add to the result whether the topic or cluster claims allow the access request
         // return the result
     }
+    
+    // ...
 }
 ```
 
-Operations are described in the [Confluent docs](https://docs.confluent.io/platform/current/kafka/authorization.html#operations).
+Operations are described in the [Kafka docs](https://kafka.apache.org/documentation/#operations_in_kafka).
 Allowing an operation will follow the same logic as in [AclEntry.supportedOperations](https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/security/authorizer/AclEntry.scala#L99).
 
 The above code will be supplied with unit tests and documentation explaining how to set up Strimzi with
 the new authorizer using Azure Active Directory B2C as an example.
-The setup will be similar for other identity providers, with the main difference being the configuration of the identity provider itself and the `<acls>` field.
+The setup will be similar for other identity providers, with the main difference being the configuration of the identity provider itself and the `acls` field.
 
 ## Analysis of more popular identity providers
 
