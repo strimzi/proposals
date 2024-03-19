@@ -56,6 +56,14 @@ making use of the [KeycloakRBACAuthorizer](https://github.com/strimzi/strimzi-ka
 This is in order to support both KRaft and Zookeeper.
 
 ```java
+public class TopicAccess
+{
+  // topic name or pattern
+  public final String pattern;
+  // allowed operation
+  public final AclOperation operation;
+}
+
 public class JWTAuthorizer implements ClusterMetadataAuthorizer {
     private StandardAuthorizer delegate;
     private KeycloakRBACAuthorizer singleton;
@@ -74,12 +82,45 @@ public class JWTAuthorizer implements ClusterMetadataAuthorizer {
         // check token validity
         BearerTokenWithPayload jwt = principal.getJwt();
         ObjectNode payload = jwt.getClaimsJSON();
+
         // get the acls from the payload
-        // for each access request
-        //   add to the result whether the topic or cluster claims allow the access request
-        // return the result
+        List<TopicAccess> topicAccesses = extractTopicAccesses(topicAccessesRaw, prefix);
+        List<ClusterAccess> clusterAccesses = extractClusterAccesses(clusterAccessesRaw, prefix);
+
+        List<AuthorizationResult> results = new ArrayList<>(actions.size());
+        for (Action action : actions) {
+          if (checkTopicJwtClaims(topicAccesses, action) || checkClusterJwtClaims(clusterAccesses, action)) {
+              results.add(AuthorizationResult.ALLOWED);
+          } else {
+            results.add(AuthorizationResult.DENIED);
+          }
+        }
+        return results;
     }
-    
+
+    // sketch of how the topic access check could look like
+    public static boolean checkTopicJwtClaims(List<TopicAccess> topicAccesses, Action requestedAction) {
+    for (TopicAccess t : topicAccesses) {
+      switch (requestedAction.resourcePattern().resourceType()) {
+          case TOPIC:
+              if (matchTopicPattern(requestedAction, t) && checkTopicAccess(t.operation, requestedAction))
+                  return true;
+              break;
+          case CLUSTER: // ...
+          case GROUP: // ...
+      }
+      return false;
+    }
+
+    private static boolean checkTopicAccess(AclOperation claimedOperation, Action requestedAction) {
+      switch (requestedAction.operation()) {
+        case READ:
+          return List.of(ANY, ALL, READ).contains(claimedOperation);
+        case WRITE:
+        // ...
+      }
+    }
+
     // ...
 }
 ```
@@ -101,7 +142,8 @@ If a client has hundreds of permissions it is likely that architecture is flawed
 the client performs too many tasks, which is again a sign of a flawed architecture.
 
 10s of permissions in the JWT would be very little overhead.
-If the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
+Worst case, if the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
+In practice, for a service reading from 5 topics and writing to 1 topic, the overhead would be less than 100 bytes.
 
 Passing 100s of permissions would be too much of an overhead, so it is advised against.
 Passing 1000s of permissions is not feasible.
