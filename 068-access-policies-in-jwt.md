@@ -24,6 +24,22 @@ This solution will work in most cases and with most identity providers, however 
 scale to infinity.
 It will, however, be decoupled from Keycloak and therefore be more generic.
 
+## Why JWT as an authorization mechanism?
+
+The official [JWT](https://jwt.io/introduction) lists some use cases:
+
+> Authorization: This is the most common scenario for using JWT. Once the user is logged in, each subsequent request will include the JWT, allowing the user to access routes, services, and resources that are permitted with that token. Single Sign On is a feature that widely uses JWT nowadays, because of its small overhead and its ability to be easily used across different domains.
+
+JWT supports custom claims, which can be used to pass additional claims/roles.
+For example [Spring Security](https://docs.spring.io/spring-authorization-server/reference/guides/how-to-custom-claims-authorities.html) can pass both claims and roles in the JWT,
+which can be used to authorize the user.
+
+All OAuth2 providers support custom claims in the JWT in one way or another.
+We have listed the most popular ones in the [Support for roles or claims in popular identity providers](#support-for-roles-or-claims-in-popular-identity-providers) section with links to the documentation
+on how custom claims or roles are supported.
+
+The concept of roles can be directly mapped to the concept of access policies in Kafka.
+
 ## Proposal
 
 Identity providers support passing custom fields in the JWT token.
@@ -134,19 +150,39 @@ The setup will be similar for other identity providers, with the main difference
 
 ## Scalability
 
-This solution is intended for small to medium-sized clients.
-In practice the permissions that are granted to a client are usually at most a few dozen.
-In most cases in microservices, even less than ten as the client is usually designed to perform a single task,
-i.e., read from a single topic (or a few) and write to a single topic.
+This solution is intended for small to medium-sized clients,
+that have a couple 10s of permissions.
+Since permissions would be passed as strings, the overhead would be proportional to the number and kind of
+permissions.
 
-10s of permissions in the JWT would be very little overhead.
-Worst case, if the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
-In practice, for a service reading from 5 topics and writing to 1 topic, the overhead would be less than 100 bytes.
+10s of permissions in the JWT would be very little overhead in terms of computation.
+The main overhead is the size of the JWT.
+If the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
 
 Passing 100s of permissions would be too much of an overhead, so it is advised against.
 Passing 1000s of permissions is not feasible.
 
-## Analysis of more popular identity providers
+## Affected/not affected projects
+
+This proposal will not affect any other projects.
+It will be added as a new feature, an alternative implementation of the Keycloak Authorizer.
+
+## Compatibility
+
+This proposal is backward compatible and will not affect any existing functionality.
+
+## Rejected alternatives
+
+There do not currently exist alternatives apart from the Keycloak Authorizer.
+Using another OAuth2 provider is not possible without implementing a new authorizer,
+which is tightly coupled with said provider.
+While that is an alternative, we either have to let every user implement their own authorizer,
+or we have to implement a new authorizer for every OAuth2 provider.
+This is not feasible.
+Using more generic solutions, such as OpenFGA, overcomplicates the approach to the problem.
+Such solutions would need to be implemented on top of OAuth2, while OAuth2 works by default with JWT.
+
+## Support for roles or claims in popular identity providers
 
 Adding custom attributes/roles/groups to the token works as follows in the different auth solutions:
 
@@ -201,23 +237,3 @@ Supports a list of strings
 
 - https://developer.okta.com/docs/guides/customize-tokens-returned-from-okta/main/
 - https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/
-
-## Affected/not affected projects
-
-This proposal will not affect any other projects.
-It will be added as a new feature, an alternative implementation of the Keycloak Authorizer.
-
-## Compatibility
-
-This proposal is backward compatible and will not affect any existing functionality.
-
-## Rejected alternatives
-
-There do not currently exist alternatives apart from the Keycloak Authorizer.
-Using another OAuth2 provider is not possible without implementing a new authorizer,
-which is tightly coupled with said provider.
-While that is an alternative, we either have to let every user implement their own authorizer,
-or we have to implement a new authorizer for every OAuth2 provider.
-This is not feasible.
-Using more generic solutions, such as OpenFGA, overcomplicates the approach to the problem.
-Such solutions would need to be implemented on top of OAuth2, while OAuth2 works by default with JWT.
