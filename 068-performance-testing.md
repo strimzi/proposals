@@ -1,141 +1,311 @@
-# Strimzi Performance Testing
+#  Introducing Performance Testing
 
-## Motivation for Performance testing in Strimzi
+## Motivation
 
-In the world of distributed systems, performance is not merely a feature but a fundamental aspect that dictates the
-reliability, scalability, and efficiency of the system.
-For Apache Kafka clusters managed by Strimzi, where data throughput, latency, and resource utilization are critical,
-ensuring optimal performance is paramount.
-As enterprises rely on Kafka for real-time data processing and streaming analytics, the performance of the Strimzi operators
-directly influences the operational capabilities and service quality experienced by end-users.
+In the world of distributed systems, performance is one of the most important non-functional requirements, which has an impact on system design, reliability, scalability, and efficiency.
+For Apache Kafka clusters managed by Strimzi, where data throughput, latency, and resource utilization are critical, ensuring optimal performance is paramount.
+As enterprises rely on Kafka for real-time data processing and streaming analytics, the performance of the Strimzi operators directly influences the operational capabilities and service quality experienced by end-users.
 
-There are a benefits if we introduce performance testing within the Strimzi such as:
+Benefits of performance tests:
 1. **Uphold High Performance Standards:**
     - Performance testing ensures that Strimzi not only meets but exceeds the performance standards expected by users for managing Kafka clusters in diverse environments.
 2. **Enable Continuous Improvement:**
     - With dedicated performance benchmarks, Strimzi can continually assess and enhance its components, driving innovation while maintaining performance integrity.
 3. **Build Confidence Among Users:**
-    - By demonstrating a commitment to performance excellence, Strimzi strengthens trust with its user community, reassuring them that their Kafka infrastructures are managed with utmost efficiency.
+    - By demonstrating a commitment to performance excellence, Strimzi strengthens trust with its user community, reassuring them that their Kafka infrastructures are managed with utmost efficiency. 
 
-Moreover, we can integrate these performance tests into our Azure pipelines, enabling automatic checks to identify
-if a PR could cause a significant performance degradation, thereby ensuring every change is vetted for efficiency before being merged (future vision).
-This integration represents a proactive step towards maintaining high-performance standards and continuous improvement in Strimzi's development process.
+## Proposal: Integration within the strimzi-kafka-operator
 
-There are several considerations for designing such testing, each with its own set of advantages and disadvantages, which are discussed in the subsequent section.
+We propose integrating performance testing directly alongside existing system tests, leveraging the established infrastructure and testing utilities. 
+This method ensures that performance and system tests can share resources efficiently, streamlines the development process, facilitates immediate feedback on performance impacts, and reduces overhead.
 
-## Implementation Approaches
+**Advantages**:
+- Streamlines the development process by using existing test infrastructure.
+- Facilitates immediate feedback on performance impacts within the same testing framework used for system tests.
+- Reduces the overhead of maintaining separate modules for system and performance tests.
 
-I suggest a few possible methods for integrating performance testing into Strimzi, each characterized by its unique benefits and drawbacks.
-Our decision on which path to follow should align with our specific requirements and goals.
+### Core parts
 
-### Approach 1: Integration within the strimzi-kafka-operator STs Module
+The following strategies will be core to our implementation:
 
-This method involves incorporating performance testing directly into the existing system test module of our strimzi-kafka-operator repository.
-It's a relatively straightforward strategy, leveraging the wealth of methods, resources, and components already available
-within the repository, such as ResourceManager, LogCollector, and MetricsCollector.
-This integration significantly lowers the complexity and duplication of effort compared to setting up a separate dedicated repository for performance tests.
-One of the drawbacks that we would need to add a new classes like PerformanceReporting and tools for generating Markdown documents, among others.
-However, this integration might complicate the use of the system test module as a cohesive unit, given that certain
-classes would be specifically tailored for performance testing, while others remain focused on system testing.
-Despite this, embedding performance checks into our PR process would be more straightforward, providing
-a robust mechanism to detect performance degradations introduced by new changes.
+1. **JUnit5 Usage:** 
+   1. Employ JUnit5 for structuring and executing performance tests. This choice allows us to benefit from JUnit5's advanced features such as dynamic tests, parameterized tests, and its powerful extension model, enhancing our test design and flexibility.
+2. **Resource Management:** 
+   1. Utilize the `ResourceManager` from the system test module to manage the lifecycle of resources.
+   2. This approach ensures efficient setup, teardown, and management of Kafka clusters, topics, and other necessary components across both performance and system tests.
+3. **Metrics Collection:** 
+   1. Base our metrics collection on the system test module's `MetricsCollector`, with plans to possibly extend this functionality in the future from an external library like [Test Frame](https://github.com/skodjob/test-frame). 
+   2. Additionally, introduce specialized collectors such as `TopicOperatorMetricsCollector` to gather detailed metrics relevant to the Strimzi Topic Operator, tailoring our data gathering to the nuances of Kafka and Strimzi.
+4. **Performance Reporting:** 
+   1. Develop a performance test reporting mechanism. This component will be essential for documenting and analyzing the outcomes of performance tests. 
+   2. The reporter should be capable of generating detailed summaries and insights, 
+   ideally supporting formats conducive to both human reading and automated parsing, such as Markdown or structured JSON.
 
-#### Note on Release Lifecycle:
+**Including within the `systemtest` module:** Integrate performance tests to ensure they coexist seamlessly with system tests, potentially categorizing tests to maintain clarity and prevent any confusion between system and performance testing efforts (i.e., using performance profile). 
 
-Embedding performance tests within the strimzi-kafka-operator's system test module means performance
-testing phases are tightly coupled with the operator's release cycle.
-This could streamline the release process but might also necessitate additional considerations for test maintenance
-and updates aligned with each release.
+### CI: Azure Pipelines
 
----
+We assume Azure machines may not suffice for all performance tests, meaning we anticipate that lower-complexity performance tests, 
+not requiring as much memory/CPU, could run on such infrastructure. 
+However, for tests needing more memory in the context of performance, we prefer another approach (i.e., using a Testing farm) to execute these tests.
 
-Nevertheless, this approach limits the applicability of the performance tests to the strimzi-kafka-operator, excluding potential integration
-with other repositories such as strimzi-kafka-bridge and strimzi-kafka-oauth, leading us to consider a second approach.
+### CI: Possible integration with Testing Farm 
 
-### Approach 2: Creating a Dedicated Repository for Performance testing
+Special consideration will be given to the potential integration of performance tests with Testing farm, utilizing higher-capacity machines than those available in Azure, to ensure comprehensive performance evaluation. 
+This future integration into our Continuous Integration (CI) pipeline will help detect any significant performance degradations introduced by new changes, safeguarding the efficiency and reliability of Strimzi-managed Kafka clusters.
 
-This method proposes creating a separate, dedicated repository for performance testing across the Strimzi ecosystem,
-addressing some challenges of the first approach while introducing new considerations.
-A distinct advantage of this strategy is its facilitation of integration with various Strimzi projects,
-enhancing the flexibility and reach of performance testing.
+We could basically automate this in our PRs or by manual trigger as first try:
+```bash
+/packit test --labels=performance
+```
+So, as first step we could add this manual trigger and if we would see that such job would be stable and would not cause any race conditions or false alarms we could include this in our PR as form of performance check.
 
-However, this approach requires re-implementing foundational components such as ResourceManager, SetupClusterOperator, LogCollector, and MetricsCollector.
-While this might seem daunting, leveraging a framework like [Test Frame](https://github.com/skodjob/test-frame) could streamline the process.
-Test Frame provides a robust starting point with essential classes that can be easily extended to fit our needs,
-such as developing a TopicMetricsCollector by extending the MetricsCollector class.
+## Implementation details
 
-Despite these benefits, integrating this dedicated repository with the strimzi-kafka-operator poses a more complex challenge.
-Achieving seamless integration requires careful planning and coordination, ensuring that performance tests can be effectively
-executed and monitored across different components of the Strimzi ecosystem.
+As mentioned above we will have a set of test cases, which could be run by specification of the concrete test profile.
+Execution will be handled by JUnit5 identically as we are using it in `systemtests` module.
 
-#### Note on Release Lifecycle:
+### Test case example
 
-A dedicated repository for performance testing introduces a separate release lifecycle for the testing framework itself.
-This separation offers flexibility in testing across different versions of Strimzi components but requires careful
-synchronization to ensure compatibility and relevance of performance tests to the versions of Strimzi components being tested.
-It also allows for independent evolution of the testing framework, accommodating new testing needs and methodologies
-without being constrained by the release cycles of the Strimzi components it tests.
+As an illustrative example, we can do the following:
+1. create a set of possible configuration for SUT (i.e., system under test). 
+In this case it's Topic Operator, where we want to see if configuring different batch sizes and batch linger times has
+a huge impact on the system.
+2. create a test case instrumented by a mentioned configuration
+```java
+private static Stream<Arguments> provideConfigurationsForAliceBulkBatchUseCase() {
+    return Stream.of(
+            Arguments.of("100", "10", false)      // Lower batch size with short linger time for comparison
+            Arguments.of("500", "10", false),     // Increased batch size with short linger time
+            Arguments.of("1000", "10", false),    // Large batch size with short linger time
+            Arguments.of("100", "30000", false),  // Lower batch size with 30 seconds linger time
+            Arguments.of("500", "30000", false),  // Increased batch size with 30 seconds linger time
+            Arguments.of("1000", "30000", false), // Large batch size with 30 seconds linger time
+            Arguments.of("100", "100", false),    // Lower batch size with longer linger time for extended comparison
+            Arguments.of("500", "100", false),    // Increased batch size with longer linger time
+            Arguments.of("1000", "100", false)    // Large batch size with longer linger time
+    );
+}
+```
 
----
+```java
+@ParameterizedTest
+@MethodSource("provideConfigurationsForAliceBulkBatchUseCase")
+public void testAliceBulkBatchUseCase(String maxBatchSize, String maxBatchLingerMs, boolean withClientsEnabled) throws IOException {
+    final int numberOfTopics = 500; // Number of topics to test
+    // other variables prohibited for brevity
+    // ...
+        
+    try {
+        // 1a. setup phase: creation of SUT i.e., Kafka and Topic Operator in this case
+        // ...        
+        resourceManager.createResourceWithWait(
+                KafkaTemplates.kafkaMetricsConfigMap(testStorage.getNamespaceName(), testStorage.getClusterName()),
+                KafkaTemplates.kafkaWithMetrics(testStorage.getNamespaceName(), testStorage.getClusterName(), brokerReplicas, controllerReplicas)
+                .editSpec()
+                    .editEntityOperator()
+                        .editTopicOperator()
+                            .withReconciliationIntervalSeconds(10)
+                        .endTopicOperator()
+                        .editOrNewTemplate()
+                            .editOrNewTopicOperatorContainer()
+                            // Finalizers ensure orderly and controlled deletion of KafkaTopic resources.
+                            // In this case we would delete them automatically via ResourceManager
+                                .addNewEnv()
+                                    .withName("STRIMZI_USE_FINALIZERS")
+                                    .withValue("false")
+                                .endEnv()
+                                .addNewEnv()
+                                    .withName("STRIMZI_ENABLE_ADDITIONAL_METRICS")
+                                    .withValue("true")
+                                .endEnv()
+                                .addNewEnv()
+                                    .withName("STRIMZI_MAX_QUEUE_SIZE")
+                                    .withValue(String.valueOf(Integer.MAX_VALUE))
+                                .endEnv()
+                                .addNewEnv()
+                                    .withName("STRIMZI_MAX_BATCH_SIZE")
+                                    .withValue(maxBatchSize)
+                                .endEnv()
+                                .addNewEnv()
+                                    .withName("MAX_BATCH_LINGER_MS")
+                                    .withValue(maxBatchLingerMs)
+                                .endEnv()
+                            .endTopicOperatorContainer()
+                        .endTemplate()
+                    .endEntityOperator()
+                .endSpec()
+                .build(),
+                ScraperTemplates.scraperPod(testStorage.getNamespaceName(), testStorage.getScraperName()).build());
 
-This approach may appear more effective than the initial one, yet it necessitates the creation of numerous support classes for:
+        // 1b. setup phase: Create a Thread for scraping metrics
+        this.topicOperatorCollector = new TopicOperatorMetricsCollector.Builder()
+                .withScraperPodName(this.testStorage.getScraperPodName())
+                .withNamespaceName(this.testStorage.getNamespaceName())
+                .withComponentType(ComponentType.TopicOperator)
+                .withComponentName(this.testStorage.getClusterName())
+                .build();
 
-1. Extracting metrics from Kubernetes Pods components
-2. Monitoring the entire lifecycle
-3. Documenting (i.e., reporting) the outcomes of performance tests
-    4. this could all metrics scraped during performance test
-    5. and then reporting via table of each parameter monitored during such test
+        this.topicOperatorPollingThread = new TopicOperatorPollingThread(this.topicOperatorCollector, "strimzi.io/cluster=" + this.testStorage.getClusterName());
+        this.daemonThread = new Thread(this.topicOperatorPollingThread);
+        this.daemonThread.setDaemon(true); // Set as daemon so it doesn't prevent JVM shutdown
+        this.daemonThread.start();
 
-For instance such result from tool could look like this:
+        // 2a. Exercise: Creation of KafkaTopics
+        startTime = System.nanoTime();
 
-| Experiment   | Number of Topics   | Creation Time (s)   | Deletion Time (s)   | Total Test Time (s)   | STRIMZI_MAX_BATCH_SIZE   | MAX_BATCH_LINGER_MS   | Reconciliation Max Duration (s)   | Max Batch Size   | Max Queue Size   | UTO Event Queue Time (s)   | Describe Configs Max Duration (s)   | Create Topics Max Duration (s)   | Reconciliations Max Duration (s)   | Update Status Max Duration (s)   | Max System Load Average 1m Per Core (%)   | Max JVM Memory Used (MBs)   |
-|--------------|--------------------|---------------------|---------------------|-----------------------|--------------------------|-----------------------|-----------------------------------|------------------|------------------|----------------------------|-------------------------------------|----------------------------------|------------------------------------|----------------------------------|-------------------------------------------|-----------------------------|
-| 1            | 500                | 80.582              | 137.925             | 218.507               | 500                      | 30000                 | 0.620                             | 364.000          | 261.000          | 598.308                    | 0.234549834                         | 0.479047522                      | 0.620329716                        | 0.107349124                      | 17.9%                                     | 181.68                      |
-| 2            | 500                | 84.553              | 169.537             | 254.090               | 1000                     | 30000                 | 7.281                             | 385.000          | 324.000          | 3091.712                   | 0.237088658                         | 6.530933468                      | 7.281358907                        | 0.307568988                      | 22.8%                                     | 172.74                      |
-| 3            | 500                | 81.317              | 149.702             | 231.020               | 100                      | 30000                 | 0.584                             | 100.000          | 217.000          | 375.047                    | 0.128191095                         | 0.469570205                      | 0.584339784                        | 0.141746915                      | 30.4%                                     | 176.84                      |
-| 4            | 500                | 80.479              | 192.831             | 273.310               | 1000                     | 100                   | 0.650                             | 343.000          | 204.000          | 737.818                    | 0.243653084                         | 0.507064354                      | 0.650260969                        | 0.222171153                      | 17.0%                                     | 169.38                      |
-| 5            | 500                | 81.132              | 181.297             | 262.429               | 100                      | 100                   | 0.694                             | 100.000          | 284.000          | 533.664                    | 0.096442905                         | 0.498362223                      | 0.693851682                        | 0.190127359                      | 25.0%                                     | 191.59                      |
-| 6            | 500                | 81.278              | 139.751             | 221.029               | 100                      | 10                    | 0.464                             | 100.000          | 274.000          | 399.806                    | 0.0966407                           | 0.357316642                      | 0.463936625                        | 0.104226111                      | 14.4%                                     | 190.14                      |
-| 7            | 500                | 82.744              | 161.603             | 244.347               | 500                      | 100                   | 0.732                             | 405.000          | 291.000          | 884.769                    | 0.267927291                         | 0.590955106                      | 0.731769998                        | 0.264752859                      | 29.9%                                     | 170.65                      |
-| 8            | 500                | 80.222              | 135.259             | 215.481               | 500                      | 10                    | 0.697                             | 384.000          | 226.000          | 628.528                    | 0.227750243                         | 0.564784403                      | 0.697055392                        | 0.141776211                      | 24.9%                                     | 182.10                      |
-| 9            | 500                | 81.656              | 159.475             | 241.131               | 1000                     | 10                    | 0.595                             | 345.000          | 272.000          | 710.384                    | 0.221294127                         | 0.462604201                      | 0.595031656                        | 0.112158161                      | 18.8%                                     | 180.02                      |
+        // Create topics
+        KafkaTopicScalabilityUtils.createTopicsViaK8s(testStorage.getNamespaceName(), testStorage.getClusterName(), topicNamePrefix,
+                numberOfTopics, 12, 3, 1);
 
-Consider eliminating points 2 and 3 by utilizing an existing performance tool that encompasses all these functionalities.
+        KafkaTopicScalabilityUtils.waitForTopicsReady(testStorage.getNamespaceName(), topicNamePrefix, numberOfTopics);
 
-### Approach 3: Using known performance tools
+        endTime = System.nanoTime();
+        createTopicsTime = endTime - startTime;
+        LOGGER.info("Time taken to create {} topics: {} ms", numberOfTopics, createTopicsTime);
 
-[Grafana k6](https://k6.io/) is an open-source performance testing tool designed to assess the load capacity and performance of various systems and infrastructure.
-It allows developers and testers to simulate traffic and user behavior towards applications, APIs,
-and services to identify potential bottlenecks and performance limits under controlled test environments.
-k6 integrates seamlessly with [Grafana](https://grafana.com/), a popular open-source analytics and monitoring solution,
-enabling users to visualize test results and performance metrics in real-time through comprehensive dashboards.
-This integration facilitates easy analysis and interpretation of data, making it simpler for teams to make informed
-decisions based on the performance characteristics of their applications.
+        endTimeWhole = System.nanoTime();
+        totalTimeWhole = endTimeWhole - startTime;
 
-One of the key features of k6 is its extensibility through extensions, which allows users to tailor the tool to their specific testing needs.
-For instance, the ability to extend k6's functionality to work with specific technologies like Kubernetes through
-the xk6-kubernetes extension showcases its flexibility.
-Similarly, this extensibility opens up the possibility of developing a dedicated extension for Strimzi, enabling specialized
-performance testing for Strimzi-managed Apache Kafka clusters.
-This approach would allow for targeted load testing of Kafka operators, providing insights into how Strimzi components
-behave under various load conditions, thereby ensuring that Strimzi deployments are optimized for performance and reliability.
+        LOGGER.info("Time taken to create {} topics and send and recv: {} messages: {} ms", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWhole);
+        
+        // Start measuring time for deletion of all topics
+        long deletionStartTime = System.nanoTime();
 
-The primary challenge is that developing such an extension requires proficiency in Go/Javascript,
-which might be less familiar to our community accustomed to Java.
+        // 2b. Exercise: Deletion of KafkaTopics
+        ResourceManager.getInstance().deleteResourcesOfType(KafkaTopic.RESOURCE_KIND);
 
-####  Notes on Release Cycle for Using k6:
+        long deletionEndTime = System.nanoTime();
+        totalDeletionTime = deletionEndTime - deletionStartTime;
+        LOGGER.info("Time taken to delete {} topics: {} ms", numberOfTopics, totalDeletionTime);
 
-The release cycle for incorporating k6 into Strimzi testing would bear similarities to the dedicated repository approach,
-with both pros and cons.
-One advantage is the potential for rapid adoption and integration of new performance testing methodologies,
-given k6's established user base and continuous updates.
-However, a possible downside is the need to maintain compatibility with Strimzi's evolving infrastructure,
-possibly requiring frequent updates to any Strimzi-specific extensions or configurations within k6.
+        endTimeWhole = System.nanoTime();
+        totalTimeWhole = endTimeWhole - startTime;
+
+        LOGGER.info("Total time taken to create {} topics, send and receive {} messages, and delete topics: {} ms", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWhole);
+    } finally {
+        // 4a. teardown: Gracefully stop the topic-operator thread
+        // 4b: teardown: Now, it's safe to log performance data as the collection thread has been stopped
+        PerformanceReporter.logPerformanceData(
+                numberOfTopics, numberOfClientInstances, NUMBER_OF_MESSAGES, createTopicsTime, totalSendAndRecvTime, 
+                totalDeletionTime, totalTimeWhole, this.testStorage, ACTUAL_TIME, Environment.PERFORMANCE_DIR, 
+                maxBatchSize, maxBatchLingerMs, this.topicOperatorPollingThread.getMetricsHistory()
+        );
+    }
+}
+```
+
+Note that this is just an one possible example. There is no need to use @ParametrizedTest.
+We could also use simple @Test to edge performance cases.
+
+### Gathered metrics
+
+During test execution we need to scrape metrics from the `SUT` pods. 
+Therefore, one way how to tackle such problem is that we could use a `Thread`, which would run a infinite loop, where we would scrape all related metrics f.e.:
+```java
+@Override
+public void run() {
+    LOGGER.info("Thread started with selector: {}", this.selector);
+
+    while (!Thread.currentThread().isInterrupted()) {
+        this.topicOperatorMetricsCollector.collectMetricsFromPods();
+        // record specific time when metrics were collected
+        Long timeWhenMetricsWereCollected = System.nanoTime();
+
+        Map<String, List<Double>> currentMetrics = new HashMap<>();
+
+        // metrics
+        currentMetrics.put("strimzi_alter_configs_duration_seconds_sum", this.topicOperatorMetricsCollector.getAlterConfigsDurationSecondsSum(this.selector));
+        // derived Metrics
+        // the total time spent on the UTO's event queue. -> (reconciliations_duration - (internal_op0_duration + internal_op1_duration,...)).
+        currentMetrics.put("strimzi_total_time_spend_on_uto_event_queue_duration_seconds",
+                this.calculateTotalTimeSpendOnUtoEventQueueDurationSeconds(this.selector));
+
+        try {
+            // Sleep for a predefined interval before polling again
+            Thread.sleep(5000); // Poll every 5 seconds, adjust as needed
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // restore interrupted status
+            LOGGER.error("Thread was interrupted", e);
+        } catch (Exception e) {
+            LOGGER.error("Exception in thread", e);
+        } finally {
+            LOGGER.info("Thread finishing");
+        }
+    }
+}
+```
+
+And in the test case we would simply interrupt such `Thread` to finish with scraping.
+Also, we could make a interval for scraping such metrics configurable via environment variable or system property.
+
+Moreover, we propose that all metrics would be gathered in the `systemtest/target/performance` directory, with same pattern as we do it with the `logs` directory. 
+For instance from performance directory we could:
+```bash
+performance/
+└── 2024-03-16-13-46-48
+    └── alice
+        └── max-batch-size-100-max-linger-time-10
+            ├── jvm_gc_memory_allocated_bytes_total.txt
+            ├── jvm_gc_pause_seconds_max{action="end of minor GC",cause="G1 Evacuation Pause",gc="G1 Young Generation",}.txt
+            ...
+            ├── strimzi_add_finalizer_duration_seconds_max.txt
+            ├── strimzi_add_finalizer_duration_seconds_sum.txt
+            ...
+            ├── strimzi_update_status_duration_seconds_sum.txt
+            ├── system_cpu_count.txt
+            ├── system_cpu_usage.txt
+            ├── system_load_average_1m.txt
+            ├── system_load_average_per_core_percent.txt
+            └── test-performance-metrics.txt
+... # more dates
+```
+where each of these files contains values, scraped by `Thread` in the test. 
+This is content of the `system_load_average_1m.txt` file:
+```bash
+Timestamp: 2024-03-16-13-51-13-997, Values: [3.87]
+... # other records skipped for brevity
+Timestamp: 2024-03-16-13-57-59-797, Values: [6.12]
+Timestamp: 2024-03-16-13-58-05-067, Values: [6.19]
+```
+
+And these values/data could be used in the next phase (i.e., analyzing and reporting).
+
+### Analyze and report 
+
+We propose, that a `Reporter.class`, which is responsible for retrieving metrics from `<module-name>/target/performance` directory. 
+Reporter will generate a table of all related metrics to that specific test case.
+For instance for Topic Operator performance test case such report could look like this:
+
+| Experiment | Number of Topics | Creation Time (s) | Deletion Time (s) | Total Test Time (s) | STRIMZI_MAX_BATCH_SIZE | MAX_BATCH_LINGER_MS | Reconciliation Max Duration (s) | Max Batch Size | Max Queue Size | UTO Event Queue Time (s) | Describe Configs Max Duration (s) | Create Topics Max Duration (s) | Reconciliations Max Duration (s) | Update Status Max Duration (s) | Max System Load Average 1m Per Core (%) | Max JVM Memory Used (MBs) |
+|------------|------------------|-------------------|-------------------|---------------------|------------------------|---------------------|---------------------------------|----------------|----------------|--------------------------|-----------------------------------|--------------------------------|----------------------------------|--------------------------------|-----------------------------------------|---------------------------|
+| 1          | 500              | 80.582            | 137.925           | 218.507             | 500                    | 30000               | 0.620                           | 364.000        | 261.000        | 598.308                  | 0.234549834                       | 0.479047522                    | 0.620329716                      | 0.107349124                    | 17.9%                                   | 181.68                    |
+| 2          | 500              | 84.553            | 169.537           | 254.090             | 1000                   | 30000               | 7.281                           | 385.000        | 324.000        | 3091.712                 | 0.237088658                       | 6.530933468                    | 7.281358907                      | 0.307568988                    | 22.8%                                   | 172.74                    |
+| ...        | ...              | ...               | ...               | ...                 | ...                    | ...                 | ...                             | ...            | ...            | ...                      | ...                               | ...                            | ...                              | ...                            | ...                                     | ...                       |
+
+We could use such report as a `post-processing` phase after test execution and all needed metrics were gathered from Pods.
+
+### CI: Testing farm
+
+We copy pattern from the system tests and just adapt specific label to it.
+
+## Rejected Alternatives:
+
+1. **Creating a performance module within strimzi-kafka-operator for exclusive performance testing**: 
+Initially considered, this strategy involved establishing a separate performance module within the Strimzi project to house all performance-related tests and tools. 
+Despite its potential for clean separation of performance tests from system tests and focused development on performance capabilities, this approach was ultimately not chosen. 
+The decision favored a more integrated method, using the existing `systemtest` module to leverage established resources and simplify the testing process. 
+The advantages of a dedicated performance module, such as organizational clarity and specialized tool integration, were weighed against the benefits of integration within the existing framework.
+2. **Creating a Dedicated Repository for Performance Testing**:
+While offering flexibility and the potential for broader ecosystem testing, this approach requires significant additional 
+development and maintenance efforts. The need to recreate foundational components and ensure their integration with each 
+Strimzi project adds complexity and resource demands.
+3. **Adoption of external performnace tools (e.g., Grafana k6)**:
+Despite its powerful features and extensibility, this option introduces a steep learning curve due to the requirement for proficiency in Go/Javascript, 
+which may not align with the skill set of the existing Strimzi community. 
+Additionally, it necessitates the development and maintenance of Strimzi-specific extensions, complicating the testing process.
 
 ## Conclusion
 
-Wrapping this up, diving into performance testing within Strimzi isn't just about keeping things running smoothly—it's crucial.
-Whether we're thinking about embedding tests right into the strimzi-kafka-operator, setting up a whole new repo for the cause,
-or getting our hands on tools like Grafana k6, each path has its perks and quirks.
-It's about striking the right balance that fits our goals and the ever-evolving Strimzi landscape.
-Leveraging Grafana k6 might ask for a bit of a learning curve, but it’s a solid bet for making sure 
+Integrating performance testing within the `strimzi-kafka-operator`'s system test module offers a streamlined, efficient approach to ensuring the performance standards of Strimzi-managed Kafka clusters are met and exceeded. 
+This strategy leverages existing infrastructure and components while providing a clear focus on performance, enabling continuous improvement and building confidence among users.
