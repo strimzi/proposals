@@ -26,7 +26,7 @@ This method ensures that performance and system tests can share resources effici
 
 ### Core parts
 
-The following strategies will be core to our implementation:
+The following activities will be core to our implementation:
 
 1. **JUnit5 Usage:** 
    1. Employ JUnit5 for structuring and executing performance tests. This choice allows us to benefit from JUnit5's advanced features such as dynamic tests, parameterized tests, and its powerful extension model, enhancing our test design and flexibility.
@@ -68,7 +68,7 @@ Execution will be handled by JUnit5 identically as we are using it in `systemtes
 ### Test case example
 
 As an illustrative example, we can do the following:
-1. create a set of possible configuration for SUT (i.e., system under test). 
+1. create a set of possible configurations for the system under test (SUT). 
 In this case it's Topic Operator, where we want to see if configuring different batch sizes and batch linger times has
 a huge impact on the system.
 2. create a test case instrumented by a mentioned configuration
@@ -89,6 +89,19 @@ private static Stream<Arguments> provideConfigurationsForAliceBulkBatchUseCase()
 ```
 
 ```java
+/**
+ * This test case is designed to simulate a bulk ingestion/batch use case, as might be required by a user like Alice.
+ * Alice's scenario involves the need to rapidly create hundreds of topics, perform data ingestion in parallel across all these topics,
+ * subsequently consume from them in parallel, and finally delete all the topics. This use case is particularly focused on minimizing
+ * the latency associated with the bulk creation and deletion of topics. In such scenarios, Kafka's performance and its ability to handle
+ * batching operations efficiently become crucial factors.
+ *
+ * The test leverages Kafka's batching capabilities for both creation and deletion of topics to aid in this process. By using a larger batch size
+ * and a longer linger time, the test aims to optimize the throughput and minimize the operational latency.
+ *
+ * This test scenario is implemented to help users in understanding the performance characteristics of Kafka when dealing with
+ * high volumes of topics and to assist in configuring their systems for optimal performance during bulk operations.
+ */
 @ParameterizedTest
 @MethodSource("provideConfigurationsForAliceBulkBatchUseCase")
 public void testAliceBulkBatchUseCase(String maxBatchSize, String maxBatchLingerMs, boolean withClientsEnabled) throws IOException {
@@ -152,7 +165,7 @@ public void testAliceBulkBatchUseCase(String maxBatchSize, String maxBatchLinger
         this.daemonThread.start();
 
         // 2a. Exercise: Creation of KafkaTopics
-        startTime = System.nanoTime();
+        startTimeNs = System.nanoTime();
 
         // Create topics
         KafkaTopicScalabilityUtils.createTopicsViaK8s(testStorage.getNamespaceName(), testStorage.getClusterName(), topicNamePrefix,
@@ -161,34 +174,34 @@ public void testAliceBulkBatchUseCase(String maxBatchSize, String maxBatchLinger
         KafkaTopicScalabilityUtils.waitForTopicsReady(testStorage.getNamespaceName(), topicNamePrefix, numberOfTopics);
 
         endTime = System.nanoTime();
-        createTopicsTime = endTime - startTime;
-        LOGGER.info("Time taken to create {} topics: {} ms", numberOfTopics, createTopicsTime);
+        createTopicsTimeNs = endTimeNs - startTimeNs;
+        LOGGER.info("Time taken to create {} topics: {} ns", numberOfTopics, createTopicsTimeNs);
 
-        endTimeWhole = System.nanoTime();
-        totalTimeWhole = endTimeWhole - startTime;
+        endTimeWholeNs = System.nanoTime();
+        totalTimeWholeNs = endTimeWholeNs - startTimeNs;
 
-        LOGGER.info("Time taken to create {} topics and send and recv: {} messages: {} ms", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWhole);
+        LOGGER.info("Time taken to create {} topics and send and recv: {} messages: {} ns", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWholeNs);
         
         // Start measuring time for deletion of all topics
-        long deletionStartTime = System.nanoTime();
+        long deletionStartTimeNs = System.nanoTime();
 
         // 2b. Exercise: Deletion of KafkaTopics
         ResourceManager.getInstance().deleteResourcesOfType(KafkaTopic.RESOURCE_KIND);
 
-        long deletionEndTime = System.nanoTime();
-        totalDeletionTime = deletionEndTime - deletionStartTime;
-        LOGGER.info("Time taken to delete {} topics: {} ms", numberOfTopics, totalDeletionTime);
+        long deletionEndTimeNs = System.nanoTime();
+        totalDeletionTimeNs = deletionEndTimeNs - deletionStartTimeNs;
+        LOGGER.info("Time taken to delete {} topics: {} ns", numberOfTopics, totalDeletionTimeNs);
 
-        endTimeWhole = System.nanoTime();
-        totalTimeWhole = endTimeWhole - startTime;
+        endTimeWholeNs = System.nanoTime();
+        totalTimeWholeNs = endTimeWholeNs - startTimeNs;
 
-        LOGGER.info("Total time taken to create {} topics, send and receive {} messages, and delete topics: {} ms", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWhole);
+        LOGGER.info("Total time taken to create {} topics, send and receive {} messages, and delete topics: {} ns", numberOfTopics, NUMBER_OF_MESSAGES, totalTimeWholeNs);
     } finally {
         // 4a. teardown: Gracefully stop the topic-operator thread
         // 4b: teardown: Now, it's safe to log performance data as the collection thread has been stopped
         PerformanceReporter.logPerformanceData(
-                numberOfTopics, numberOfClientInstances, NUMBER_OF_MESSAGES, createTopicsTime, totalSendAndRecvTime, 
-                totalDeletionTime, totalTimeWhole, this.testStorage, ACTUAL_TIME, Environment.PERFORMANCE_DIR, 
+                numberOfTopics, numberOfClientInstances, NUMBER_OF_MESSAGES, createTopicsTimeNs, totalSendAndRecvTimeNs, 
+                totalDeletionTimeNs, totalTimeWholeNs, this.testStorage, ACTUAL_TIME, Environment.PERFORMANCE_DIR, 
                 maxBatchSize, maxBatchLingerMs, this.topicOperatorPollingThread.getMetricsHistory()
         );
     }
@@ -223,7 +236,7 @@ public void run() {
 
         try {
             // Sleep for a predefined interval before polling again
-            Thread.sleep(5000); // Poll every 5 seconds, adjust as needed
+             TimeUnit.SECONDS.sleep(5); // Poll every 5 seconds, adjust as needed
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // restore interrupted status
             LOGGER.error("Thread was interrupted", e);
@@ -237,14 +250,14 @@ public void run() {
 ```
 
 And in the test case we would simply interrupt such `Thread` to finish with scraping.
-Also, we could make a interval for scraping such metrics configurable via environment variable or system property.
+Also, we could make an interval for scraping such metrics configurable via environment variable or system property.
 
 Moreover, we propose that all metrics would be gathered in the `systemtest/target/performance` directory, with same pattern as we do it with the `logs` directory. 
 For instance from performance directory we could:
 ```bash
 performance/
 └── 2024-03-16-13-46-48
-    └── alice
+    └── aliceBulkBatchUseCase
         └── max-batch-size-100-max-linger-time-10
             ├── jvm_gc_memory_allocated_bytes_total.txt
             ├── jvm_gc_pause_seconds_max{action="end of minor GC",cause="G1 Evacuation Pause",gc="G1 Young Generation",}.txt
@@ -304,8 +317,3 @@ Strimzi project adds complexity and resource demands.
 Despite its powerful features and extensibility, this option introduces a steep learning curve due to the requirement for proficiency in Go/Javascript, 
 which may not align with the skill set of the existing Strimzi community. 
 Additionally, it necessitates the development and maintenance of Strimzi-specific extensions, complicating the testing process.
-
-## Conclusion
-
-Integrating performance testing within the `strimzi-kafka-operator`'s system test module offers a streamlined, efficient approach to ensuring the performance standards of Strimzi-managed Kafka clusters are met and exceeded. 
-This strategy leverages existing infrastructure and components while providing a clear focus on performance, enabling continuous improvement and building confidence among users.
