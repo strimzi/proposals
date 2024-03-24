@@ -17,8 +17,12 @@ and Keycloak authorizer.
 It also supports custom authorizers, which can be used to point to the implementation of a custom authorizer class.
 There is currently no inbuilt support for JWT-based authorization.
 If a user wants to use JWT-based authorization, they have to implement their own authorizer and use the custom authorizer feature.
+As the documentation states:
+
+> In addition to the Kafka custom resource configuration, the JAR file containing the custom authorizer class along with its dependencies must be available on the classpath of the Kafka broker.
+
 This proposal aims to add the JWT-based authorizer to Strimzi, so it can be selected in the configuration as
-another option apart from the simple and keycloak ones.
+another option apart from the simple and Keycloak ones, without having to implement a custom authorizer.
 
 ## Motivation
 
