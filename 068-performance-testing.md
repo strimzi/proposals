@@ -24,6 +24,8 @@ This method ensures that performance and system tests can share resources effici
 - Facilitates immediate feedback on performance impacts within the same testing framework used for system tests.
 - Reduces the overhead of maintaining separate modules for system and performance tests.
 
+The initial PR will cover the Topic Operator (TO) component, but the plan is to extend it and test our other Strimzi components.
+
 ### Core parts
 
 The following activities will be core to our implementation:
