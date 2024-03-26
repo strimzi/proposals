@@ -78,6 +78,29 @@ and for a string:
 
 The field name is configurable with default value `acls`.
 
+### Using roles to pass ACLs
+
+Sometimes the identity provider supports very fine customization of the JWT,
+but this is not always the case.
+However, pretty much all identity providers support the concept of roles or claims.
+Roles are often used to define the access level of a user or service.
+For example, the database service is given the `admin` role, while the frontend service is given the `read` role. 
+In the application layer, the role is checked to see if the user has the necessary permissions when the user tries to perform an action.
+
+We can use fine-grained roles to represent ACLs.
+Instead of naming the role `admin`, which implicitly implies all permissions, we can name the role `*:topic:*:*` or if we want to limit the permissions - `*:topic:my_topic:read`.
+This way we are using the name of the role to encode the permissions the user has,
+instead of using a generic name such as `admin` and having the application layer understand what `admin` means.
+
+As an example we can define the roles for a service A in the IDP to be:
+```json
+"roles": [
+  "*:topic:input_topic:read",
+  "*:topic:output_topic:write",
+],
+```
+Now when these "roles" are passed in the JWT, we can use them as Kafka ACLs in order to authorize service A.
+
 ### ACL Syntax
 
 A single ACL has the syntax `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`.
