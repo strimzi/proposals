@@ -169,7 +169,7 @@ permissions.
 
 10s of permissions in the JWT would be very little overhead in terms of computation.
 The main overhead is the size of the JWT.
-If the average topic length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
+If the average topic name length is 20 characters, with 10 ACLs the overhead would be 200-300 bytes.
 
 Passing 100s of permissions would be too much of an overhead, so it is advised against.
 Passing 1000s of permissions is not feasible.
