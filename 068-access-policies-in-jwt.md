@@ -157,7 +157,9 @@ Operations are described in the [Kafka docs](https://kafka.apache.org/documentat
 Allowing an operation will follow the same logic as in [AclEntry.supportedOperations](https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/security/authorizer/AclEntry.scala#L99).
 
 The above code will be supplied with unit tests and documentation explaining how to set up Strimzi with
-the new authorizer using Azure Active Directory B2C as an example.
+the new authorizer.
+We would also include two example setups.
+One using Azure Active Directory B2C and the other with Keycloak.
 The setup will be similar for other identity providers, with the main difference being the configuration of the identity provider itself and the `acls` field.
 
 ## Scalability
