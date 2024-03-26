@@ -78,6 +78,41 @@ and for a string:
 
 The field name is configurable with default value `acls`.
 
+### ACL Syntax
+
+A single ACL has the syntax `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`.
+The separator `:` is chosen because it is a common separator in the Unix world.
+
+If the ACLs are passed as a string, they are separated by `,`.
+i.e., `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS,CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`
+
+- `RESOURCE_TYPE` can be `topic` or `group`, or the shortened versions `t` and `g`.
+- `PERMITTED_ACTIONS` is a list of a subset of `read`, `write`, `create`, `delete`, `alter`, `alter_configs`, `describe`, `describe_configs`, `cluster_action`, `all`, or the shortened versions `r`, `w`, `c`, `d`, `a`, `ac`, `de`, `dc`, `ca`. The short version for `all` is `*`.
+The list items are separated by `|`.
+The choice of the separator `|` is based on the typical pattern of OR-ing boolean permissions.
+- `CLUSTER_NAME` is the name of the cluster, and `RESOURCE_SPEC` is the name of the resource (topic/group).
+These fields can start or end with `*` to match any prefix/suffix.
+
+### Defaults
+If `CLUSTER_NAME` or `RESOURCE_SPEC` is empty, it is considered a wildcard `*`, which matches any cluster or resource.
+
+If `RESOURCE_TYPE` is empty, it takes the default value `topic`.
+
+If `PERMITTED_ACTIONS` is empty, no actions are allowed.
+
+The defaults for `CLUSTER_NAME`, `RESOURCE_SPEC`, and `RESOURCE_TYPE` are chosen for convenience.
+The default for `PERMITTED_ACTIONS` is none to prevent accidental access to all resources.
+
+### Examples of ACLs
+
+- `my_cluster:t:topic1:r|w` - allows reading and writing to `topic1` in the cluster `my_cluster`.
+- `:::` - denies all actions on all topics in all clusters.
+- `:::*` - allows all actions on all topics in all clusters.
+- `my_cluster:group:*_app2:read` - allows reading from all groups ending with `_app2` in the cluster `my_cluster`.
+- `::edge_*:write|r` - allows writing and reading topics starting with `edge_` in all clusters.
+
+### Implementation details
+
 The new authorizer will be implemented as a new class, similarly to
 [KeycloakAuthorizer](https://github.com/strimzi/strimzi-kafka-oauth/blob/229daee85b096804d16e2904c8c0f1add599cc99/oauth-keycloak-authorizer/src/main/java/io/strimzi/kafka/oauth/server/authorizer/KeycloakAuthorizer.java),
 making use of the [KeycloakRBACAuthorizer](https://github.com/strimzi/strimzi-kafka-oauth/blob/229daee85b096804d16e2904c8c0f1add599cc99/oauth-keycloak-authorizer/src/main/java/io/strimzi/kafka/oauth/server/authorizer/KeycloakRBACAuthorizer.java).
@@ -195,6 +230,11 @@ or we have to implement a new authorizer for every OAuth2 provider.
 This is not feasible.
 Using more generic solutions, such as OpenFGA, overcomplicates the approach to the problem.
 Such solutions would need to be implemented on top of OAuth2, while OAuth2 works by default with JWT.
+
+Using RegEx for cluster/topic name matching would be very extensible.
+However, it would overcomplicate the solution.
+Also, it would make it harder to debug and profile in case the user inputs a wrong or very complex RegEx.
+While glob patterns are not as powerful, they are simpler to understand and have consistent performance.
 
 ## Support for roles or claims in popular identity providers
 
