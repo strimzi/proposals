@@ -8,7 +8,7 @@ As enterprises rely on Kafka for real-time data processing and streaming analyti
 
 Benefits of performance tests:
 1. **Uphold High Performance Standards:**
-    - Performance testing ensures that Strimzi not only meets but exceeds the performance standards expected by users for managing Kafka clusters in diverse environments.
+    - Performance testing consistently meets and surpasses the performance benchmarks set by users for managing Kafka clusters in diverse environments.
 2. **Enable Continuous Improvement:**
     - With dedicated performance benchmarks, Strimzi can continually assess and enhance its components, driving innovation while maintaining performance integrity.
 3. **Build Confidence Among Users:**
@@ -19,7 +19,7 @@ Benefits of performance tests:
 We propose integrating performance testing directly alongside existing system tests, leveraging the established infrastructure and testing utilities. 
 This method ensures that performance and system tests can share resources efficiently, streamlines the development process, facilitates immediate feedback on performance impacts, and reduces overhead.
 
-**Advantages**:
+**Advantages to integration**:
 - Streamlines the development process by using existing test infrastructure.
 - Facilitates immediate feedback on performance impacts within the same testing framework used for system tests.
 - Reduces the overhead of maintaining separate modules for system and performance tests.
@@ -43,13 +43,13 @@ The following activities will be core to our implementation:
    2. The reporter should be capable of generating detailed summaries and insights, 
    ideally supporting formats conducive to both human reading and automated parsing, such as Markdown or structured JSON.
 
-**Including within the `systemtest` module:** Integrate performance tests to ensure they coexist seamlessly with system tests, potentially categorizing tests to maintain clarity and prevent any confusion between system and performance testing efforts (i.e., using performance profile). 
+**Inclusion within the `systemtest` module:** Integrate performance tests to ensure they coexist seamlessly with system tests, potentially categorizing tests to maintain clarity and prevent any confusion between system and performance testing efforts (i.e., using performance profile). 
 
 ### CI: Azure Pipelines
 
 We assume Azure machines may not suffice for all performance tests, meaning we anticipate that lower-complexity performance tests, 
 not requiring as much memory/CPU, could run on such infrastructure. 
-However, for tests needing more memory in the context of performance, we prefer another approach (i.e., using a Testing farm) to execute these tests.
+However, for tests needing more memory in the context of performance, we prefer another approach (i.e., using a [Testing farm](https://docs.testing-farm.io/Testing%20Farm/0.1/index.html)) to execute these tests.
 
 ### CI: Possible integration with Testing Farm 
 
@@ -60,20 +60,19 @@ We could basically automate this in our PRs or by manual trigger as first try:
 ```bash
 /packit test --labels=performance
 ```
-So, as first step we could add this manual trigger and if we would see that such job would be stable and would not cause any race conditions or false alarms we could include this in our PR as form of performance check.
+So, as a first step we could add this manual trigger, and if we see that the job is stable and won't cause any race conditions or false alarms we could include it in our PR as a form of performance check.
 
 ## Implementation details
 
 As mentioned above we will have a set of test cases, which could be run by specification of the concrete test profile.
-Execution will be handled by JUnit5 identically as we are using it in `systemtests` module.
+Execution will be handled by JUnit5, identical to the approach used in the `systemtests` module.
 
 ### Test case example
 
 As an illustrative example, we can do the following:
-1. create a set of possible configurations for the system under test (SUT). 
-In this case it's Topic Operator, where we want to see if configuring different batch sizes and batch linger times has
-a huge impact on the system.
-2. create a test case instrumented by a mentioned configuration
+1. Create a set of possible configurations for the system under test (SUT).
+   In this case it's Topic Operator, where we want to see if configuring different batch sizes and batch linger times has a significant impact on the system.
+2.  Create a test case instrumented by a specific configuration. In this case, we are looking at a performance test of an operation for a user named Alice.
 ```java
 private static Stream<Arguments> provideConfigurationsForAliceBulkBatchUseCase() {
     return Stream.of(
@@ -215,8 +214,8 @@ We could also use simple @Test to edge performance cases.
 
 ### Gathered metrics
 
-During test execution we need to scrape metrics from the `SUT` pods. 
-Therefore, one way how to tackle such problem is that we could use a `Thread`, which would run a infinite loop, where we would scrape all related metrics f.e.:
+During test execution we need to scrape metrics from the `SUT` pods.
+Therefore, one way how to tackle such a problem is that we could use a `Thread`, which would run an infinite loop, where we would scrape all related metrics. For example:
 ```java
 @Override
 public void run() {
@@ -251,11 +250,11 @@ public void run() {
 }
 ```
 
-And in the test case we would simply interrupt such `Thread` to finish with scraping.
-Also, we could make an interval for scraping such metrics configurable via environment variable or system property.
+And in the test case we would simply interrupt the `Thread` to finish the scraping.
+Also, we could make an interval for scraping such metrics configurable via an environment variable or system property.
 
-Moreover, we propose that all metrics would be gathered in the `systemtest/target/performance` directory, with same pattern as we do it with the `logs` directory. 
-For instance from performance directory we could:
+Moreover, we propose that all metrics would be gathered in the `systemtest/target/performance` directory, with the same pattern as with the `logs` directory.
+For instance, the performance directory could be structured as follows:
 ```bash
 performance/
 └── 2024-03-16-13-46-48
@@ -275,7 +274,7 @@ performance/
             └── test-performance-metrics.txt
 ... # more dates
 ```
-where each of these files contains values, scraped by `Thread` in the test. 
+where each of these files contains values scraped by `Thread` in the test. 
 This is content of the `system_load_average_1m.txt` file:
 ```bash
 Timestamp: 2024-03-16-13-51-13-997, Values: [3.87]
@@ -288,9 +287,9 @@ And these values/data could be used in the next phase (i.e., analyzing and repor
 
 ### Analyze and report 
 
-We propose, that a `Reporter.class`, which is responsible for retrieving metrics from `<module-name>/target/performance` directory. 
+We propose a `Reporter.class` that is responsible for retrieving metrics from `<module-name>/target/performance` directory.
 Reporter will generate a table of all related metrics to that specific test case.
-For instance for Topic Operator performance test case such report could look like this:
+For instance, for the Topic Operator performance test case such a report could look like this:
 
 | Experiment | Number of Topics | Creation Time (s) | Deletion Time (s) | Total Test Time (s) | STRIMZI_MAX_BATCH_SIZE | MAX_BATCH_LINGER_MS | Reconciliation Max Duration (s) | Max Batch Size | Max Queue Size | UTO Event Queue Time (s) | Describe Configs Max Duration (s) | Create Topics Max Duration (s) | Reconciliations Max Duration (s) | Update Status Max Duration (s) | Max System Load Average 1m Per Core (%) | Max JVM Memory Used (MBs) |
 |------------|------------------|-------------------|-------------------|---------------------|------------------------|---------------------|---------------------------------|----------------|----------------|--------------------------|-----------------------------------|--------------------------------|----------------------------------|--------------------------------|-----------------------------------------|---------------------------|
@@ -303,6 +302,34 @@ We could use such report as a `post-processing` phase after test execution and a
 ### CI: Testing farm
 
 We copy pattern from the system tests and just adapt specific label to it.
+For example for performance tests we could start with adding such profile into our `.packit.yaml`.
+Packit is a CI/CD service that helps with packaging software as well as with testing and deployment of packages by utilizing specifications directly from project repositories as described in their [documentation](https://packit.dev/docs/configuration/upstream/tests).
+```bash
+  ... # other profiles 
+  ...
+  - job: tests
+    trigger: pull_request
+    identifier: "performance"
+    targets:
+      - centos-stream-9-x86_64
+      - centos-stream-9-aarch64
+    skip_build: true
+    manual_trigger: true
+    env: { IP_FAMILY: ipv4 }
+    labels:
+      - performance
+    tf_extra_params:
+      test:
+        tmt:
+          name: "performance"
+  ...
+  ...
+  ...
+```
+Moreover, we would create a tag (i.e., `performance`) where all test cases would use it, and therefore we would be able to e trigger such job using testing farm via:
+```bash
+/packit test --labels=performance
+```
 
 ## Rejected Alternatives:
 
@@ -315,7 +342,7 @@ The advantages of a dedicated performance module, such as organizational clarity
 While offering flexibility and the potential for broader ecosystem testing, this approach requires significant additional 
 development and maintenance efforts. The need to recreate foundational components and ensure their integration with each 
 Strimzi project adds complexity and resource demands.
-3. **Adoption of external performnace tools (e.g., Grafana k6)**:
+3. **Adoption of external performance tools (e.g., Grafana k6)**:
 Despite its powerful features and extensibility, this option introduces a steep learning curve due to the requirement for proficiency in Go/Javascript, 
 which may not align with the skill set of the existing Strimzi community. 
 Additionally, it necessitates the development and maintenance of Strimzi-specific extensions, complicating the testing process.
