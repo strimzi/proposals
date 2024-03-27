@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 69  | [Introducing Performance Testing](./069-performance-testing.md) |
 | 68  | [Quotas management](./068-quotas-management.md) |
 | 67  | [JBOD support in KRaft mode](./067-kraft-jbod-support.md) |
 | 66  | [Topic replication factor change](./066-topic-replication-factor-change.md) |
