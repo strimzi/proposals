@@ -8,31 +8,31 @@ Today, we support manual rolling update for following operands:
 * ZooKeeper
 * Kafka brokers
 * Kafka Connect
-* Kafka Mirror Maker 2
+* Kafka MirrorMaker 2
 
-The manual rolling update is triggered by the user using the `strimzi.io/manual-rolling-update=true` annotation placed on a Pod or StrimziPodSet resource.
-And it is executed as part of the next reconciliation for given operand.
+The manual rolling update is triggered by adding the `strimzi.io/manual-rolling-update="true"` annotation to a `Pod` or `StrimziPodSet` resource.
+And it is executed as part of the next reconciliation for a given operand.
 When the manual rolling update fails, then it fails the whole reconciliation.
 
 The manual rolling update is done as one of the first steps in the reconciliation process.
 The reason for doing it as early as possible is to do the manual rolling update with the original definition of the related Kubernetes resources (e.g. StrimziPodSets, PVCs, Services, ConfigMaps etc.).
-Doing it only later in the reconciliation might mean that the pod will be rolled but the accompanying Kubernetes resources would already look differently due to unrelated changes to the Strimzi custom resources and this might lead to issues.
+If rolling the pod later in the reconciliation, the related Kubernetes resources would have already changed due to unrelated updates to the Strimzi custom resources, which can lead to issues.
 
 ## Motivation
 
 There can be many different reasons why the manual rolling update might fail.
 For example:
 * Due to partition-replicas not being in-sync
-* Due to Pod not getting ready
+* Due to the pod not reaching a Ready state
 
-In some situation, the reason for the manual rolling update failing is a problem that would be fixed later in the reconciliation.
+In some situations, the reason for the manual rolling update failing is a problem that would be fixed later in the reconciliation.
 But the operator never gets to it because the manual rolling update fails and that fails the whole reconciliation, so that it doesn't continue.
 
 One such example that we saw multiple times is described in the [strimzi/strimzi-kafka-operator#9654](https://github.com/strimzi/strimzi-kafka-operator/issues/9654) issue:
 
-1. Due to a storage issues, one of the Kafka nodes (node X) is deleted including its PVC and PV
+1. Due to a storage issue, one of the Kafka nodes (node X) is deleted including its PVC and PV
 2. At the same time, another Kafka node (node Y) is annotated for manual rolling update (either by the user but possibly also by Drain Cleaner)
-3. The StrimziPodSet controller will restart the failed pod X, but without the PVC/PV, it will be in a Pending state
+3. The StrimziPodSet controller will restart the failed pod X, but without the PVC/PV it will be in a Pending state
 4. Next periodical reconciliation starts and tries to roll the annotated pod Y. 
    But the rolling update fails because of the pod X being in Pending state and its partition replicas not being in-sync.
    Rolling the pod Y as requested by the annotation would break availability.
@@ -52,7 +52,7 @@ Proceeding with the reconciliation might cause the related Kubernetes resources 
 So it in a way goes against the reason why the manual rolling update is done early in the reconciliation process:
 
 > The reason for doing it as early as possible is to do the manual rolling update with the original definition of the related Kubernetes resources (e.g. StrimziPodSets, PVCs, Services, ConfigMaps etc.).
-> Doing it only later in the reconciliation might mean that the pod will be rolled but the accompanying Kubernetes resources would already look differently due to unrelated changes to the Strimzi custom resources and this might lead to issues.
+> If rolling the pod later in the reconciliation, the related Kubernetes resources would have already changed due to unrelated updates to the Strimzi custom resources, which can lead to issues.
 
 However, it provides a reasonable compromise in doing the manual rolling update as early as possible as a _best effort_, but not getting stuck with it forever.
 
@@ -65,8 +65,8 @@ The feature gate will be named `ContinueReconciliationOnManualRollingUpdateFailu
 When this feature gate is enabled, a failure of the manual rolling update will not cause a failure of the whole reconciliation but the reconciliation will continue with a warning instead.
 When the feature gate is disabled, the reconciliation will fail with an error as it does today.
 
-This feature gate is expected:
-* To be introduced in Strimzi 0.41.0 as alpha level feature gate
+This expected roadmap for the feature gate is as follows:
+* Introduced in Strimzi 0.41.0 as alpha level feature gate
 * Move to _beta_ phase and be enabled by default in Strimzi 0.43.0
 * Move to _GA_ phase and be permanently enabled in Strimzi 0.45.0
 
