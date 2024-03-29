@@ -24,16 +24,16 @@ Furthermore, every time there are changes in the HTTP endpoints definition, we n
 
 ## Proposal
 
-The proposal is about deprecating the OpenAPI v2 specification support in the next Strimgi HTTP bridge 0.29.0 release and removing it in the future 0.30.0 release.
+The proposal is about deprecating the OpenAPI v2 specification support in the next Strimzi HTTP bridge 0.29.0 release and removing it in the first minor release of 2025.
 To make the transition smoothly, the idea is to have two new HTTP endpoints:
 
 * `/openapi/v2`: still exposing the bridge HTTP endpoints definition with the OpenAPI v2 specification.
 * `/openapi/v3`: exposing the bridge HTTP endpoints definition with the OpenAPI v3 specification.
 
-During the deprecation period, with the 0.29.0 release, the HTTP endpoints definition will be available with both OpenAPI v2 and v3 specification on the two different above endpoints.
+During the deprecation period, starting with the 0.29.0 release, the HTTP endpoints definition will be available with both OpenAPI v2 and v3 specification on the two different above endpoints.
 Any HTTP request issued to the current `/openapi` endpoint will be forwarded to the `/openapi/v2` endpoint, still with the OpenAPI v2 specification.
 
-With the 0.30.0 release, the `/openapi/v2` will be handled to return the `404 Not Found` HTTP status code instead.
+At the end of the deprecation period, with the first minor release of 2025, the `/openapi/v2` will be handled to return the `404 Not Found` HTTP status code instead.
 Any HTTP request issued to the `/openapi` endpoint will be forwarded to the `/openapi/v3`, with the OpenAPI v3 specification.
 
 ## Affected/not affected projects
@@ -47,4 +47,4 @@ Of course, after the removal, the bridge won't be compatible with OpenAPI v2 spe
 
 ## Rejected alternatives
 
-N/A
+One alternative was about deprecate with the 0.29.0 release and remove with the future 0.30.0 but it was rejected not giving to much time to the users to adapt, also taking into account the effort for the implementation.
