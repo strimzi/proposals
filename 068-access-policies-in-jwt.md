@@ -110,9 +110,8 @@ If the ACLs are passed as a string, they are separated by `,`.
 i.e., `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS,CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`
 
 - `RESOURCE_TYPE` can be `topic` or `group`, or the shortened versions `t` and `g`.
-- `PERMITTED_ACTIONS` is a list of a subset of `read`, `write`, `create`, `delete`, `alter`, `alter_configs`, `describe`, `describe_configs`, `cluster_action`, `all`, or the shortened versions `r`, `w`, `c`, `d`, `a`, `ac`, `de`, `dc`, `ca`. The short version for `all` is `*`.
-The list items are separated by `|`.
-The choice of the separator `|` is based on the typical pattern of OR-ing boolean permissions.
+- `PERMITTED_ACTIONS` is a list of a subset of `read`, `write`, `create`, `delete`, `alter`, `describe`, `cluster_action`, `describe_configs`, `alter_configs`, `idempotent_write`, `create_tokens`, `describe_tokens`, `all`, or the shortened versions `r`, `w`, `c`, `d`, `a`, `de`, `ca`, `dc`, `ac`, `iw`, `ct`, `dt`. The short version for `all` is `*`.
+The list items are separated by a `+`.
 - `CLUSTER_NAME` is the name of the cluster, and `RESOURCE_SPEC` is the name of the resource (topic/group).
 These fields can start or end with `*` to match any prefix/suffix.
 
@@ -128,11 +127,11 @@ The default for `PERMITTED_ACTIONS` is none to prevent accidental access to all 
 
 ### Examples of ACLs
 
-- `my_cluster:t:topic1:r|w` - allows reading and writing to `topic1` in the cluster `my_cluster`.
+- `my_cluster:t:topic1:r+w` - allows reading and writing to `topic1` in the cluster `my_cluster`.
 - `:::` - denies all actions on all topics in all clusters.
 - `:::*` - allows all actions on all topics in all clusters.
 - `my_cluster:group:*_app2:read` - allows reading from all groups ending with `_app2` in the cluster `my_cluster`.
-- `::edge_*:write|r` - allows writing and reading topics starting with `edge_` in all clusters.
+- `::edge_*:write+r` - allows writing and reading topics starting with `edge_` in all clusters.
 
 ### Implementation details
 
