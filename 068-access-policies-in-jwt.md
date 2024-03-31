@@ -109,7 +109,7 @@ The separator `:` is chosen because it is a common separator in the Unix world.
 If the ACLs are passed as a string, they are separated by `,`.
 i.e., `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS,CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`
 
-- `RESOURCE_TYPE` can be `topic` or `group`, or the shortened versions `t` and `g`.
+- `RESOURCE_TYPE` can be `topic`, `group`, `transactional_id`, `delegation_token`, `user`, or the shortened versions `t`, `g`, `tid`, `dt`, `u`.
 - `PERMITTED_ACTIONS` is a list of a subset of `read`, `write`, `create`, `delete`, `alter`, `describe`, `cluster_action`, `describe_configs`, `alter_configs`, `idempotent_write`, `create_tokens`, `describe_tokens`, `all`, or the shortened versions `r`, `w`, `c`, `d`, `a`, `de`, `ca`, `dc`, `ac`, `iw`, `ct`, `dt`. The short version for `all` is `*`.
 The list items are separated by a `+`.
 - `CLUSTER_NAME` is the name of the cluster, and `RESOURCE_SPEC` is the name of the resource (topic/group).
