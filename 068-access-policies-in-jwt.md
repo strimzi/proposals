@@ -72,7 +72,7 @@ e.g. for a list of strings:
 and for a string:
 ```json
 {
-  "acls": "cluster_x:topic_1:read,topic2:write"
+  "acls": "cluster_x:topic_1:read,:topic2:write"
 }
 ```
 
