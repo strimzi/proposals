@@ -103,26 +103,26 @@ Now when these "roles" are passed in the JWT, we can use them as Kafka ACLs in o
 
 ### ACL Syntax
 
-A single ACL has the syntax `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`.
+A single ACL has the syntax `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_NAME:PERMITTED_ACTIONS`.
 The separator `:` is chosen because it is a common separator in the Unix world.
 
 If the ACLs are passed as a string, they are separated by `,`.
-i.e., `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS,CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_SPEC:PERMITTED_ACTIONS`
+i.e., `CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_NAME:PERMITTED_ACTIONS,CLUSTER_NAME:RESOURCE_TYPE:RESOURCE_NAME:PERMITTED_ACTIONS`
 
 - `RESOURCE_TYPE` can be `topic`, `group`, `transactional_id`, `delegation_token`, `user`, or the shortened versions `t`, `g`, `tid`, `dt`, `u`.
 - `PERMITTED_ACTIONS` is a list of a subset of `read`, `write`, `create`, `delete`, `alter`, `describe`, `cluster_action`, `describe_configs`, `alter_configs`, `idempotent_write`, `create_tokens`, `describe_tokens`, `all`, or the shortened versions `r`, `w`, `c`, `d`, `a`, `de`, `ca`, `dc`, `ac`, `iw`, `ct`, `dt`. The short version for `all` is `*`.
 The list items are separated by a `+`.
-- `CLUSTER_NAME` is the name of the cluster, and `RESOURCE_SPEC` is the name of the resource (topic/group).
+- `CLUSTER_NAME` is the name of the cluster, and `RESOURCE_NAME` is the name of the resource (topic/group).
 These fields can start or end with `*` to match any prefix/suffix.
 
 ### Defaults
-If `CLUSTER_NAME` or `RESOURCE_SPEC` is empty, it is considered a wildcard `*`, which matches any cluster or resource.
+If `CLUSTER_NAME` or `RESOURCE_NAME` is empty, it is considered a wildcard `*`, which matches any cluster or resource.
 
 If `RESOURCE_TYPE` is empty, it takes the default value `topic`.
 
 If `PERMITTED_ACTIONS` is empty, no actions are allowed.
 
-The defaults for `CLUSTER_NAME`, `RESOURCE_SPEC`, and `RESOURCE_TYPE` are chosen for convenience.
+The defaults for `CLUSTER_NAME`, `RESOURCE_NAME`, and `RESOURCE_TYPE` are chosen for convenience.
 The default for `PERMITTED_ACTIONS` is none to prevent accidental access to all resources.
 
 ### Examples of ACLs
