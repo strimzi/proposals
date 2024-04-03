@@ -103,9 +103,14 @@ Context: {
          numRetries: 0
 }
 ```               
-2. Transition each node's state to the corresponding state based on the information collected from the abstracted sources.
+2. Observe and transition each node's state to the corresponding state based on the information collected from the abstracted sources.
 
-3. Group the nodes into the following categories based on their state and connectivity:
+3. If there are nodes in `NOT_READY` state, wait for them to have `SERVING` within the `postOperationalTimeoutMs`.  
+   We want to give nodes chance to get ready before we try to connect to the or consider them for rolling. This is important especially for nodes which were just started.
+   This is consistent with how the current roller handles unready nodes.
+   - If the timeout is reached, proceed to the next step and check if any of the nodes need to be restarted.
+
+4. Group the nodes into the following categories based on their state and connectivity:
    - `RESTART_FIRST` - Nodes that have `NOT_READY` or `NOT_RUNNING` state in their contexts. The group will also include nodes that we cannot connect to via Admin API.
    - `WAIT_FOR_LOG_RECOVERY` -  Nodes that have `RECOVERING` state.
    - `RESTART` - Nodes that have non-empty list of reasons from the predicate function and have not been restarted yet (Context.numRestartAttempts == 0).
@@ -113,11 +118,11 @@ Context: {
    - `NOP` - Nodes that have at least one restart or reconfiguration attempt (Context.numRestartAttempts > 0 || Context.numReconfigAttempts > 0 ) and have either
              `LEADING_ALL_PREFERRED` or `SERVING` state.
 
-4. Wait for nodes in `WAIT_FOR_LOG_RECOVERY` group to finish performing log recovery. 
-   - Wait for each node to have `SERVING` within the `postOperationalTimeoutMs`. 
-   - If the timeout is reached for a node and its `numRetries` is greater than or equal to `maxRetries`, throw `UnrestartableNodesException` with the log recovery progress (number of remaining logs and segments). Otherwise increment node's `numRetries` and repeat from step 3.
+5. Wait for nodes in `WAIT_FOR_LOG_RECOVERY` group to finish performing log recovery. 
+   - Wait for nodes to have `SERVING` within the `postOperationalTimeoutMs`. 
+   - If the timeout is reached for a node and its `numRetries` is greater than or equal to `maxRetries`, throw `UnrestartableNodesException` with the log recovery progress (number of remaining logs and segments). Otherwise increment node's `numRetries` and repeat from step 2.
 
-5. Restart nodes in `RESTART_FIRST` category:
+6. Restart nodes in `RESTART_FIRST` category:
    - if one or more nodes have `NOT_RUNNING` state, we first need to check 2 special conditions:
       - If all of the nodes are combined and are in `NOT_RUNNING` state, restart them in parallel to give the best chance of forming the quorum.
       > This is to address the issue described in https://github.com/strimzi/strimzi-kafka-operator/issues/9426.
@@ -125,7 +130,7 @@ Context: {
       - If a node is in `NOT_RUNNING` state, the restart it only if it has `POD_HAS_OLD_REVISION` reason. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date.
       > For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
 
-      - At this point either we started nodes or decided not to because nodes did not have `POD_HAS_OLD_REVISION` reason. Regardless, wait for nodes to have `SERVING` within `postOperationalTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 3. 
+      - At this point either we started nodes or decided not to because nodes did not have `POD_HAS_OLD_REVISION` reason. Regardless, wait for nodes to have `SERVING` within `postOperationalTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 2. 
 
    
    - Otherwise the nodes will be attempted to restart one by one in the following order:
@@ -133,24 +138,28 @@ Context: {
       - Combined nodes
       - Broker only nodes
       
-   - Wait for the restarted node to have `SERVING` within `postOperationalTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 3. 
+   - Wait for the restarted node to have `SERVING` within `postOperationalTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 2. 
 
-6. Further refine the broker nodes in `MAYBE_RECONFIGURE` group:
+7. Further refine the broker nodes in `MAYBE_RECONFIGURE` group:
    - Describe Kafka configurations for each node via Admin API and compare them against the desired configurations. This is essentially the same mechanism we use today for the current KafkaRoller.
    - If a node has configuration changes and they can be dynamically updated, add the node into another group called `RECONFIGURE`.
    - If a node has configuration changes but they cannot be dynamically updated, add the node into the `RESTART` group.
    - If a node has no configuration changes, put the node into the `NOP` group.
 
-7. Reconfigure each node in `RECONFIGURE` group:
-   - If `numReconfigAttempts` of a node is greater than the configured `maxReconfigAttempts`, add a restart reason to its context and repeat from step 3. Otherwise continue.
+8. Reconfigure each node in `RECONFIGURE` group:
+   - If `numReconfigAttempts` of a node is greater than the configured `maxReconfigAttempts`, add a restart reason to its context and repeat from step 2. Otherwise continue.
    - Send `incrementalAlterConfig` request with its config updates.
    - Transitions the node's state to `RECONFIGURED` and increment its `numReconfigAttempts`.
    - Wait for each node that got configurations updated until they have `LEADING_ALL_PREFERRED` within the `postOperationalTimeoutMs`.
-   - If the `postOperationalTimeoutMs` is reached, repeat from step 3.
+   - If the `postOperationalTimeoutMs` is reached, repeat from step 2.
 
-8. If at this point, the `RESTART` group is empty, the reconciliation will be completed successfully.
+9. If at this point, the `RESTART` group is empty and if there is no nodes that is in `NOT_READY` state, the reconciliation will be completed successfully.
+   - If there are nodes in `NOT_READY` state, wait for them to have `SERVING` within the `postOperationalTimeoutMs`. 
+   - If the timeout is reached for a node and its `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. 
+   - Otherwise increment node's `numRetries` and repeat from step 2.
+   This is consistent with how the current roller handles unready nodes.
 
-9. Otherwise, batch nodes in `RESTART` group and get the next batch to restart:
+10. Otherwise, batch nodes in `RESTART` group and get the next batch to restart:
    - Further categorize nodes based on their roles so that the following restart order can be enforced:
        1. `NON_ACTIVE_CONTROLLER` - Pure controller that is not the active controller
        2. `ACTIVE_CONTROLLER` - Pure controller that is the active controller (the quorum leader)
@@ -169,17 +178,17 @@ Context: {
        - batch the nodes that do not have any partitions in common therefore can be restarted together
        - remove nodes that have an impact on the availability from the batches (more on this later)
        - return the largest batch
-   - If an empty batch is returned, that means none of the nodes met the safety conditions such as availability and qourum health impact. In this case, check their `numRetries` and if any of them is equal to or greater than `maxRetries`, throw `UnrestartableNodesException`. Otherwise increment their `numRetries` and repeat from step 3.
+   - If an empty batch is returned, that means none of the nodes met the safety conditions such as availability and qourum health impact. In this case, check their `numRetries` and if any of them is equal to or greater than `maxRetries`, throw `UnrestartableNodesException`. Otherwise increment their `numRetries` and repeat from step 2.
 
-8. Restart the nodes from the returned batch in parallel:
+11. Restart the nodes from the returned batch in parallel:
    - If `numRestartAttempts` of a node is larger than `maxRestartAttempts`, throw `MaxRestartsExceededException`.
    - Otherwise, restart each node and transition its state to `RESTARTED` and increment its `numRestartAttempts`.
    - After restarting all the nodes in the batch, wait for their states to become `SERVING` until the configured `postOperationalTimeoutMs` is reached.
-   - If the timeout is reached, throw `TimeoutException` if a node's `numRetries` is greater than or equal to `maxRetries`. Otherwise increment their `numRetries` and repeat from step 3.
+   - If the timeout is reached, throw `TimeoutException`. If a node's `numRetries` is greater than or equal to `maxRetries`. Otherwise increment their `numRetries` and repeat from step 2.
    - After all the nodes are in `SERVING` state, trigger preferred leader elections via Admin client. Wait for their states to become `LEADING_ALL_PREFERRED` until the configured `postOperationalTimeoutMs` is reached. If the timeout is reached, log a `WARN` message. 
 
 
-9. If there are no exceptions thrown at this point, the reconciliation completes successfully. If there were `UnrestartableNodesException`, `TimeoutException`, `MaxRestartsExceededException` or any other unexpected exceptions throws, the reconciliation fails.
+12. If there are no exceptions thrown at this point, the reconciliation completes successfully. If there were `UnrestartableNodesException`, `TimeoutException`, `MaxRestartsExceededException` or any other unexpected exceptions throws, the reconciliation fails.
 
 #### Quorum health check
 
