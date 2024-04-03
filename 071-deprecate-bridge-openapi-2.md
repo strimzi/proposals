@@ -18,8 +18,8 @@ Exposing the OpenAPI specification via a dedicated HTTP endpoint is useful to ex
 
 The bridge has been exposing the HTTP endpoints definition via the OpenAPI v2 specification for supporting external systems and tools still using Swagger.
 Internally, it has always been using the OpenAPI v3 to "load" the HTTP endpoints definition, build the corresponding web routes and validate the parameters and body on the incoming HTTP requests.
-The OpenAPI v2 specification can be considered obsolete with the latest [release](https://swagger.io/specification/v2/) happened 10 years ago.
-Most of the API gateways, clients and tools are now mostly supporting the OpenAPI v3 specification.
+The OpenAPI v2 specification can be considered obsolete as the latest [release](https://swagger.io/specification/v2/) happened 10 years ago.
+Most of the API gateways, clients and tools are now supporting the OpenAPI v3 specification.
 Furthermore, every time there are changes in the HTTP endpoints definition, we need to keep the two JSON files in sync, because they are used both for different purposes as explained before.
 
 ## Proposal
@@ -30,7 +30,7 @@ To make the transition smoothly, the idea is to have two new HTTP endpoints:
 * `/openapi/v2`: still exposing the bridge HTTP endpoints definition with the OpenAPI v2 specification.
 * `/openapi/v3`: exposing the bridge HTTP endpoints definition with the OpenAPI v3 specification.
 
-During the deprecation period, starting with the 0.29.0 release, the HTTP endpoints definition will be available with both OpenAPI v2 and v3 specification on the two different above endpoints.
+During the deprecation period, starting with the 0.29.0 release, the HTTP endpoints definition will be available with both OpenAPI v2 and v3 specification on the two different endpoints.
 Any HTTP request issued to the current `/openapi` endpoint will be forwarded to the `/openapi/v2` endpoint, still with the OpenAPI v2 specification.
 
 At the end of the deprecation period, with the first major or minor release of 2025, the `/openapi/v2` will be handled to return the `404 Not Found` HTTP status code instead.
@@ -47,4 +47,4 @@ Of course, after the removal, the bridge won't be compatible with OpenAPI v2 spe
 
 ## Rejected alternatives
 
-One alternative was about deprecate with the 0.29.0 release and remove with the future 0.30.0 but it was rejected not giving to much time to the users to adapt, also taking into account the effort for the implementation.
+One alternative was to deprecate with the 0.29.0 release and remove with the future 0.30.0, but it was rejected as not giving enough time to the users to adapt, also taking into account the effort for the implementation.
