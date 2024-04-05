@@ -33,7 +33,7 @@ To make the transition smoothly, the idea is to have two new HTTP endpoints:
 During the deprecation period, starting with the 0.29.0 release, the HTTP endpoints definition will be available with both OpenAPI v2 and v3 specification on the two different endpoints.
 Any HTTP request issued to the current `/openapi` endpoint will be forwarded to the `/openapi/v2` endpoint, still with the OpenAPI v2 specification.
 
-At the end of the deprecation period, with the first major or minor release of 2025, the `/openapi/v2` will be handled to return the `404 Not Found` HTTP status code instead.
+At the end of the deprecation period, with the first major or minor release of 2025, the `/openapi/v2` will be handled to return the `410 Gone` HTTP status code instead.
 Any HTTP request issued to the `/openapi` endpoint will be forwarded to the `/openapi/v3`, with the OpenAPI v3 specification.
 
 ## Affected/not affected projects
