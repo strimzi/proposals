@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 72  | [Enhance KafkaBridge resource with consumer inactivity timeout and HTTP consumer/producer parts enablement](./072-kafkabrige-consumer-producer.md) |
 | 71  | [Deprecate and remove OpenAPI v2 (Swagger) support on the Strimzi HTTP bridge](./071-deprecate-bridge-openapi-2.md) |
 | 70  | [Don't fail reconciliation when Manual Rolling Update fails](./070-dont-fail-reconciliation-in-manual-rolling-update.md) |
 | 69  | [Introducing Performance Testing](./069-performance-testing.md) |
