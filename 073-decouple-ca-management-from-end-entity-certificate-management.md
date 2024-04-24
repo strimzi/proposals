@@ -1,6 +1,6 @@
 <!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
 
-# CA Abstraction
+# Decouple CA management from end-entity certificate management
 
 This proposal aims to decouple the management of the cluster CA and client CA from the rolling out of trust of those certificates to components in a Strimzi cluster.
 
@@ -15,7 +15,7 @@ The "clients CA" is used for issuing certificates for Kafka clients, for example
 The cluster CA root certificate is added to Strimzi component trust stores (so that, for example, ZooKeeper nodes trust each other's and brokers' certificates, and brokers trust certs issued to other brokers, etc).
 
 
-![Cluster CA relationships](./images/000-cluster-ca.svg)
+![Cluster CA relationships](./images/073-cluster-ca.svg)
 
 > In the diagram, the red lines show trust.
 > For example, because the Kafka Broker trusts the Cluster CA certificate,
@@ -26,7 +26,7 @@ The cluster CA root certificate is added to Strimzi component trust stores (so t
 The cluster CA root certificate also needs to be trusted by Kafka clients connecting to the cluster (so that clients trust the broker's EE certificates).
 The client CA root certificate is added to the broker trust stores too, so that the brokers will trust certificates issued to Kafka client applications.
 
-![Client CA relationships](./images/000-clients-ca.svg)
+![Client CA relationships](./images/073-clients-ca.svg)
 
 Currently as part of a reconciliation loop the CaReconciler handles three things:
 1. Creating or renewing the cluster and client CAs and storing them in secrets
