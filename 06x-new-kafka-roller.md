@@ -79,13 +79,13 @@ The broker states are defined [here](https://github.com/apache/kafka/blob/58ddd6
 ### Configurability
 The following can be the configuration options for the new KafkaRoller:
 
-| Configuration | Default value | Exposed to user | Description |
-| :-------------| :-------------| :---------------| :---------- |
-| maxRestartAttempts | 3 | No | The maximum number of times a node can be restarted before failing the reconciliation. This is checked against the node's `numRestartAttempts`.|
-| maxReconfigAttempts | 3 | No | The maximum number of times a node can be reconfigured before restarting it. This is checked against the node's `numReconfigAttempts`.|
-| maxRetries| 10 | No | The maximum number of times a node can retried after not meeting the safety conditions. This is checked against the node's `numRetries`.|
-| postOperationTimeoutMs | 60 seconds | Yes | The maximum amount of time we will wait for nodes to transition to `SERVING` state after an operation in each retry. This will be based on the operation timeout that is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
-| maxRestartParallelism | 1 | Yes | The maximum number of broker nodes that can be restarted in parallel. |
+| Configuration          | Default value | Exposed to user | Description                                                                                                                                                                                                                                                   |
+|:-----------------------|:--------------|:----------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| maxRestartAttempts     | 3             | No              | The maximum number of times a node can be restarted before failing the reconciliation. This is checked against the node's `numRestartAttempts`.                                                                                                               |
+| maxReconfigAttempts    | 3             | No              | The maximum number of times a node can be reconfigured before restarting it. This is checked against the node's `numReconfigAttempts`.                                                                                                                        |
+| maxRetries             | 10            | No              | The maximum number of times a node can retried after not meeting the safety conditions. This is checked against the node's `numRetries`.                                                                                                                      |
+| postOperationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `SERVING` state after an operation in each retry. This will be based on the operation timeout that is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
+| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel.                                                                                                                                                                                         |
 
 
 ### Algorithm
