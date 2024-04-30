@@ -147,6 +147,7 @@ In the scenario described in the _Motivation_ section, the new API will work lik
    This last rolling update does not impact operands such as Kafka Connect.
 7. The removal of `ca-<timestamp>.crt` from the Secret will cause rolling update of the client-based operand (e.g. Connect).
    This rolling update will remove the trust to the old CA from the operand as well.
+   This is an additional rolling update that happens when the new API is used.
 
 ### Examples
 
