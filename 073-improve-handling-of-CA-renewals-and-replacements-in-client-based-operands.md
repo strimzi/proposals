@@ -117,7 +117,7 @@ The user can load all three CAs with the following configuration:
         extension: crt
 ```
 
-As today, when one of the existing certificates changes, Strimzi will automatically toll the operand to update the trusted certificates.
+As today, when one of the existing certificates changes, Strimzi will automatically roll the operand to update the trusted certificates.
 The same will happen also when a new record is added to the Secret that matches the extension - e.g. `ca-4.crt`.
 
 In the scenario described in the _Motivation_ section, the new API will work like this:
