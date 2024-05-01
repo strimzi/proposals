@@ -47,18 +47,23 @@ These solutions generate certificates that (from the PoV of an end-entity certif
 Using those solutions therefore requires TLS peers to be able to trust multiple root CA certificates.
 In addition these solutions cannot be responsible for rolling updates to components like Kafka.
 This means that end-entity certificate generation and the rollout of trust in the CA certificates referenced in those end-entity certificates, needs to be decoupled.
-This would be highly valuable for organizations with compliance requirements with regard to certificates. 
+This would be highly valuable for organizations with compliance requirements with regard to certificates.
 
 ## Proposal
 
-Strimzi should be updated to decouple the management of the cluster and clients CA certificatess, and the consumption of those CA certificates by components (such as ZooKeeper, Kafka and cluster operator).
+Strimzi should be updated to decouple the management of the cluster and clients CA certificates, and the consumption of those CA certificates by components (such as ZooKeeper, Kafka and cluster operator).
 
-To do this we will introduce new Kubernetes Secrets to share the CA certificates and track their lifecycle
-These Kubernetes Secrets are different from the ones that are mounted into the components to use a truststore.
-This allows the cluster operator and user operator to manage the truststore Kubernetes Secrets independently of how the CA certificates are being managed and make it easier to reason about which CA certificates are in use.
-These Kubernetes Secrets can be updated by multiple processes.
+To do this we will introduce new Kubernetes Secrets that are used to keep track of CA certificates and their current state.
+These new Kubernetes Secrets are separate from the ones that are mounted into the components to use a truststore.
+The cluster operator will update these new Kubernetes Secrets when it renews cluster or client CA certificates.
+The cluster operator and user operator will copy the CA certificates from the new Kubernetes Secrets into the existing truststore Kubernetes Secrets that are mounted into components.
+The cluster operator and user operator will update the new Kubernetes Secrets to reflect whether the CA certificates are currently trusted and/or in use or not.
+This will make it easier to reason about which CA certificates are in use/trusted, and allow the management of CA certificates to be evolved further in future (see [Future changes](#future-changes)).
+These new Kubernetes Secrets can be updated by multiple processes (i.e the cluster operator when issuing the CA certificates, and the cluster and user operators when updating the state of CA certificates).
 
-### Kubernetes Secret format
+### New Kubernetes Secret format for CA certificate state
+
+A new Kubernetes Secret is introduced which is primarily updated by the cluster operator in its role as a CA, but also updated by the cluster operator and user operator to reflect whether the individual CA certificates are trusted and/or in use in the cluster.
 
 ```yaml
 kind: Secret
@@ -66,11 +71,12 @@ metdata:
   name: ${cluster}-${ca-type}-trust # e.g. foo-cluster-ca-trust
 type: strimzi.io/trust
 data:
-  ${fingerprint}.${state}: <PEM encoded Secret>
+  ${fingerprint}.${state}: <PEM encoded CA certificate>
 ```
 
-The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA-1 hash of the ASN.1 DER-encoded form of the X509 certificate. The `state` can be any of the states of the CA certificate trust state machine described below.
-Including the state in the item name facilitates inspection of the Kubernetes Secret.
+The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA-1 hash of the ASN.1 DER-encoded form of the X509 certificate, which is a commonly used way of identifying certificates using common tooling.
+The `state` can be any of the states of the CA certificate trust state machine described below.
+Including the state in the item name facilitates understanding the current role of the Kubernetes Secret within the cluster.
 
 The existing Kubernetes Secrets, named using `${cluster}-${ca}-certs` and passed via Secret volume mounts to containers would not change under this proposal.
 
@@ -84,41 +90,44 @@ The "CA certificate trust state machine" has the following states:
   UNTRUSTED // not yet trusted everywhere it needs to be 
    |
    v
-  TRUSTED_UNUSED // trusted everywhere it needs to be, but no EE certificates yet issued
+  TRUSTED_UNUSED // trusted everywhere it needs to be, but no EE certificates yet issued with this CA certificate
    |
    v
-  TRUSTED_USED // trusted everywhere, EE certificates issued
+  TRUSTED_IN_USE // trusted everywhere, EE certificates issued using this CA certificate
    |
    v
-  PHASE_OUT // trusted everywhere, but being phased out
+  PHASE_OUT // trusted everywhere, but new end-entity certificates will not be issued using this CA certificate
    |
    v
-  ZOMBIE // still trusted by some component, but not relied on by any party.
+  ZOMBIE // still trusted by some component, but with no issued end-entity certificates in current use.
 ```
 
 New cluster creation process:
 1. The CaReconciler creates the CA certificates and places them in the relevant Kubernetes Secret with the state UNTRUSTED
 2. The cluster and user operator, during their respective reconcile loops:
    1. Add the CA certificate to the relevant component truststore Kubernetes Secret and change the state to TRUSTED_UNUSED
-   2. Generate end entity certificates using the CA and add the EE certificate to the relevant component keystore Kubernetes Secret and change the state to TRUSTED_USED
+   2. Generate end entity certificates using the CA and add the EE certificate to the relevant component keystore Kubernetes Secret and change the state to TRUSTED_IN_USE
 
-Update process (e.g. CA key has been updated):
+Update process (e.g. CA private key has been updated):
 1. The CaReconciler generates a new CA certificate and places it in the relevant Kubernetes Secret with the state UNTRUSTED. It also updates the old CA certificate to have the state PHASE_OUT.
 2. The cluster and user operator, during their respective reconcile loop:
    1. Add the CA certificate to the relevant component truststore Kubernetes Secret and change the state to TRUSTED_UNUSED
-   2. Generate end entity certificates using the CA and add the EE certificate to the relevant component keystore Kubernetes Secret and change the state to TRUSTED_USED
+   2. Generate end entity certificates using the CA and add the EE certificate to the relevant component keystore Kubernetes Secret and change the state to TRUSTED_IN_USE
    3. Update the old CA certificate to ZOMBIE, indicating that no EE certicates are using the CA certificate
-3. In a future loop the CaReconciler removes the CA certificate from the shared Kubernetes Secret
+3. In a future loop the CaReconciler removes the CA certificate from the shared Kubernetes Secret (because it is observed to be in the `ZOMBIE` state).
 4. The cluster and user operator remove the CA certificate from the truststore Kubernetes Secret
 
 Notes:
-1. The key for the self-signed cluster CA certificate in a Kafka cluster called **foo**, can be stored in `foo-cluster-ca`.
+1. The private key for the self-signed cluster CA certificate in a Kafka cluster called **foo**, can be stored in `foo-cluster-ca`.
 2. The strimzi.io/cluster-ca-key-generation can be used by the cluster operator when managing the self-signed cluster CA certificate
-3. The strimzi.io/cluster-ca-cert-generation on components can be used to store the fingerprint of the issuing CA, rather than an increasing integer
+3. A new annotation strimzi.io/cluster-ca-cert-fingerprint on components can be used to store the fingerprint of the issuing CA. This removes the need for the current annotation strimzi.io/cluster-ca-cert-generation which just holds an integer.
 
 ### Future changes
 
 Once this proposal is implemented, it allows in future to update to change both the issuing of end entity certificates and the management of the CA certificates to be done by certificate management solutions, similarly to the [closed proposal][pr46].
+This proposal is the first step because it decouples the management of the CA certificates, from the rolling out of trust of those CA certificates.
+The next logical step will be to change the end-entity certificate issuance process, so that an end-entity certificate and it's root CA certificate can be received at the same time.
+Currently it is assumed that the CA certificate is already issued and is used for signing the end-entity certificates, rather than an end-entity certificate has been received that has been signed by (from the PoV of the requesting operator) and arbitrary CA.
 
 ## Affected/not affected projects
 
