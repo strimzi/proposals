@@ -91,10 +91,15 @@ For example, the following happens when a user triggers CA replacement using the
 
 This proposal suggests improving the API of our custom resources that we use for configuring the trusted certificates.
 It should allow loading more certificates without an exact specification of the keys in the Secret.
-To do so, we should add a new field called `extension`.
-This field will allow users to specify the extension of the files that should be loaded from the Secret without specifying the exact name.
+To do so, we should add a new field called `certificatesMatching`.
+This field will allow users to specify a pattern to match the files that should be loaded from the Secret without specifying the exact name.
+The pattern will use the [_glob_ pattern format](https://en.wikipedia.org/wiki/Glob_(programming)) allowing users to use wildcards such as `*` or `?` to specify the certificates that should be loaded.
+
+In the Strimzi Cluster Operator, the [Java `PathMatcher`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/file/PathMatcher.html) will be used to parse the pattern.
+In the container, `bash` will be used to evaluate the pattern.
+
 The existing `certificate` field will remain supported.
-But it will not be marked as required anymore and instead the CRDs will require one of the fields `certifciate` or `extension` to be specified.
+But it will not be marked as required anymore and instead the CRDs will require one of the fields `certifciate` or `certificatesMatching` to be specified.
 
 This would allow users to instruct Strimzi to load all files with a specific extension as trusted certificates.
 For example with a Secret like this:
@@ -114,7 +119,7 @@ The user can load all three CAs with the following configuration:
   tls:
     trustedCertificates:
       - secretName: my-secret
-        extension: crt
+        certificatesMatching: "*.crt"
 ```
 
 As today, when one of the existing certificates changes, Strimzi will automatically roll the operand to update the trusted certificates.
@@ -130,7 +135,7 @@ In the scenario described in the _Motivation_ section, the new API will work lik
    tls:
       trustedCertificates:
          - secretName: my-cluster-cluster-ca-cert
-           extension: crt
+           certificatesMatching: "*.crt"
    ```
    detects that the `ca.crt` in the Secret was updated and a new `ca-<timestamp>.crt` added, triggering a rolling update of the operand to use the new CA.
    After the rolling update, it trusts both the old and new CAs and continues working without any problems while the CA is being replaced.
@@ -149,6 +154,12 @@ In the scenario described in the _Motivation_ section, the new API will work lik
    This rolling update will remove the trust to the old CA from the operand as well.
    This is an additional rolling update that happens when the new API is used.
 
+### Certificate validation
+
+The Strimzi Cluster Operator will not do any validation of the matching records found in the Secret.
+If they contain certificates in unsupported format or non-certificate records, it might cause the operand pods to crash loop while trying to use them.
+This does not differ from the current API where also no validation happens inside the Cluster Operator.
+
 ### Examples
 
 The examples for the operands based on Kafka clients will be updated to use the new field:
@@ -156,7 +167,7 @@ The examples for the operands based on Kafka clients will be updated to use the 
   tls:
     trustedCertificates:
       - secretName: my-cluster-cluster-ca-cert
-        extension: crt
+        certificatesMatching: "*.crt"
 ```
 
 This will make sure that when used with a Strimzi based cluster, everything - including CA replacement - will work without any outages and issues.
@@ -174,31 +185,41 @@ All existing custom resources will work without any change.
 
 ## Rejected alternatives
 
-### Using a regular expression instead of extension
+### Using an `extension` field
 
-One option considered for this proposal was to use a pattern to specify the matching certificates instead of extension.
-However, when using a pattern / regular expression:
-* The correct value would depend on where is the pattern applied (e.g. in Java, in shell when starting the container image, in some different language in the future).
+A new field `extension` would be added to the trusted certificate API.
+It would specify an extension of the files inside the Secret that should be used.
+For example:
+
+```yaml
+  tls:
+    trustedCertificates:
+      - secretName: my-cluster-cluster-ca-cert
+        extension: crt
+```
+
+This was rejected in favor of using the matching pattern which was deemed more user-friendly.
+
+### Using a full regular expression instead of the glob pattern
+
+Regular expressions can be used instead of using the glob patterns.
+However, when using a regular expressions:
+* The correct value would depend on where is it applied (e.g. in Java, in shell when starting the container image, in some different language in the future).
 * For non-expert users it might be hard to understand the exact format and the different regular expression variants.
 * It would be hard to validate the the pattern / regular expression.
 
 That is why this option was rejected.
 
-### Hardcoding the extension
+### Hardcoding the pattern
 
-Another considered option was to not add a new field to specify the `extension` at all in the API and just make the `certificate` field optional.
-When the `certificate` field would not be specified, all items from the Secret with the `.crt` extension would be loaded.
+The matching pattern could be hardcoded in the Strimzi source code instead of being configurable.
+It would be hardcoded to `*.crt` and always match Secret entries with the `crt` extension.
 This option was rejected because in some cases, users might use different extension such as `.pem` for public keys and having it hardcoded might make it not work for them.
 
-It was also considered to not add the `extension` field, but instead of hardcoding the `.crt` extension to simply try to load everything from the Secret.
-But in this situation, we might struggle to identify the fields that contain a public key.
-We would likely need to parse them and that might not produce reliable results.
-So this alternative was rejected as well.
+### Making `certificate` and `certificatesMatching` fields completely optional
 
-### Making `certificate` and `extension` fields completely optional
-
-Another option - similar to the previous one - was to keep the `extension` field.
-But make specifying `extension` (as well as `certicicate`) fully optional.
+Another option - similar to the previous one - was to keep the `certificatesMatching` field.
+But make specifying `certificatesMatching` (as well as `certificate`) fully optional.
 For example:
 ```yaml
   tls:
@@ -206,5 +227,5 @@ For example:
       - secretName: my-cluster-cluster-ca-cert
 ```
 
-And when none of them would be specified, it will be treated as if `extension` was set to `crt`.
+And when none of them would be specified, it will be treated as if `certificatesMatching` was set to `*.crt`.
 This is something what can be considered and added even later if desired.
