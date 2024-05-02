@@ -91,7 +91,7 @@ For example, the following happens when a user triggers CA replacement using the
 
 This proposal suggests improving the API of our custom resources that we use for configuring the trusted certificates.
 It should allow loading more certificates without an exact specification of the keys in the Secret.
-To do so, we should add a new field called `certificatesMatching`.
+To do so, we should add a new field called `pattern`.
 This field will allow users to specify a pattern to match the files that should be loaded from the Secret without specifying the exact name.
 The pattern will use the [_glob_ pattern format](https://en.wikipedia.org/wiki/Glob_(programming)) allowing users to use wildcards such as `*` or `?` to specify the certificates that should be loaded.
 
@@ -99,7 +99,7 @@ In the Strimzi Cluster Operator, the [Java `PathMatcher`](https://docs.oracle.co
 In the container, `bash` will be used to evaluate the pattern.
 
 The existing `certificate` field will remain supported.
-But it will not be marked as required anymore and instead the CRDs will require one of the fields `certifciate` or `certificatesMatching` to be specified.
+But it will not be marked as required anymore and instead the CRDs will require one of the fields `certificate` or `pattern` to be specified.
 
 This would allow users to instruct Strimzi to load all files with a specific extension as trusted certificates.
 For example with a Secret like this:
@@ -119,7 +119,7 @@ The user can load all three CAs with the following configuration:
   tls:
     trustedCertificates:
       - secretName: my-secret
-        certificatesMatching: "*.crt"
+        pattern: "*.crt"
 ```
 
 As today, when one of the existing certificates changes, Strimzi will automatically roll the operand to update the trusted certificates.
@@ -135,7 +135,7 @@ In the scenario described in the _Motivation_ section, the new API will work lik
    tls:
       trustedCertificates:
          - secretName: my-cluster-cluster-ca-cert
-           certificatesMatching: "*.crt"
+           pattern: "*.crt"
    ```
    detects that the `ca.crt` in the Secret was updated and a new `ca-<timestamp>.crt` added, triggering a rolling update of the operand to use the new CA.
    After the rolling update, it trusts both the old and new CAs and continues working without any problems while the CA is being replaced.
@@ -167,7 +167,7 @@ The examples for the operands based on Kafka clients will be updated to use the 
   tls:
     trustedCertificates:
       - secretName: my-cluster-cluster-ca-cert
-        certificatesMatching: "*.crt"
+        pattern: "*.crt"
 ```
 
 This will make sure that when used with a Strimzi based cluster, everything - including CA replacement - will work without any outages and issues.
@@ -216,10 +216,10 @@ The matching pattern could be hardcoded in the Strimzi source code instead of be
 It would be hardcoded to `*.crt` and always match Secret entries with the `crt` extension.
 This option was rejected because in some cases, users might use different extension such as `.pem` for public keys and having it hardcoded might make it not work for them.
 
-### Making `certificate` and `certificatesMatching` fields completely optional
+### Making `certificate` and `pattern` fields completely optional
 
-Another option - similar to the previous one - was to keep the `certificatesMatching` field.
-But make specifying `certificatesMatching` (as well as `certificate`) fully optional.
+Another option - similar to the previous one - was to keep the `pattern` field.
+But make specifying `pattern` (as well as `certificate`) fully optional.
 For example:
 ```yaml
   tls:
@@ -227,5 +227,5 @@ For example:
       - secretName: my-cluster-cluster-ca-cert
 ```
 
-And when none of them would be specified, it will be treated as if `certificatesMatching` was set to `*.crt`.
+And when none of them would be specified, it will be treated as if `pattern` was set to `*.crt`.
 This is something what can be considered and added even later if desired.
