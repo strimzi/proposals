@@ -53,7 +53,7 @@ This would be highly valuable for organizations with compliance requirements wit
 
 Strimzi should be updated to decouple the management of the cluster and clients CA certificates, and the consumption of those CA certificates by components (such as ZooKeeper, Kafka and cluster operator).
 
-To do this we will introduce new Kubernetes Secrets that are used to keep track of CA certificates and their current state.
+To do this we will introduce new Kubernetes Secrets that are used to keep track of CA certificates and their current state with respect to issued end entity certificates.
 These new Kubernetes Secrets are separate from the ones that are mounted into the components to use a truststore.
 The cluster operator will update these new Kubernetes Secrets when it renews cluster or client CA certificates.
 The cluster operator and user operator will copy the CA certificates from the new Kubernetes Secrets into the existing truststore Kubernetes Secrets that are mounted into components.
