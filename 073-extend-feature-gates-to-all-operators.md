@@ -34,7 +34,7 @@ However, if the operator doesn't have any use for the feature gate, it can simpl
 
 When the User and Topic Operators are deployed through the Cluster Operator as part of the Kafka cluster, the user will configure the feature gates as today using the `STRIMZI_FEATURE_GATES` environment variable.
 And the Cluster Operator will then automatically pass the environment variable to the User and Topic Operators when deploying them.
-When the User and Topic Operators are deployed as standalone, used can configure the `STRIMZI_FEATURE_GATES` environment variable directly in their deployments.
+When the User and Topic Operators are deployed as standalone, user can configure the `STRIMZI_FEATURE_GATES` environment variable directly in their deployments.
 
 ### Trade-offs and limitations
 
