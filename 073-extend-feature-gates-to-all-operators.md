@@ -34,7 +34,9 @@ However, if the operator doesn't have any use for the feature gate, it can simpl
 
 When the User and Topic Operators are deployed through the Cluster Operator as part of the Kafka cluster, the user will configure the feature gates as today using the `STRIMZI_FEATURE_GATES` environment variable.
 And the Cluster Operator will then automatically pass the environment variable to the User and Topic Operators when deploying them.
-When the User and Topic Operators are deployed as standalone, users can configure the `STRIMZI_FEATURE_GATES` environment variable directly in their deployments.
+
+When the User and Topic Operators are deployed as standalone, there is no Cluster Operator to configure the feature gates through it.
+But the users can configure the `STRIMZI_FEATURE_GATES` environment variable directly in the User and Topic operator deployments.
 
 ### Trade-offs and limitations
 
@@ -51,7 +53,7 @@ This design has several trade-offs and limitations:
 The proposed change also has aspects that can be considered advantages:
 * The configuration of the feature gates is unchanged compared to how it works today.
   It also maintains the simplicity of the configuration.
-  The user needs to set only one environment variable in the Cluster Operator to configure all feature gates.
+  The user needs to set only one environment variable in the Cluster Operator to configure all feature gates (unless using standalone User and Topic Operators).
   This also means that we do not need any changes to our system tests as they can keep using the Feature Gates in the same way as they do today.
 * Having a consistency and clarity how the operators are configured simplifies support as there are less variables that need to be understood before helping our users.
 * While the implementation is different, the proposed behavior mirrors the current behavior:
