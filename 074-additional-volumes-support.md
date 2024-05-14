@@ -1,6 +1,6 @@
 # Support of additional volumes in pod
 
-We propose to enhance the Strimzi Kafka Operator by adding support for specifying additional volumes in the CRD. This will involve modifying the Kafka and KafkaConnect CRDs to include an `additionalVolumes` field, which will allow users to define extra volumes and volume mounts.
+We propose to enhance the Strimzi Kafka Operator by adding support for specifying additional volumes in the CRD. This will involve modifying the Kafka CRDs to include an `additionalVolumes` field, which will allow users to define extra volumes and volume mounts.
 
 The specific usecase of ours, is that we want to set custom log4j logging for audit logs, to ensure that audit logs are *not* present in stdout, but can be picked up by a sidecar which uses OpenTelemtry or logstash to forward to the audit logs to a secure location.
 
@@ -19,11 +19,9 @@ Improve flexibility in managing Kafka deployments by allowing users to attach cu
 
 ## Proposal
 
-Provide an introduction to the proposal. Use sub sections to call out considerations, possible delivery mechanisms etc.
-
 ### Considerations
 
-- CRD Changes: Update the Kafka and KafkaConnect CRDs to include an `additionalVolumes` field.
+- CRD Changes: Update the Kafka CRDs to include an `additionalVolumes` field.
 - Validation: Ensure that the additional volumes are validated correctly and do not conflict with existing volume definitions such as `/var/lib/kafka/` and `/tmp`.
 - Documentation: Update the Strimzi documentation to include examples and guidelines on how to use the new `additionalVolumes` field.
 - Security: Ensure that the additional volumes do not introduce security vulnerabilities by validating the configurations.
@@ -32,7 +30,9 @@ Provide an introduction to the proposal. Use sub sections to call out considerat
 ### Possible Delivery Mechanisms
 
 - CRD Updates: Modify the existing CRDs to include the new field.
+  - This will be done by extending the `PodTemplate.java` class to include the new `additionalVolumes` field as a list.
 - Operator Logic: Update the operator logic to handle the additional volumes during the deployment process.
+  - This should be possible to implement in the `KafkaCluster.java` class.
 
 See initial work in this PR draft:
 <https://github.com/strimzi/strimzi-kafka-operator/pull/10099>
