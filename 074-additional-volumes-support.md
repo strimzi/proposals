@@ -34,6 +34,43 @@ Improve flexibility in managing Kafka deployments by allowing users to attach cu
 - Operator Logic: Update the operator logic to handle the additional volumes during the deployment process.
   - This should be possible to implement in the `KafkaCluster.java` class.
 
+The configuration could look as follows:
+
+```yaml
+    additionalVolumes:
+    - name: example-configmap
+      path: /path/to/mount/volume
+      #subPath: mykey # Add this to mount only a specific key of the configmap/secret
+      configMap:
+        name: config-map-name
+    - name: temp
+      path: /tmp/logs
+      emptyDir: {}
+    - name: example-csi-volume
+      path: /path/to/mount/volume
+      #subPath: "subpath" # Add this to mount the CSI volume at a specific subpath
+      csi:
+        driver: csi-driver-name
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: example-secret-provider-class
+    - name: example-projected-volume
+      path: /path/to/mount/volume
+      projected:
+        sources:
+          serviceAccountToken
+```
+
+### Supported volumes
+
+The following types of volumes are proposed as initial support. More types could be added later.
+
+- Secret
+- ConfigMap
+- EmptyDir
+- CSI
+- Projected volume
+
 See initial work in this PR draft:
 <https://github.com/strimzi/strimzi-kafka-operator/pull/10099>
 
