@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 76  | [Connector Offsets Support](./076-connector-offsets-support.md) |
 | 75  | [Support of additional volumes](./075-additional-volumes-support.md) |
 | 74  | [Extend Feature Gates to all Strimzi operators](./074-extend-feature-gates-to-all-operators.md) |
 | 73  | [Improve handling of CA renewals and replacements in operands based on the Kafka clients](./073-improve-handling-of-CA-renewals-and-replacements-in-client-based-operands.md) |
