@@ -5,7 +5,7 @@ Update the KafkaConnector resource to allow users to manage offsets
 ## Current situation
 
 [KIP-875][kip] added first class offsets support to Kafka Connect.
-This was done via three new endpoints:
+This was done via four new endpoints:
 * GET /connectors/{connector}/offsets
 * PATCH /connectors/{connector}/offsets
 * DELETE /connectors/{connector}/offsets
@@ -16,7 +16,7 @@ Currently users that are utilising the KafkaConnector resource cannot make use o
 
 ## Motivation
 
-Previously if users wanted to list, update or delete offsets for a connector they had to interact with the relevant Kafka topics directly.
+Previously if users wanted to list, update or delete offsets for a connector they had to interact with the relevant consumer groups for sink connectors or directly write to the Kafka Connect internal offsets topic for source connectors.
 [KIP-875][kip] adds new endpoints to let the user do this more easily.
 There are multiple reasons a user might want to manage offsets, for example (as listed in the KIP):
 * Resetting the offsets for a connector while iterating rapidly in a development environment (so that the connector does not have to be renamed each time)
