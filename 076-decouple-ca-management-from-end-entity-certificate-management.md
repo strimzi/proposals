@@ -9,6 +9,7 @@ This proposal aims to decouple the management of the cluster and client CA certi
 When deploying Kafka clusters, in order to provide a secure-by-default, TLS out-of-the-box experience Strimzi ended up implementing its own CA operations internally, within the cluster operator.
 It does this by using `openssl` to generate a self-signed root CA certificate and private key which is then used to directly sign end-entity (EE) certificates (i.e. intermediate certificates are not used).
 In fact Strimzi has two such CAs.
+These CAs are only used for Kafka clusters and a unique instance of each CA is used for each Kafka cluster.
 The "cluster CA" is used for issuing certificates for Strimzi components:
 * ZooKeeper nodes
 * Kafka nodes
@@ -41,7 +42,7 @@ Strimzi currently uses the following Kubernetes Secrets to store the CA certific
 * <CLUSTER_NAME>-clients-ca-cert for the Clients CA root certificate
 * <CLUSTER_NAME>-clients-ca for the Clients CA private key
 
-Strimzi currently uses the following Kubernetes Secrets to store end-entity certificates (signed by the cluster CA) that components will present to clients:
+Strimzi currently uses the following Kubernetes Secrets to store server certificates (signed by the cluster CA) that components will present to clients:
 * <CLUSTER_NAME>-kafka-brokers for Kafka brokers
 * <CLUSTER_NAME>-zookeeper-nodes for ZooKeeper nodes
 
@@ -102,7 +103,7 @@ When the CA private key is updated (either because it has expired or the user ha
 2. The CaReconciler skips updating the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret (since the components still only trust the old CA)
 3. The CaReconciler rolls the ZooKeeper and Kafka nodes to trust the new CA certificates
 4. The ZooKeeper and Kafka reconcilers generate new certificates signed by the new CA key and roll the pods to use the new certificates
-5. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the new CA key amd roll the pods to use the new certificates
+5. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the new CA key and roll the pods to use the new certificates
 6. A new reconciliation starts
 7. The CaReconciler updates the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret with the new CA certificate (since the generations are now correct)
 8. The CaReconciler removes the old CA certificates and keys that have been named ca-YYYY-MM-DDTHH-MM-SSZ.crt.
@@ -114,7 +115,7 @@ The existing logic assumes two things:
 ## Motivation
 
 In future it would be beneficial if Strimzi can integrate with commonly deployed certificate management solutions, such as [Cert Manager][cmio], or [Vault][vault].
-These solutions work by having the user request certificates from a particular issuer.
+These solutions work by providing an API that can be used to request certificates from a particular issuer.
 
 Integrating with these solutions requires a change in how things are managed. Specifically:
  - Strimzi cannot guarantee that the issuer will issue every certificate signed by the same root CA certificate. 
@@ -184,7 +185,7 @@ When a new cluster is first created the flow is:
 
 1. Either user or CaReconciler creates the Cluster and Client CA certificates and keys and stores them in Kubernetes Secrets.
 2. The CaReconciler takes the Cluster CA certificate and places it in the new shared Kubernetes Secret with the state UNTRUSTED
-3. At the beginning of the reconcile loop of components, the cluster operator generates the Cluster Operator certificate and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret
+3. At the beginning of the reconcile loop of components, the cluster operator generates the Cluster Operator certificate and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret.
    It does this even though the state is UNTRUSTED, because the Kubernetes Secret was missing
 4. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc):
    1. generate their certificates, store them in Kubernetes Secrets
