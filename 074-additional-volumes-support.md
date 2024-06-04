@@ -1,6 +1,6 @@
 # Support of additional volumes in pod
 
-We propose to enhance the Strimzi Kafka Operator by adding support for specifying additional volumes in the CRD. This will involve modifying the Kafka CRDs to include an `additionalVolumes` field, which will allow users to define extra volumes and volume mounts.
+We propose to enhance the Strimzi Kafka Operator by adding support for specifying additional volumes in the CRDs. This will involve modifying the Kafka CRDs (see details below) to include a `volumes` field which will allow users to define extra volumes, and a `volumeMounts` field which will allow users to define extra volume mounts.
 
 The specific usecase of ours, is that we want to set custom log4j logging for audit logs, to ensure that audit logs are *not* present in stdout, but can be picked up by a sidecar which uses OpenTelemtry or logstash to forward to the audit logs to a secure location.
 
@@ -21,44 +21,74 @@ Improve flexibility in managing Kafka deployments by allowing users to attach cu
 
 ### Considerations
 
-- CRD Changes: Update the Kafka CRDs to include an `additionalVolumes` field.
+- CRD Changes: Update the Kafka CRDs to include a `volumes` and a `volumeMounts` field.
 - Validation: Ensure that the additional volumes are validated correctly and do not conflict with existing volume definitions such as `/var/lib/kafka/` and `/tmp`.
-- Documentation: Update the Strimzi documentation to include examples and guidelines on how to use the new `additionalVolumes` field.
+- Documentation: Update the Strimzi documentation to include examples and guidelines on how to use the new `volumes` and `volumeMounst` fields.
 - Security: Ensure that the additional volumes do not introduce security vulnerabilities by validating the configurations.
 - Testing: Comprehensive testing to cover various scenarios and use cases, ensuring that the feature works as expected.
 
-### Possible Delivery Mechanisms
+### CRD Changes
 
-- CRD Updates: Modify the existing CRDs to include the new field.
-  - This will be done by extending the `PodTemplate.java` class to include the new `additionalVolumes` field as a list.
-- Operator Logic: Update the operator logic to handle the additional volumes during the deployment process.
-  - This should be possible to implement in the `KafkaCluster.java` class.
+Add a new `volumes` field to PodTemplate and a new `volumeMounts` field to ContainerTemplate. Update the associated code to create and mount the specified volumes. Support will be added for specifying `volumes`/`volumeMounts` in the PodTemplate/ContainerTemplate in the following locations:
 
-The configuration could look as follows:
+|Pod              |CRD              |Schema Location                                                                       |Implementing class           |
+|-----------------|-----------------|--------------------------------------------------------------------------------------|-----------------------------|
+|Kafka            |Kafka            |spec -> kafka -> template -> pod/kafkaContainer/initContainer                         |KafkaCluster.java            |
+|                 |KafkaNodePoolSpec|spec -> template -> pod/kafkaContainer/initContainer                                  |                             |
+|Zookeeper        |Kafka            |spec -> zookeeper -> template -> pod/zookeeperContainer                               |ZookeeperCluster.java        |
+|EntityOperator   |Kafka            |spec -> entityOperator -> template -> pod/topicOperatorContainer/userOperatorContainer|EntityOperator.java          |
+|CruiseControl    |Kafka            |spec -> cruiseControl -> template -> pod/cruiseControlContainer                       |CruiseControl.java           |
+|KafkaExporter    |Kafka            |spec -> kafkaExporter -> template -> pod/container                                    |KafkaExporter.java           |
+|KafkaConnect     |KafkaConnect     |spec -> template -> pod/connectContainer/initContainer/buildContainer                 |KafkaConnectCluster.java     |
+|KafkaBridge      |KafkaBridge      |spec -> template -> pod/bridgeContainer/initContainer                                 |KafkaBridgeCluster.java      |
+|KafkaMirrorMaker2|KafkaMirrorMaker |spec -> template -> pod/connectContainer/initContainer/buildContainer                 |KafkaMirrorMaker2Cluster.java|
+
+
+It is proposed to not add support in the following locations - if `volumes` or `volumeMounts` are specified in the PodTemplate or ContainerTemplate in any of these locations it will be ignored:
+
+|Pod             |CRD             |Schema Location                                          |Reason                                 |
+|----------------|----------------|---------------------------------------------------------|---------------------------------------|
+|KafkaMirrorMaker|KafkaMirrorMaker|spec -> template -> pod/mirrorMakerContainer             |KafkaMirrorMaker has been deprecated   |
+|Kafka           |Kafka           |spec -> jmxTrans -> template -> pod/container            |JmxTrans no longer supported           |
+|EntityOperator  |Kafka           |spec -> entityOperator -> template -> tlsSidecarContainer|tlsSidecarContainer no longer supported|
+|CruiseControl   |Kafka           |spec -> cruiseControl -> template -> tlsSidecarContainer |tlsSidecarContainer deprecated         |
+
+
+An example configuration could look as follows:
 
 ```yaml
-    additionalVolumes:
-    - name: example-configmap
-      path: /path/to/mount/volume
-      #subPath: mykey # Add this to mount only a specific key of the configmap/secret
-      configMap:
-        name: config-map-name
-    - name: temp
-      path: /tmp/logs
-      emptyDir: {}
-    - name: example-csi-volume
-      path: /path/to/mount/volume
-      #subPath: "subpath" # Add this to mount the CSI volume at a specific subpath
-      csi:
-        driver: csi-driver-name
-        readOnly: true
-        volumeAttributes:
-          secretProviderClass: example-secret-provider-class
-    - name: example-projected-volume
-      path: /path/to/mount/volume
-      projected:
-        sources:
-          serviceAccountToken
+    kind: Kafka
+    spec:
+      kafka:
+        template:
+          pod:
+            volumes:
+            - name: example-configmap
+              configMap:
+                name: config-map-name
+            - name: temp
+              emptyDir: {}
+            - name: example-csi-volume
+              csi:
+                driver: csi-driver-name
+                readOnly: true
+                volumeAttributes:
+                  secretProviderClass: example-secret-provider-class
+            - name: example-projected-volume
+              projected:
+                sources:
+                  serviceAccountToken
+          kafkaContainer:
+            volumeMounts:
+            - name: example-configmap
+              path: /path/to/mount/cm-volume
+            - name: temp
+              path: /tmp/logs
+            - name: example-csi-volume
+              path: /path/to/mount/csi-volume
+            - name: example-projected-volume
+              path: /path/to/mount/proj-volume
+
 ```
 
 ### Supported volumes
@@ -77,6 +107,8 @@ See initial work in this PR draft:
 ## Affected/not affected projects
 
 <https://github.com/strimzi/strimzi-kafka-operator>
+
+Affected operands/components as described in table in "CRD Changes" section above
 
 ## Compatibility
 
