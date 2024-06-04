@@ -207,6 +207,36 @@ When the CA private key is updated (either because it has expired or the user ha
 8. At the end of the reconcile loop the cluster operator updates the shared Kubernetes Secret to change the state of the CA certificate to TRUSTED_IN_USE and the old CA certificate to ZOMBIE, indicating that no end entity certificates are using the CA certificate
 9. In a future loop the CaReconciler removes the old CA certificate from the shared Kubernetes Secret (because it is observed to be in the `ZOMBIE` state).
 
+1. If Strimzi is managing the CA, the CaReconciler renews the Cluster and Client CAs certificates and keys. The old certificate and key can be removed from the Kubernetes Secret.
+2. The CaReconciler takes the Cluster CA certificate and places it in the new shared Kubernetes Secret with the state UNTRUSTED. It also updates the old CA certificate to have the state PHASE_OUT.
+3. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc) see the new UNTRUSTED CA certificate and:
+   1. Roll the pods to trust the new CA certificate
+4. One of the rolling updates times out
+5. In the mean time the Kafka CR has changed
+5. This change triggers a new reconcile loop
+6. At the beginning of the reconcile loop the cluster operator sees there is a CA certificate in the state UNTRUSTED and keeps the old Cluster Operator certificate
+7. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc):
+   1. Generate new certificates signed by the new CA key
+   2. Roll the pods to use the new certificates
+8. In this case we get an error because the brokers don't trust the new 
+
+
+Usecase where we use current flow:
+When the CA private key is updated (either because it has expired or the user has incremented the generation to indicate they've manually updated the Kubernetes Secret):
+1. If Strimzi is managing the CA, the CaReconciler renews the Cluster and Client CAs certificates and keys. The old certificate and key are kept in the Kubernetes Secret and renamed to have the key ca-YYYY-MM-DDTHH-MM-SSZ.crt.
+2. The CaReconciler skips updating the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret (since the components still only trust the old CA)
+3. The CaReconciler rolls the ZooKeeper and Kafka nodes to trust the new CA certificates
+4. One of the rolling updates times out
+5. In the mean time the Kafka CR has changed
+5. This change triggers a new reconcile loop
+6. At the beginning of the reconcile loop the CaReconciler sees there are some pods still not trusting the new CA so it keeps the same cluster operator certificate
+7. CaReconciler finished rolling the pods
+4. The ZooKeeper and Kafka reconcilers generate new certificates signed by the new CA key and with new config and roll the pods to use the new certificates
+5. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the new CA key and with new config and roll the pods to use the new certificates
+6. A new reconciliation starts
+7. The CaReconciler updates the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret with the new CA certificate (since the generations are now correct)
+8. The CaReconciler removes the old CA certificates and keys that have been named ca-YYYY-MM-DDTHH-MM-SSZ.crt.
+
 Notes:
 The existing annotations strimzi.io/ca-cert-generation and strimzi.io/ca-key-generation can still be used by the CaReconciler and the cluster operator to track which certificates the Kubernetes Pods are trusting/using.
 
