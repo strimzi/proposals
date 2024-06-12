@@ -87,9 +87,17 @@ The operator will then remove the annotation from the KafkaConnector CR.
 
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
 
-The ConfigMap the operator creates will be called `{connector}-offsets`, where `{connector}` is the name of the KafkaConnector CR that was annotated.
-The ConfigMap will contain a single file called `offsets.json` that contains the response received from the GET /connectors/{connector}/offsets endpoint.
-The KafkaConnector CRD will also be updated to contain a new property called `listOffsetsCM` that when set will override the name of the ConfigMap the operator creates/updates with the endpoint response.
+The ConfigMap the operator creates will be called `{connector}-offsets` by default, where `{connector}` is the name of the KafkaConnector CR that was annotated.
+The KafkaConnector CRD will also be updated to contain a new property called `listOffsets` that when set will override the name of the ConfigMap the operator creates/updates with the endpoint response.
+The structure of the `listOffsets` property will be as below, to allow it to be extended in future if required:
+
+```yaml
+listOffsets:
+  toConfigMap:
+    name: my-connector-offsets
+```
+
+The ConfigMap will contain a single entry called `offsets.json` that contains the response received from the GET /connectors/{connector}/offsets endpoint.
 
 For example for a source connector the ConfigMap might look like:
 
@@ -145,9 +153,17 @@ After the annotation is added, on the next reconciliation the operator will call
 Once the patch is complete the operator will then remove the annotation from the KafkaConnector CR.
 
 By default, the operator will construct the request body from a ConfigMap called `{connector}-offsets`, where `{connector}` is the name of the KafkaConnector CR that was annotated.
-This matches the name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets be altered using that same ConfigMap.
+The operator will read in the entry called `offsets.json` from the ConfigMap.
+The entry name and default ConfigMap name matches the entry and default ConfigMap names used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets be altered using that same ConfigMap.
 
-The KafkaConnector CRD will also be updated to contain a new property called `alterOffsetsCM` that when set will override the name of the ConfigMap the operator uses to populate the request body.
+The KafkaConnector CRD will also be updated to contain a new property called `alterOffsets` that when set will override the name of the ConfigMap the operator uses to populate the request body.
+The structure of the `alterOffsets` property will be as below, to allow it to be extended in future if required:
+
+```yaml
+alterOffsets:
+  fromConfigMap:
+    name: my-connector-offsets
+```
 
 Notes:
 * The format of the request body will be validated to make sure it is valid JSON, but the operator won't perform any further validation, instead relying on the API endpoint to return a reasonable error message.
@@ -159,8 +175,9 @@ Notes:
     status: "True"
     type: Warning
   ```
-* Strimzi will not attempt to verify that the connector is already stopped, it will rely on the API failing if that is the case.
-  This is to simplify the logic and means we don't have to account for what happens if the KafkaConnector spec has been updated but the connector isn't stopped yet.
+* Strimzi will shortcut and automatically fail to do the reset if the KafkaConnector resource does not have it's `state` set as `stopped`.
+  The user can update the KafkaConnector to stop the connector and alter the offsets at the same time.
+  In that case the operator will first stop the connector, and once that API call returns, then it will make the call to alter the offsets.
 
 ### Resetting offsets
 
@@ -170,7 +187,7 @@ When the reset has been completed the operator will remove this annotation from 
 
 If the reset fails the operator will add a condition to the KafkaConnector resource called `ResetOffsets` to communicate the failure and remove the annotation.
 
-Strimzi will shortcut and automatically fail to do the reset if the KafkaConnector resource is not stopped.
+Strimzi will shortcut and automatically fail to do the reset if the KafkaConnector resource does not have it's `state` set as `stopped`.
 The user can update the KafkaConnector to stop the connector and reset the offsets at the same time.
 In that case the operator will first stop the connector, and once that API call returns, then it will make the call to reset the offsets.
 
