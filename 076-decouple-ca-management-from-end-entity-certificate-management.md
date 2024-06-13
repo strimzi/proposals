@@ -7,7 +7,7 @@ This proposal aims to decouple the management of the cluster CA certificate from
 ## Current situation
 
 To provide a secure, TLS-enabled setup by default when deploying Kafka clusters, Strimzi integrated its own CA operations into the Cluster Operator.
-The Cluster Operator accomplishes this by using `openssl` to generate self-signed root CA certificates and private keys which it then uses to directly sign end-entity (EE) certificates (i.e. intermediate certificates are not used).
+The Cluster Operator accomplishes this by using `openssl` to generate self-signed root CA certificates and private keys which it then uses to directly sign end-entity (EE) certificates (i.e. intermediate certificates can't be used).
 A _cluster CA_  and _clients CA_ are generated.
 These CAs are only used for Kafka clusters and a unique instance of each CA is used for each Kafka cluster.
 The cluster CA issues certificates for the following Strimzi components:
@@ -32,7 +32,7 @@ The cluster CA root certificate is added to the trust stores of Strimzi componen
 > during TLS handshake.
 
 The cluster CA root certificate also needs to be trusted by Kafka clients connecting to the cluster so that clients trust the certificates presented by the brokers.
-The clients CA root certificate is added to the broker trust stores too, so that the brokers will trust certificates issued to Kafka client applications.
+The clients CA root certificate is added to the broker trust stores too, so that the brokers will trust certificates issued to Kafka client applications that they present to brokers when mutual TLS is enabled on a listener.
 
 #### Fig 2: Clients CA certificate and component relationships
 
@@ -52,8 +52,8 @@ Strimzi currently uses the following Kubernetes Secrets to store server certific
 
 Strimzi currently uses the following Kubernetes Secrets to store client certificates (signed by the cluster CA) that components will present to Kafka or ZooKeeper when making requests:
 * <CLUSTER_NAME>-cluster-operator-certs for the Cluster Operator
-* <CLUSTER_NAME>-entity-topic-operator-certs for the Entity Topic Operator
-* <CLUSTER_NAME>-entity-user-operator-certs for the Entity User Operator
+* <CLUSTER_NAME>-entity-topic-operator-certs for the Topic Operator
+* <CLUSTER_NAME>-entity-user-operator-certs for the User Operator
 * <CLUSTER_NAME>-kafka-exporter-certs for the Kafka Exporter
 * <CLUSTER_NAME>-cruise-control-certs for Cruise Control
 
@@ -62,19 +62,19 @@ Strimzi currently uses the following Kubernetes Secrets to store client certific
 Strimzi uses both the notion of a "generation" and hashes when keeping track of certificates.
 
 A generation is associated with a specific certificate or private key for either the Cluster or Clients CA.
-If Strimzi is managing the CA, it increments the generation each time the certificate or private key is renewed or replaced.
+If Strimzi is managing the CA, it increments the generation each time the certificate is renewed or the private key is replaced (so the corresponding certificate is regenerated as well).
 If the user is managing the CA, they are responsible for incrementing the generation.
 The generations are then used during the reconcile loop to track the state of trust (as described in the example flows below).
 
-Strimzi uses the following annotations on Kubernetes Secrets:
+Strimzi uses the following annotations on the <CLUSTER_NAME>-<cluster/clients>-ca-cert and <CLUSTER_NAME>-<cluster/clients>-ca Kubernetes Secrets:
 * strimzi.io/ca-cert-generation to indicate the generation of the Cluster CA or Client CA certificate in the Kubernetes Secret
 * strimzi.io/ca-key-generation to indicate the generation of the Cluster CA or Client CA private key in the Kubernetes Secret
 
-Strimzi uses the following annotations on Kubernetes Pods and Kubernetes Secrets to indicate the generation of the Cluster CA certificate used to sign the certificates that are either stored in the Kubernetes Secret, or presented by the Kubernetes Pod:
+Strimzi uses the following annotations on Kubernetes Pods and the <CLUSTER_NAME>-kafka-brokers and <CLUSTER_NAME>-zookeeper-nodes Kubernetes Secrets to indicate the generation of the Cluster CA certificate used to sign the certificates that are either stored in the Kubernetes Secret, or presented by the Kubernetes Pod:
 * strimzi.io/cluster-ca-cert-generation for certificates signed by the Cluster CA
 * strimzi.io/clients-ca-cert-generation for certificates signed by the Clients CA
 
-Strimzi uses the following annotation on Kubernetes Pods to indicate the generation of the Cluster CA private key used to sign the cluster CA certificate that the pod currently trusts:
+Strimzi uses the following annotation on Kubernetes Pods to indicate the generation of the Cluster CA private key used to sign the cluster CA certificate that the component running in that Kubernetes Pod currently trusts:
 * strimzi.io/cluster-ca-key-generation
 
 Strimzi uses the following annotation on the Kafka and ZooKeeper nodes to store the full SHA1-hash of the certificate the nodes present to clients:
@@ -118,10 +118,17 @@ When a new cluster is first created the flow is:
 
 1. Either the user or the CaReconciler creates the Cluster CA certificate and key and stores them in the <CLUSTER_NAME>-cluster-ca-cert and <CLUSTER_NAME>-cluster-ca Kubernetes Secrets respectively.
 2. The CaReconciler generates the Cluster Operator certificate and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret.
-3. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc) generate their certificates, store them in Kubernetes Secrets and annotate the Kubernetes Secrets and Pods with the cert and key generations, and (for ZooKeeper and Kafka) the certificate hash.
+3. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc) generate their corresponding EE certificates (signed by the newly generated Cluster CA certificate), store them in Kubernetes Secrets and annotate the Kubernetes Secrets and Pods with the cert and key generations, and (for ZooKeeper and Kafka) the certificate hash.
 
-When the Cluster CA private key is updated (either because it has expired or the user has incremented the generation to indicate they've manually updated the Kubernetes Secret):
-1. If Strimzi is managing the Cluster CA, the CaReconciler renews the Cluster CAs certificate and key. The old certificate and key are kept in the respective Kubernetes Secret and renamed to ca-YYYY-MM-DDTHH-MM-SSZ.crt.
+#### Fig 3: New cluster create flow
+
+![New cluster create flow](./images/073-cert-new-existing.png)
+
+> Fig 3: The numbers in the diagram match the numbers in the full description of the steps.
+> The diagram omits the use of annotations.
+
+When the Cluster CA private key is updated (either because the user has requested for it to be regenerated (while Strimzi is managing the CA) or the user has incremented the generation to indicate they've manually updated the Kubernetes Secret):
+1. If Strimzi is managing the Cluster CA, the CaReconciler regenerates the Cluster CAs certificate and key. The old certificate and key are kept in the respective Kubernetes Secret and renamed to ca-YYYY-MM-DDTHH-MM-SSZ.crt.
 2. The CaReconciler skips updating the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret (since the components still only trust the old CA certificate).
 3. The CaReconciler rolls the ZooKeeper and Kafka nodes to trust the new CA certificates.
 4. The ZooKeeper and Kafka reconcilers:
@@ -130,13 +137,20 @@ When the Cluster CA private key is updated (either because it has expired or the
    3. During their rolling update step, roll the Kubernetes Pods for ZooKeeper and Kafka to use the new certificates (this is triggered by diffing the server-cert-hash annotation).
 5. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the new CA key and roll the Kubernetes Pods to use the new certificates.
 6. A new reconciliation starts.
-7. The CaReconciler updates the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret with a new certificate signed by the new CA certificate (since the generations are now correct).
+7. The CaReconciler updates the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret with a new certificate signed by the new CA certificate (since the Kafka and ZooKeeper Kubernetes Pods now have the strimzi.io/cluster-ca-cert-generation and strimzi.io/cluster-ca-key-generation matching the current Cluster CA and therefore the Cluster CA is fully trusted and used).
 8. The CaReconciler removes the old CA certificates and keys that have been named ca-YYYY-MM-DDTHH-MM-SSZ.crt.
 9. The component reconcilers roll their Kubernetes Pods, since the Cluster CA passed in has a flag indicating certs have been removed.
 
+#### Fig 4: Cluster CA private key update flow
+
+![Cluster CA private key update flow](./images/073-cert-update-existing.png)
+
+> Fig 4: The numbers in the diagram match the numbers in the full description of the steps.
+> The diagram omits the use of annotations, the EntityOperator, CruiseControl and KafkaExporter reconcilers, and the removal of trust of the old CA certificate and key.
+
 The existing logic assumes a few things:
  - All certificates used by components have been signed by the same root CA certificate.
- - The CaReconciler runs and (if required) has either created or updated the CA certificates and keys before the other reconcilers run, i.e. the CA certificate is already present when e.g. the KafkaReconciler starts.
+ - The CaReconciler performs its reconciliation steps to (if required) either create or update the CA certificates and keys before the other reconcilers reconcile their resources, i.e. the CA certificate is already present when e.g. the KafkaReconciler starts.
  - There is a single Kubernetes Secret containing the Cluster CA certificate that is used by:
    - The Strimzi Cluster CA for storing the most recent CA certificate.
    - The components for mounting into the Kubernetes Pods and used as a Trust Store.
@@ -201,14 +215,12 @@ A new Kubernetes Secret is introduced which is updated by the cluster operator i
 kind: Secret
 metdata:
   name: <CLUSTER_NAME>-cluster-ca-trust-state # e.g. foo-cluster-ca-trust-state
-type: strimzi.io/trust
 data:
-  ${fingerprint}.${state}: <PEM encoded CA certificate>
+  ${fingerprint}: ${state}
 ```
 
 The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA-1 hash of the ASN.1 DER-encoded form of the X509 certificate, which is a commonly used way of identifying certificates using common tooling.
 The `state` can be any of the states of the CA certificate trust state machine described below.
-Including the state in the item name facilitates understanding the current role of the Kubernetes Secret within the cluster.
 
 ### CA certificate state machine
 
@@ -250,29 +262,35 @@ The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA
 
 When a new cluster is first created the flow is (new/altered steps in bold):
 
-1. Either user or CaReconciler creates the Cluster CA certificate and key and stores them in Kubernetes Secrets.
+1. Either user or CaReconciler creates the Cluster CA certificate and key and stores them in the <CLUSTER_NAME>-cluster-ca and <CLUSTER_NAME>-cluster-ca-cert Kubernetes Secrets.
 2. __The CaReconciler takes the Cluster CA certificate and places it in the trust-state Kubernetes Secret with the state UNTRUSTED.__
 3. The CaReconciler generates the Cluster Operator certificate and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret.
    It does this even though the state is UNTRUSTED, because the Kubernetes Secret was missing.
-4. __The CaReconciler places the Cluster CA certificate in the trusted-certificates Kubernetes Secret.__
+4. __The CaReconciler places the Cluster CA certificate in the trusted-certs Kubernetes Secret.__
 5. The ZooKeeper and Kafka reconcilers:
-   1. Generate their certificates and store them in Kubernetes Secrets. 
+   1. Generate their certificates and store them in the <CLUSTER_NAME>-kafka-brokers (for Kafka brokers) <CLUSTER_NAME>-zookeeper-nodes (for ZooKeeper nodes) Kubernetes Secrets. 
    2. Create the StrimziPodSets for ZooKeeper/Kafka and add the cluster-ca-cert-generation and server-cert-hash annotations.
-   3. During their rolling update step, roll the Kubernetes Pods for ZooKeeper/Kafka to use the new certificates (this is triggered by diffing the server-cert-hash annotation).
 6. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate their certificates and create their Kubernetes Deployments.
 7. A new reconciliation starts.
 8. __The CaReconciler sees that the cluster-ca-cert-generation on the ZooKeeper and Kafka Kubernetes Pods is current so updates the state of the Cluster CA in the trust-state Kubernetes Secret to TRUSTED_IN_USE.__
 
-When the Cluster CA private key is updated (either because it has expired or the user has incremented the generation to indicate they've manually updated the Kubernetes Secret):
+#### Fig 5: New cluster create flow
+
+![New cluster create flow](./images/073-cert-new-proposed.png)
+
+> Fig 5: The numbers in the diagram match the numbers in the full description of the steps.
+> The diagram omits the use of annotations and the EntityOperator, CruiseControl and KafkaExporter reconcilers.
+
+When the Cluster CA private key is updated (either because the user has requested for it to be regenerated (when Strimzi is managing the CA) or the user has incremented the generation to indicate they've manually updated the Kubernetes Secret):
 
 1. If Strimzi is managing the Cluster CA, the CaReconciler renews the Cluster CA certificate and key. The old certificate and key can be removed from the Kubernetes Secret.
 2. __The CaReconciler takes the Cluster CA certificate and places it in the trust-state Kubernetes Secret with the state UNTRUSTED. It also updates the old CA certificate to have the state PHASE_OUT.__
-3. __The CaReconciler places the new Cluster CA certificate in the trusted-certificates Kubernetes Secret.__
+3. __The CaReconciler places the new Cluster CA certificate in the trusted-certs Kubernetes Secret.__
 4. The CaReconciler rolls the Kafka and ZooKeeper Kubernetes Pods to trust the new CA certificate, __then it updates the trust-state Kubernetes Secret to put the new CA certificate into TRUSTED_UNUSED.__
 5. The ZooKeeper and Kafka reconcilers:
    1. Generate new certificates signed by the new CA key.
    2. Update the cluster-ca-cert-generation and server-cert-hash annotations on the StrimziPodSets.
-   3. During their rolling update step, roll the Kubernetes Pods for ZooKeeper and Kafka to use the new certificates (this is triggered by diffing the server-cert-hash annotation).
+   3. During their rolling update step, roll the Kubernetes Pods for ZooKeeper and Kafka to use the new certificates (this is triggered by diffing the server-cert-hash annotation on the StrimziPodSet versus the individual Pods).
 6. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the new CA key and roll the Kubernetes Pods to use the new certificates.
 7. A new reconciliation starts.
 8. __The CaReconciler sees there is a CA certificate in the state TRUSTED_UNUSED in the trust-state Kubernetes Secret.
@@ -283,6 +301,13 @@ When the Cluster CA private key is updated (either because it has expired or the
 11. __The CaReconciler rolls the Kafka and ZooKeeper nodes so they no longer trust the old Cluster CA.__
 12. __The CaReconciler removes the old Cluster CA certificate from the trust-state Kubernetes Secret.__
 13. The other component reconcilers (i.e. not Kafka or ZooKeeper) roll their Kubernetes Pods, since the Cluster CA passed in has a flag indicating certs have been removed.
+
+#### Fig 6: New cluster create flow
+
+![Cluster CA private key update flow](./images/073-cert-update-proposed.png)
+
+> Fig 6: The numbers in the diagram match the numbers in the full description of the steps.
+> The diagram omits the use of annotations and the EntityOperator, CruiseControl and KafkaExporter reconcilers, and the removal of trust of the old CA certificate and key.
 
 Notes:
 * The existing annotations strimzi.io/ca-cert-generation and strimzi.io/server-cert-hash are still used to keep track of the certificate being presented by the Kubernetes Pod and which generation of the Cluster CA signed that certificate.
