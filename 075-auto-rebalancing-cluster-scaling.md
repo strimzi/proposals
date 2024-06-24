@@ -40,10 +40,10 @@ The `Kafka` custom resource is extended by adding a new `spec.cruiseControl.auto
 By default, without such field, no auto-rebalancing runs on scaling.
 
 The `spec.cruiseControl.autoRebalance` field allows to specify a list of rebalancing modes with the corresponding configuration to be used.
-For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (i.e. `add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a `KafkaRebalanceSettings` custom resource by using the `spec.cruiseControl.autoRebalance.settings` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
+For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (i.e. `add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a "template" `KafkaRebalance` custom resource (see later for more details), by using the `spec.cruiseControl.autoRebalance.config` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
 This field is optional and if not specified, the auto-rebalancing runs with the default Cruise Control configuration.
 
-In the following example, a user can decide to use the same rebalancing settings when adding or removing brokers.
+In the following example, a user can decide to use the same rebalancing configuration when adding or removing brokers.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -56,14 +56,32 @@ spec:
   cruiseControl:
     # ...
     autoRebalance:
-      # using the same rebalancing settings when adding or removing brokers
+      # using the same rebalancing configuration when adding or removing brokers
       - mode: add-brokers
-        settings: my-add-remove-brokers-rebalancing-settings
+        config: my-add-remove-brokers-rebalancing-config
       - mode: remove-brokers
-        settings: my-add-remove-brokers-rebalancing-settings
+        config: my-add-remove-brokers-rebalancing-config
 ```
 
-The user can even decide to use different settings when adding or removing brokers.
+Furthermore, it is possible to use the default Cruise Control rebalancing configuration by omitting the corresponding field.
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+spec:
+  kafka:
+    # ...
+  cruiseControl:
+    # ...
+    autoRebalance:
+      # using the default Cruise Control rebalancing configuration when adding or removing brokers
+      - mode: add-brokers
+      - mode: remove-brokers
+```
+
+The user can even decide to use a different configuration when adding or removing brokers.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -77,32 +95,36 @@ spec:
   cruiseControl:
     # ...
     autoRebalance:
-      # using specific settings when adding brokers
+      # using specific configuration when adding brokers
       - mode: add-brokers
-        settings: my-add-brokers-rebalancing-settings
-      # using different settings when removing brokers  
+        config: my-add-brokers-rebalancing-config
+      # using different configuration when removing brokers  
       - mode: remove-brokers
-        settings: my-remove-brokers-rebalancing-settings
+        config: my-remove-brokers-rebalancing-config
 ```
 
 The user could even decide to have auto-rebalancing only when adding or removing brokers but not for both.
 
 This way provides the greatest flexibility to describe in which case to run the auto-rebalancing and with which configuration.
 
-A new `KafkaRebalanceSettings` custom resource provides the auto-rebalance configuration for the `autoRebalance.settings` property in the `Kafka` resource.
-It's similar to the `KafkaRebalance` resource,  but it doesn't specify the rebalancing mode and the brokers that are going to be involved in the rebalancing.
+The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.config` property in the `Kafka` resource is provided through a `KafkaRebalance` custom resource marked as a "template".
+That is a `KafkaRebalance` custom resource with the `strimzi.io/rebalance: template` annotation set.
+When it is created, the `KafkaRebalanceAssemblyOperator` doesn't run any rebalancing.
 This is because it doesn't represent an actual rebalance request to get an optimization proposal, it's just where configuration related to auto-rebalancing is defined.
 The user can specify rebalancing goals and options, such as `skipHardGoalCheck`, within the resource.
-When the `KafkaRebalanceSettings` custom resource is referenced within the `spec.cruiseControl.autoRebalance.settings` field for one or more modes, the settings are used to ask Cruise Control for an optimization proposal with such configuration.
+When such a "template" `KafkaRebalance` custom resource is referenced within the `spec.cruiseControl.autoRebalance.config` field for one or more modes, the operator asks to Cruise Control for an optimization proposal with such configuration.
+If the `mode` and `brokers` fields are set, they will be just ignored because they are automatically set on the corresponding `KafkaRebalance` custom resource by the operator.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaRebalanceSettings
+kind: KafkaRebalance
 metadata:
-  name: my-rebalance-settings
+  name: my-rebalance-config
+  annotations:
+    strimzi.io/rebalance: template
 spec:
-  # NOTE: mode and brokers fields are not available as in the KafkaRebalance,
-  #       they are automatically set on the corresponding KafkaRebalance by the operator
+  # NOTE: mode and brokers fields, if set, will be just ignored because they are
+  #       automatically set on the corresponding KafkaRebalance by the operator
   goals:
     - CpuCapacityGoal
     - NetworkInboundCapacityGoal
@@ -115,24 +137,51 @@ spec:
   # ... other rebalancing related configuration
 ```
 
-When the `spec.cruiseControl.autoRebalance` is set and a specific rebalancing mode refers to a `KafkaRebalanceSettings` custom resource, the operator automatically creates a `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
-The operator copies over goals and rebalancing options from the referenced settings resource to the actual rebalancing one and also adds the `spec.mode` and `spec.brokers` to it.
+When the `spec.cruiseControl.autoRebalance` is set and a specific rebalancing mode refers to a "template" `KafkaRebalance` custom resource, the operator automatically creates a corresponding `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
+The operator copies over goals and rebalancing options from the referenced "template" resource to the actual rebalancing one and also adds the `spec.mode` and `spec.brokers` to it.
 The `KafkaRebalance` custom resource could be named as `<my-cluster-name>-auto-rebalancing-<mode>` where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `<mode>` is referring to which rebalancing has to run (add or remove brokers).
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaRebalance
+metadata:
+  name: my-cluster-auto-rebalancing-add-brokers
+  finalizers:
+    - strimzi.io/rebalance
+spec:
+  mode: add-brokers
+  brokers: [3,4]
+  goals:
+    - CpuCapacityGoal
+    - NetworkInboundCapacityGoal
+    - DiskCapacityGoal
+    - RackAwareGoal
+    - MinTopicLeadersPerBrokerGoal
+    - NetworkOutboundCapacityGoal
+    - ReplicaCapacityGoal
+  skipHardGoalCheck: true
+  # ... other rebalancing related configuration
+```
+
+The operator also sets a finalizer, named `strimzi.io/rebalance`, on the actual `KafkaRebalance` custom resource.
+This is needed to avoid the user, or any other tooling, to delete the resource while the auto-rebalancing is still running.
+The finalizer is removed at the end of the auto-rebalancing process, allowing the `KafkaRebalance` custom resource deletion by the operator itself.
 
 The user has the flexibility to specify the [goals and the other rebalancing related configurations](https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaRebalance-reference) the same way they already do today on a `KafkaRebalance` custom resource.
 This allows the user to not rely on the default Cruise Control goals configuration which would be common for any rebalance without overriding goals.
 They could define different goals based on the status of the Kafka cluster or skip hard goals in some scenarios for example.
 As already mentioned, specifying goals but more in general customizing the optimization proposal request is already possible in the current usage of a `KafkaRebalance` custom resource so it should be allowed for the auto-rebalancing as well.
 
-The idea of using a `KafkaRebalanceSettings` custom resource could be also extended to the manual rebalancing operations started by the user when they create a new `KafkaRebalance` custom resource.
-It would mean a change on the `KafkaRebalance` custom resource by adding a new `spec.settings` field to reference the rebalancing settings and deprecating all the other fields used today (i.e. `spec.goals`, ...).
-If this proposal is considered valid, doing such a change on the `KafkaRebalance` custom resource would help the proposal itself because the operator should not copy over the entire configuration from the settings resource to the rebalance resource but just set the settings reference.
+The idea of using a "template" `KafkaRebalance` custom resource could be also extended to the manual rebalancing operations started by the user when they create a new `KafkaRebalance` custom resource.
+It would mean a change on the `KafkaRebalance` custom resource by adding a new `spec.config` field to reference the rebalancing "template" and deprecating all the other fields used today (i.e. `spec.goals`, ...).
+Another option could be leaving both the ways living together.
+If this proposal is considered valid, doing such a change on the `KafkaRebalance` custom resource would help the proposal itself because the operator should not copy over the entire configuration from the "template" resource to the actual rebalance resource but just set the configuration reference.
 Of course, such a change would need a different proposal to be approved before this one.
 
-It is also worth mentioning that the additional `KafkaRebalanceSettings` custom resource doesn't add much complexity to the operator in terms of watching, reacting and processing.
-The operator doesn't have any Kubernetes watch on the creation or update of such a resource.
-It can be only referenced by a `KafkaRebalance` custom resource so its creation doesn't trigger any action by the operator.
-The operator only reads the `KafkaRebalanceSettings` resource and generates a new `KafkaRebalance` resource when the cluster is being scaled.
+It is also worth mentioning that a "template" `KafkaRebalance` custom resource doesn't add much complexity to the operator in terms of watching, reacting and processing.
+The `KafkaRebalanceAssemblyOperator` is just going to ignore such a resource when it's created, updated or deleted.
+It can be only referenced by an actual `KafkaRebalance` custom resource so its creation doesn't trigger any action by the operator.
+The operator only reads the "template" `KafkaRebalance` custom resource and generates a new corresponding actual `KafkaRebalance` custom resource when the cluster is being scaled.
 
 ### Extending the `Kafka.status` field with auto-rebalancing related state
 
@@ -277,7 +326,7 @@ The main difference is related to the rebalancing configuration, because it just
 
 Pros:
 
-* Simpler compared to the proposed solution because no additional `KafkaRebalanceSettings` custom resource is involved.
+* Simpler compared to the proposed solution because no "template" `KafkaRebalance` custom resource is involved.
   
 Cons:
 
@@ -308,7 +357,7 @@ The main difference is related to the rebalancing configuration, because it's po
 
 Pros:
 
-* Simpler compared to the proposed solution because no additional `KafkaRebalanceSettings` custom resource is involved.
+* Simpler compared to the proposed solution because no "template" `KafkaRebalance` custom resource is involved.
 * It allows to customize the configuration (options, goals, ...) for getting a rebalancing proposal.
 * It allows to differentiate rebalancing configuration between adding and removing brokers.
 
@@ -358,7 +407,7 @@ It means that we should factor out the Cruise Control rebalancing FSM (and all t
 This way, the Cruise Control rebalancing FSM could be used directly by both the `KafkaRebalanceAssemblyOperator` for the user initiated rebalancing as today and the `KafkaAssemblyOperator` for the auto-rebalancing feature (a reference example could be the KRaft migration FSM).
 
 In the first scenario, the `KafkaRebalanceAssemblyOperator` should be able to interact directly with the Cruise Control rebalancing FSM by getting any rebalancing parameter from the `KafkaRebalance` custom resource created by the user.
-In the second scenario, the `KafkaAssemblyOperator` should be able to interact directly with the Cruise Control rebalancing FSM by getting any rebalancing parameter from a settings resource or from the Cruise Control defaults, without any need for an auto-created `KafkaRebalance` custom resource which is the main goal of this alternative.
+In the second scenario, the `KafkaAssemblyOperator` should be able to interact directly with the Cruise Control rebalancing FSM by getting any rebalancing parameter from a "template" `KafkaRebalance` custom resource or from the Cruise Control defaults, without any need for an auto-created `KafkaRebalance` custom resource which is the main goal of this alternative.
 
 Pros:
 
