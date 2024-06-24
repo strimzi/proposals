@@ -85,7 +85,8 @@ The possible values will be `list`, `alter` and `reset`.
 
 To list the current offsets the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connectorOffsets` set to `list`.
 After the annotation is added, on the next reconciliation the operator will fetch the current offsets and create a Kubernetes ConfigMap containing the JSON response.
-If the ConfigMap already exists the operator will replace the data with the updated data.
+The operator will add an owner reference to the Kubernetes ConfigMap pointing to the KafkaConnector resource that was annotated.
+If the ConfigMap already exists the operator will replace the data with the updated data and not add an owner reference.
 The operator will then remove the annotation from the KafkaConnector CR.
 
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
@@ -225,7 +226,7 @@ This only affects the Connect parts of the cluster-operator.
 
 ## Compatibility
 
-If a `KafkaConnectorOffsets` resource is created against a Kafka Connect version that does not support the APIs, the API calls will fail and the operator will put a suitable message in the status to indicate what has happened.
+N/A
 
 ## Rejected alternatives
 
