@@ -40,7 +40,7 @@ The `Kafka` custom resource is extended by adding a new `spec.cruiseControl.auto
 By default, without such field, no auto-rebalancing runs on scaling.
 
 The `spec.cruiseControl.autoRebalance` field allows to specify a list of rebalancing modes with the corresponding configuration to be used.
-For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (i.e. `add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a "template" `KafkaRebalance` custom resource (see later for more details), by using the `spec.cruiseControl.autoRebalance.config` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
+For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (i.e. `add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a "template" `KafkaRebalance` custom resource (read later for more details), by using the `spec.cruiseControl.autoRebalance.config` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
 This field is optional and if not specified, the auto-rebalancing runs with the default Cruise Control configuration.
 
 In the following example, a user can decide to use the same rebalancing configuration when adding or removing brokers.
@@ -107,13 +107,13 @@ The user could even decide to have auto-rebalancing only when adding or removing
 
 This way provides the greatest flexibility to describe in which case to run the auto-rebalancing and with which configuration.
 
-The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.config` property in the `Kafka` resource is provided through a `KafkaRebalance` custom resource marked as a "template".
+The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.config` property in the `Kafka` resource is provided through a `KafkaRebalance` custom resource defined as a "template".
 That is a `KafkaRebalance` custom resource with the `strimzi.io/rebalance: template` annotation set.
 When it is created, the `KafkaRebalanceAssemblyOperator` doesn't run any rebalancing.
-This is because it doesn't represent an actual rebalance request to get an optimization proposal, it's just where configuration related to auto-rebalancing is defined.
+This is because it doesn't represent an "actual" rebalance request to get an optimization proposal, but it's just the place where configuration related to auto-rebalancing is defined.
 The user can specify rebalancing goals and options, such as `skipHardGoalCheck`, within the resource.
 When such a "template" `KafkaRebalance` custom resource is referenced within the `spec.cruiseControl.autoRebalance.config` field for one or more modes, the operator asks to Cruise Control for an optimization proposal with such configuration.
-If the `mode` and `brokers` fields are set, they will be just ignored because they are automatically set on the corresponding `KafkaRebalance` custom resource by the operator.
+If the `mode` and `brokers` fields are set, they will be just ignored because the resource doesn't represent an "actual" rebalancing.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -121,7 +121,7 @@ kind: KafkaRebalance
 metadata:
   name: my-rebalance-config
   annotations:
-    strimzi.io/rebalance: template
+    strimzi.io/rebalance: template # specifies that this KafkaRebalance is a rebalance configuration template
 spec:
   # NOTE: mode and brokers fields, if set, will be just ignored because they are
   #       automatically set on the corresponding KafkaRebalance by the operator
@@ -138,8 +138,8 @@ spec:
 ```
 
 When the `spec.cruiseControl.autoRebalance` is set and a specific rebalancing mode refers to a "template" `KafkaRebalance` custom resource, the operator automatically creates a corresponding `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
-The operator copies over goals and rebalancing options from the referenced "template" resource to the actual rebalancing one and also adds the `spec.mode` and `spec.brokers` to it.
-The `KafkaRebalance` custom resource could be named as `<my-cluster-name>-auto-rebalancing-<mode>` where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `<mode>` is referring to which rebalancing has to run (add or remove brokers).
+The operator copies over goals and rebalancing options from the referenced "template" resource to the "actual" rebalancing one and also adds the `spec.mode` and `spec.brokers` to it.
+The "actual" `KafkaRebalance` custom resource could be named as `<my-cluster-name>-auto-rebalancing-<mode>` where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `<mode>` is referring to which rebalancing has to run (add or remove brokers).
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -163,9 +163,9 @@ spec:
   # ... other rebalancing related configuration
 ```
 
-The operator also sets a finalizer, named `strimzi.io/rebalance`, on the actual `KafkaRebalance` custom resource.
+The operator also sets a finalizer, named `strimzi.io/rebalance`, on the "actual" `KafkaRebalance` custom resource.
 This is needed to avoid the user, or any other tooling, to delete the resource while the auto-rebalancing is still running.
-The finalizer is removed at the end of the auto-rebalancing process, allowing the `KafkaRebalance` custom resource deletion by the operator itself.
+The finalizer is removed at the end of the auto-rebalancing process, allowing the "actual" `KafkaRebalance` custom resource deletion by the operator itself.
 
 The user has the flexibility to specify the [goals and the other rebalancing related configurations](https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaRebalance-reference) the same way they already do today on a `KafkaRebalance` custom resource.
 This allows the user to not rely on the default Cruise Control goals configuration which would be common for any rebalance without overriding goals.
@@ -180,8 +180,8 @@ Of course, such a change would need a different proposal to be approved before t
 
 It is also worth mentioning that a "template" `KafkaRebalance` custom resource doesn't add much complexity to the operator in terms of watching, reacting and processing.
 The `KafkaRebalanceAssemblyOperator` is just going to ignore such a resource when it's created, updated or deleted.
-It can be only referenced by an actual `KafkaRebalance` custom resource so its creation doesn't trigger any action by the operator.
-The operator only reads the "template" `KafkaRebalance` custom resource and generates a new corresponding actual `KafkaRebalance` custom resource when the cluster is being scaled.
+It can be only referenced by an "actual" `KafkaRebalance` custom resource so its creation doesn't trigger any action by the operator.
+The operator only reads the "template" `KafkaRebalance` custom resource and generates a new corresponding "actual" `KafkaRebalance` custom resource when the cluster is being scaled.
 
 ### Extending the `Kafka.status` field with auto-rebalancing related state
 
@@ -203,6 +203,7 @@ spec:
       # ...
 status:
   autoRebalance:
+    lastTransitionTime: # timestamp of last transition during the auto-rebalancing flow
     state: # if a scaling operation is running or what's the state of the current rebalancing
     modes:
       - mode: add-brokers
@@ -212,20 +213,22 @@ status:
 ```
 
 The `state` field provides the current state of the overall operation: if scaling is going on or what's the phase of a rebalancing operation.
-When the rebalancing is running, its value is got from the status of the corresponding `KafkaRebalance` custom resource that was created for the purpose.
-The `add-brokers` and `remove-brokers` track the brokers' IDs that are part of the scaling (up/down) actions to be useful across reconciliations, while scaling or the effective rebalancing is going on.
-Their values are got from the new `KafkaCluster.addedNodes` method (needs to be implemented) and the already existing `KafkaCluster.removedNodes` one.
+When the rebalancing is running, its value is got from the status of the corresponding "actual" `KafkaRebalance` custom resource that was created for the purpose.
+The `lastTransitionTime` field provides the timestamp of the latest auto-rebalancing state update.
+The `modes` field lists the enabled rebalancing modes, as defined through the `spec.cruiseControl.autoRebalance.mode` field, with the corresponding `brokers` list containing the brokers' IDs that are part of the scaling (up/down) actions to be useful across reconciliations, while scaling or the effective rebalancing is going on.
+Their values are coming from the corresponding `spec.brokers` field in the "actual" `KafkaRebalance` custom resource created by the operator.
 
 ### Auto-rebalancing execution
 
 Before describing the process in more details, it's worth mentioning how scaling up and down happens today within the Cluster Operator reconciliation flow.
 
-The scaling up is triggered asynchronously during a reconciliation which isn't blocked on waiting for the newly added nodes to be ready.
-In the `KafkaReconciler.reconcile()` method, it is triggered via the `podSet()` method which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of spinning up the newly added nodes while the current reconciliation just ends.
+Both the operations run asynchronously and they involve the `StrimziPodSet` controller which takes care of adding (scale up) or removing (scale down) pods by communicating with the Kubernetes API.
+
+In the `KafkaReconciler.reconcile()` method, the scaling up is triggered by the `podSet()` method which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of spinning up the newly added nodes while the current reconciliation just ends.
 It means that, after the scaling up is triggered, the new pods will take time to be up, running and ready, so it's likely that the auto-rebalancing will happen on a future reconciliation.
 
-The scaling down runs synchronously within a single reconciliation which is blocked on waiting for the nodes to be removed.
-In the `KafkaReconciler.reconcile()` method, it is executed via the `scaleDown()` method which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of removing the nodes while the current reconciliation waits for the end of the operation.
+In the `KafkaReconciler.reconcile()` method, the scaling down is triggered by the `scaleDown()` method which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of removing the nodes.
+Even in this case, the triggered deletion takes some time while the reconciliation ends.
 
 The idea is about adding a new `autoRebalancing()` method in the `KafkaReconciler.reconcile()` flow, taking care of starting a rebalancing and checking the status of an ongoing one across reconciliations.
 The `KafkaReconciler.reconcile()` flow, taking into account methods involved in the scaling and rebalancing, would be something like:
@@ -246,19 +249,19 @@ The following flow is triggered when the user increases the `replicas` field wit
 
 1. On the **1st** reconciliation (scaling up is requested): 
      * the `podSet()` method triggers the scaling up, as described in the previous section, but the reconciliation is not blocked on waiting for the newly added pods to be ready.
-     * the `autoRebalancing()` method detects that a scaling up was requested because of `KafkaCluster.addedNodes()` returning a non empty list with the brokers' IDs to be added to the cluster. Because the `Kafka.status.autoRebalance.state` doesn't exist, it's a new operation so the state is updated as `ScalingUp` and the `add-brokers` with the brokers' IDs. Of course, it doesn't trigger any rebalance because the scaling up is going on asynchronously.
+     * the `autoRebalancing()` method detects that a scaling up was requested because of `KafkaCluster.addedNodes()` returning a non empty list with the brokers' IDs to be added to the cluster. Because the `Kafka.status.autoRebalance.state` doesn't exist or it's `Ready` (from a previous auto-rebalancing), it's a new operation so the state is updated as `ScalingUp` and the `brokers` with the brokers' IDs. Of course, it doesn't trigger any rebalance because the scaling up is going on asynchronously.
 2. From the **2nd** to the **(N-1)th** reconciliation (scaling up is going on, checks when it's done):
      * the `podSet()` does nothing because no new brokers were added this time.
      * the `autoRebalancing()` evaluates the `Kafka.status.autoRebalance.state: ScalingUp`, so a scaling up is running, and it has to check if it's finished or not. This can be achieved looking at the involved `StrimziPodSet`(s) and comparing `readyPods` and `pods` fields in the corresponding status. If they differ, the scaling up is still running. It should not take long time but it could go across multiple reconciliations, so this check repeats.
 3. On the **Nth** reconciliation (scaling up is done, rebalancing can start):
      * the `podSet()` does nothing because no new brokers are added this time.
-     * the `autoRebalancing()` evaluates the `Kafka.status.autoRebalance.state: ScalingUp`, so a scaling up is running, but finally looking at the involved `StrimziPodSet`(s), it gets `readyPods` equals to `pods` so the scaling up is done. A new `KafkaRebalance` custom resource is created and the `Kafka.status.autoRebalance.state` is updated with the corresponding state (should be `ProposalPending`). The `KafkaRebalanceAssemblyOperator` takes care of handling the rebalancing.
+     * the `autoRebalancing()` evaluates the `Kafka.status.autoRebalance.state: ScalingUp`, so a scaling up is running, but finally looking at the involved `StrimziPodSet`(s), it gets `readyPods` equals to `pods` so the scaling up is done. A new `KafkaRebalance` custom resource is created, with the `strimzi.io/rebalance-auto-approval: true` annotation, and the `Kafka.status.autoRebalance.state` is updated with the corresponding state (should be `ProposalPending`). The `KafkaRebalanceAssemblyOperator` takes care of handling the rebalancing.
 4. From the **(N+1)th** to the **(M-1)th** reconciliation (rebalancing is going on, checks when it's done):
      * the `podSet()` does nothing because no new brokers are added this time. 
      * the `autoRebalancing()` has to check the status of the rebalancing by looking at the corresponding `KafkaRebalance` custom resource status which will move through `ProposalPending`, `ProposalReady` to `Rebalancing` (we are assuming auto-approval). The rebalancing status is reflected into the `Kafka.status.autoRebalance.state` field.
 5. On the **Mth** reconciliation (rebalancing is done):
      * the `podSet()` does nothing because no new brokers are added this time.
-     * the `autoRebalancing()` detects that the `KafkaRebalance` custom resource status reports the `Ready` state (so the rebalancing is completed).
+     * the `autoRebalancing()` detects that the `KafkaRebalance` custom resource status reports the `Ready` state (so the rebalancing is completed). The end of rebalancing is reflected into the `Kafka.status.autoRebalance.state` field and the `KafkaRebalance` is deleted.
 
 During the above flow, errors can happen after the scaling up:
 
@@ -278,17 +281,17 @@ It's the user who should deal with this scenario:
 The following flow is triggered when the user decreases the `replicas` field within a `Kafka` or `KafkaNodePool` custom resource in order to scale down the cluster by removing brokers.
 
 1. On the **1st** reconciliation (scaling down is skipped, rebalancing started):
-     * the check on scaling down the cluster fails, but it doesn't have to revert the `replicas` back because the `Kafka.spec.cruiseControl.autoRebalance` is provided. So the reconciliation doesn't fail.
+     * the check on scaling down the cluster fails, and it reverts the `replicas` back only in memory but not on the `Kafka` custom resource. The removed nodes are collected (for the auto-rebalancing mechanism) in a dedicate `removedNodes` list, which would be a copy of the one returned by `KafkaCluster.removedNodes()`.
      * the `scaleDown()` method skips doing the scale down because a rebalancing is needed first (and the check failed).
-     * the `autoRebalancing()` method detects that a scaling down was requested because of `KafkaCluster.removedNodes()` returning a non empty list with the brokers' IDs to be removed from the cluster. Because the `Kafka.status.autoRebalance.state` doesn't exist, it's a new operation so a new `KafkaRebalance` custom resource is created and the `Kafka.status.autoRebalance.state` is updated with the corresponding state (should be `ProposalPending`) and the `remove-brokers` with the brokers' IDs.
+     * the `autoRebalancing()` method detects that a scaling down was requested because of `removedNodes` not being empty but containing the brokers' IDs to be removed from the cluster. Because the `Kafka.status.autoRebalance.state` doesn't exist or it's `Ready` (from a previous auto-rebalancing), it's a new operation so a new `KafkaRebalance` custom resource is created, with the `strimzi.io/rebalance-auto-approval: true` annotation, and the `Kafka.status.autoRebalance.state` is updated with the corresponding state (should be `ProposalPending`) and the `brokers` with the brokers' IDs.
 2. From the **2nd** to the **(N-1)th** reconciliation (rebalancing is going on, checks when it's done):
-     * the checks on scaling down the cluster keeps failing but it doesn't have to revert the `replicas` back because the `Kafka.spec.cruiseControl.autoRebalance` is provided. So the reconciliation doesn't fail.
+     * the checks on scaling down the cluster keeps failing but it keeps reverting the scaling operation.
      * the `scaleDown()` method skips doing scale down because a rebalancing is needed first (and the check failed).
      * the `autoRebalancing()` has to check the status of the rebalancing by looking at the corresponding `KafkaRebalance` custom resource status which will move through `ProposalPending`, `ProposalReady` to `Rebalancing` (we are assuming auto-approval). The rebalancing status is reflected into the `Kafka.status.autoRebalance.state` field.
 3. On the **Nth** reconciliation (rebalancing id done, scaling down can start):
      * the checks on scaling down the cluster don't fail, because the auto-rebalancing was completed and the nodes to be removed don't host any partition replicas anymore.
      * the `scaleDown()` method can run the scaling down.
-     * the `autoRebalancing()` detects that the `KafkaRebalance` custom resource status reports the `Ready` state (so the rebalancing is completed).
+     * the `autoRebalancing()` detects that the `KafkaRebalance` custom resource status reports the `Ready` state (so the rebalancing is completed). The end of rebalancing is reflected into the `Kafka.status.autoRebalance.state` field and the `KafkaRebalance` is deleted.
 
 During the above flow, errors can happen before the scaling down:
 
@@ -306,7 +309,7 @@ The previous `KafkaRebalance` custom resource in the `NotReady` state is overrid
 
 This proposal involves the Cluster Operator only.
 More specifically, the development is focused on the `KafkaReconciler` class where methods mentioned in the previous sections need to be added and/or updated.
-Even the `KafkaClusterCreator` should be changed in order to avoid reverting back a scaling down request when an auto-rebalance is configured in the `Kafka` custom resource.
+Even the `KafkaClusterCreator` should be changed in order to collect the removed nodes, in case of scale down, in a dedicated list for the auto-rebalancing mechanism to proceed.
 
 ## Compatibility
 
@@ -419,6 +422,3 @@ Cons:
 * More complex and more work on factoring out the Cruise Control rebalancing FSM from the `KafkaRebalanceAssemblyOperator`.
 * Not leveraging the already ready-to-use `KafkaRebalanceAssemblyOperator` through a `KafkaRebalance` custom resource.
 * `KafkaAssemblyOperator` strongly tight to the Cruise Control rebalancing FSM with additional complexity for testing.
-
-
-
