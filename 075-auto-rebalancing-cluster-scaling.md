@@ -270,11 +270,9 @@ During the above flow, errors can happen after the scaling up:
 
 In both scenarios, the reconciliation ends with the `KafkaRebalance` custom resource in the `NotReady` state which is reflected into the `Kafka.status.autoRebalance.state` field.
 
-It's the user who should deal with this scenario:
-
-* Checking the reason why the `KafkaRebalance` is in the `NotReady` state and :
-  * deleting the custom resource if they are not interested in the rebalancing anymore. Scaling up is done already.
-  * setting the `strimzi.io/rebalance: refresh` annotation on the `KafkaRebalance` custom resource to try the rebalancing again.
+On the next reconciliation, the scaling up is done already, but the rebalancing cannot run because of the `KafkaRebalance` custom resource in the `NotReady` state.
+The user can fix it by deleting the `KafkaRebalance` custom resource so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource getting the added brokers from the `status.autoRebalancing.brokers` for the `add-brokers` mode.
+Another approach the user can take is removing the `spec.cruiseControl.autoRebalance` (other than deleting the `KafkaRebalance` custom resource) in order to run a manual rebalancing later on.
 
 ### Auto-rebalancing on scaling down
 
@@ -301,9 +299,10 @@ During the above flow, errors can happen before the scaling down:
 In both scenarios, the reconciliation ends with the `KafkaRebalance` custom resource in the `NotReady` state which is reflected into the `Kafka.status.autoRebalance.state` field.
 
 The reconcile ends but the scale down cannot proceed because the brokers to be removed are still hosting some partition replicas.
-
-On the next reconciliation, the cluster operator will try to do a scale down again, so running the flow as before.
-The previous `KafkaRebalance` custom resource in the `NotReady` state is overridden to generate a new optimization proposal.
+On the next reconciliation, the cluster operator will try to do a scale down again, so going through the same flow.
+The scale down check fails but the rebalancing cannot run because of the `KafkaRebalance` custom resource in the `NotReady` state.
+The user can fix it by deleting the `KafkaRebalance` custom resource so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource.
+Another approach the user can take is removing the `spec.cruiseControl.autoRebalance` (other than deleting the `KafkaRebalance` custom resource) in order to run a manual rebalancing later on.
 
 ## Affected/not affected projects
 
