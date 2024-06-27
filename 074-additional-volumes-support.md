@@ -3,6 +3,7 @@
 We propose to enhance the Strimzi Kafka Operator by adding support for specifying additional volumes in the CRDs. This will involve modifying the Kafka CRDs (see details below) to include a `volumes` field which will allow users to define extra volumes, and a `volumeMounts` field which will allow users to define extra volume mounts.
 
 The specific usecase of ours, is that we want to set custom log4j logging for audit logs, to ensure that audit logs are *not* present in stdout, but can be picked up by a sidecar which uses OpenTelemtry or logstash to forward to the audit logs to a secure location.
+See motivation for more use-cases and see also original discussion in <https://github.com/strimzi/strimzi-kafka-operator/issues/3693>
 
 ## Current situation
 
