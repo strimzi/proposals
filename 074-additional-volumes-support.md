@@ -107,8 +107,7 @@ The following types of volumes are proposed as initial support. More types could
 - Secret
 - ConfigMap
 - EmptyDir
-- CSI
-- Projected volume
+- PersistentVolumeClaims
 
 See initial work in this PR draft:
 <https://github.com/strimzi/strimzi-kafka-operator/pull/10099>
