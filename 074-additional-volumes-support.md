@@ -14,6 +14,14 @@ Adding support for additional volumes in the CRD will allow users to:
 
  - Access log files for enhanced monitoring and debugging.
  - Use additional configurations or secret management tools that require mounting extra volumes.
+ - Using for analyzing JVM issues (e.g. heap dumps)
+
+And prepare support for future use-cases such as:
+
+- Using Kafka Connect connectors to read/write files to/from the disk
+- Using it for tiered storage
+- CSI Secrets
+- Adding plugins to the container image
 
 Improve flexibility in managing Kafka deployments by allowing users to attach custom storage solutions based on their specific requirements.
 
