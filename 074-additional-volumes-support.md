@@ -113,7 +113,8 @@ Affected operands/components as described in table in "CRD Changes" section abov
 ## Compatibility
 
 The proposed changes are designed to be forward-compatible. Future updates to the Strimzi Kafka Operator can build upon this feature without breaking existing configurations.
-The new `additionalVolumes` field will be optional. Existing CRDs and configurations without this field will continue to work without any modifications. This ensures backward compatibility and seamless upgrades for current users.
+The new `volumes` / `volumeMounts` fields will be optional. Existing CRDs and configurations without this field will continue to work without any modifications. This ensures backward compatibility and seamless upgrades for current users.
+
 
 ## Rejected Alternatives
 
