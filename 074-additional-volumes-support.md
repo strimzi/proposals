@@ -31,7 +31,8 @@ Improve flexibility in managing Kafka deployments by allowing users to attach cu
 ### Considerations
 
 - CRD Changes: Update the Kafka CRDs to include a `volumes` and a `volumeMounts` field.
-- Validation: Ensure that the additional volumes are validated correctly and do not conflict with existing volume definitions such as `/var/lib/kafka/` and `/tmp`.
+- Validation: All additional mounted paths should be inside `/mnt` to ensure backwards compatibility for the evolution of kafka and this operator.
+
 - Documentation: Update the Strimzi documentation to include examples and guidelines on how to use the new `volumes` and `volumeMounst` fields.
 - Security: Ensure that the additional volumes do not introduce security vulnerabilities by validating the configurations.
 - Testing: Comprehensive testing to cover various scenarios and use cases, ensuring that the feature works as expected.
