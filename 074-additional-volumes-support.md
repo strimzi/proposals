@@ -58,9 +58,12 @@ It is proposed to not add support in the following locations - if `volumes` or `
 |Pod             |CRD             |Schema Location                                          |Reason                                 |
 |----------------|----------------|---------------------------------------------------------|---------------------------------------|
 |KafkaMirrorMaker|KafkaMirrorMaker|spec -> template -> pod/mirrorMakerContainer             |KafkaMirrorMaker has been deprecated   |
-|Kafka           |Kafka           |spec -> jmxTrans -> template -> pod/container            |JmxTrans no longer supported           |
-|EntityOperator  |Kafka           |spec -> entityOperator -> template -> tlsSidecarContainer|tlsSidecarContainer no longer supported|
-|CruiseControl   |Kafka           |spec -> cruiseControl -> template -> tlsSidecarContainer |tlsSidecarContainer deprecated         |
+
+Support will also not be added to the following locations which are no longer supported:
+
+|Kafka           |Kafka           |spec -> jmxTrans -> template -> pod/container            |^M
+|EntityOperator  |Kafka           |spec -> entityOperator -> template -> tlsSidecarContainer|^M
+|CruiseControl   |Kafka           |spec -> cruiseControl -> template -> tlsSidecarContainer |^M
 
 
 An example configuration could look as follows:
