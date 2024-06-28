@@ -93,13 +93,13 @@ An example configuration could look as follows:
           kafkaContainer:
             volumeMounts:
             - name: example-configmap
-              path: /path/to/mount/cm-volume
-            - name: temp
-              path: /tmp/logs
+              path: /mnt/cm-volume
+
             - name: example-csi-volume
-              path: /path/to/mount/csi-volume
-            - name: example-projected-volume
-              path: /path/to/mount/proj-volume
+            - name: example-pvc-volume
+
+              path: /mnt/pvc-volume
+
 
 ```
 
