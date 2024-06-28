@@ -40,24 +40,24 @@ Improve flexibility in managing Kafka deployments by allowing users to attach cu
 
 Add a new `volumes` field to PodTemplate and a new `volumeMounts` field to ContainerTemplate. Update the associated code to create and mount the specified volumes. Support will be added for specifying `volumes`/`volumeMounts` in the PodTemplate/ContainerTemplate in the following locations:
 
-|Pod              |CRD              |Schema Location                                                                       |Implementing class           |
-|-----------------|-----------------|--------------------------------------------------------------------------------------|-----------------------------|
-|Kafka            |Kafka            |spec -> kafka -> template -> pod/kafkaContainer/initContainer                         |KafkaCluster.java            |
-|                 |KafkaNodePoolSpec|spec -> template -> pod/kafkaContainer/initContainer                                  |                             |
-|Zookeeper        |Kafka            |spec -> zookeeper -> template -> pod/zookeeperContainer                               |ZookeeperCluster.java        |
-|EntityOperator   |Kafka            |spec -> entityOperator -> template -> pod/topicOperatorContainer/userOperatorContainer|EntityOperator.java          |
-|CruiseControl    |Kafka            |spec -> cruiseControl -> template -> pod/cruiseControlContainer                       |CruiseControl.java           |
-|KafkaExporter    |Kafka            |spec -> kafkaExporter -> template -> pod/container                                    |KafkaExporter.java           |
-|KafkaConnect     |KafkaConnect     |spec -> template -> pod/connectContainer/initContainer/buildContainer                 |KafkaConnectCluster.java     |
-|KafkaBridge      |KafkaBridge      |spec -> template -> pod/bridgeContainer/initContainer                                 |KafkaBridgeCluster.java      |
-|KafkaMirrorMaker2|KafkaMirrorMaker |spec -> template -> pod/connectContainer/initContainer/buildContainer                 |KafkaMirrorMaker2Cluster.java|
+| Pod               | CRD               | Schema Location                                                                        | Implementing class            |
+| ----------------- | ----------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| Kafka             | Kafka             | spec -> kafka -> template -> pod/kafkaContainer/initContainer                          | KafkaCluster.java             |
+|                   | KafkaNodePoolSpec | spec -> template -> pod/kafkaContainer/initContainer                                   |                               |
+| Zookeeper         | Kafka             | spec -> zookeeper -> template -> pod/zookeeperContainer                                | ZookeeperCluster.java         |
+| EntityOperator    | Kafka             | spec -> entityOperator -> template -> pod/topicOperatorContainer/userOperatorContainer | EntityOperator.java           |
+| CruiseControl     | Kafka             | spec -> cruiseControl -> template -> pod/cruiseControlContainer                        | CruiseControl.java            |
+| KafkaExporter     | Kafka             | spec -> kafkaExporter -> template -> pod/container                                     | KafkaExporter.java            |
+| KafkaConnect      | KafkaConnect      | spec -> template -> pod/connectContainer/initContainer/buildContainer                  | KafkaConnectCluster.java      |
+| KafkaBridge       | KafkaBridge       | spec -> template -> pod/bridgeContainer/initContainer                                  | KafkaBridgeCluster.java       |
+| KafkaMirrorMaker2 | KafkaMirrorMaker  | spec -> template -> pod/connectContainer/initContainer/buildContainer                  | KafkaMirrorMaker2Cluster.java |
 
 
 It is proposed to not add support in the following locations - if `volumes` or `volumeMounts` are specified in the PodTemplate or ContainerTemplate in any of these locations it will be ignored:
 
-|Pod             |CRD             |Schema Location                                          |Reason                                 |
-|----------------|----------------|---------------------------------------------------------|---------------------------------------|
-|KafkaMirrorMaker|KafkaMirrorMaker|spec -> template -> pod/mirrorMakerContainer             |KafkaMirrorMaker has been deprecated   |
+| Pod              | CRD              | Schema Location                              | Reason                               |
+| ---------------- | ---------------- | -------------------------------------------- | ------------------------------------ |
+| KafkaMirrorMaker | KafkaMirrorMaker | spec -> template -> pod/mirrorMakerContainer | KafkaMirrorMaker has been deprecated |
 
 Support will also not be added to the following locations which are no longer supported:
 
@@ -69,38 +69,31 @@ Support will also not be added to the following locations which are no longer su
 An example configuration could look as follows:
 
 ```yaml
-    kind: Kafka
-    spec:
-      kafka:
-        template:
-          pod:
-            volumes:
-            - name: example-configmap
-              configMap:
-                name: config-map-name
-            - name: temp
-              emptyDir: {}
-            - name: example-csi-volume
-              csi:
-                driver: csi-driver-name
-                readOnly: true
-                volumeAttributes:
-                  secretProviderClass: example-secret-provider-class
-            - name: example-projected-volume
-              projected:
-                sources:
-                  serviceAccountToken
-          kafkaContainer:
-            volumeMounts:
-            - name: example-configmap
-              path: /mnt/cm-volume
-
-            - name: example-csi-volume
-            - name: example-pvc-volume
-
-              path: /mnt/pvc-volume
-
-
+kind: Kafka
+spec:
+  kafka:
+    template:
+      pod:
+        volumes:
+          - name: example-secret
+            secret: 
+              secretName: secret-name
+          - name: example-configmap
+            configMap:
+              name: config-map-name
+          - name: temp
+            emptyDir: {}
+          - name: example-pvc-volume
+            persistentVolumeClaim:
+              claimName: myclaim
+      kafkaContainer:
+        volumeMounts:
+          - name: example-secret
+            mountPath: /mnt/secret-volume
+          - name: example-configmap
+            mountPath: /mnt/cm-volume
+          - name: example-pvc-volume
+            mountPath: "/mnt/data"
 ```
 
 ### Supported volumes
