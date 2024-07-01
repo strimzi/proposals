@@ -251,7 +251,6 @@ This Kubernetes Secret will be mounted into Kubernetes Pods to use a TrustStore.
 kind: Secret
 metdata:
   name: <CLUSTER_NAME>-cluster-ca-trusted-certs # e.g. foo-cluster-ca-trusted-certs
-type: strimzi.io/trust
 data:
    ${fingerprint}.crt: <PEM encoded CA certificate>
 ```
@@ -263,7 +262,7 @@ The `fingerprint` is the fingerprint/thumbprint of the certificate. I.e. the SHA
 When a new cluster is first created the flow is (new/altered steps in bold):
 
 1. Either user or CaReconciler creates the Cluster CA certificate and key and stores them in the <CLUSTER_NAME>-cluster-ca and <CLUSTER_NAME>-cluster-ca-cert Kubernetes Secrets.
-2. __The CaReconciler takes the Cluster CA certificate and places it in the trust-state Kubernetes Secret with the state UNTRUSTED.__
+2. __The CaReconciler takes the Cluster CA certificate and places it in the trust-state Kubernetes Secret with the state UNTRUSTED (because this Cluster CA certificate is not already present in the trust-state).__
 3. The CaReconciler generates the Cluster Operator certificate and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret.
    It does this even though the state is UNTRUSTED, because the Kubernetes Secret was missing.
 4. __The CaReconciler places the Cluster CA certificate in the trusted-certs Kubernetes Secret.__
@@ -302,7 +301,7 @@ When the Cluster CA private key is updated (either because the user has requeste
 12. __The CaReconciler removes the old Cluster CA certificate from the trust-state Kubernetes Secret.__
 13. The other component reconcilers (i.e. not Kafka or ZooKeeper) roll their Kubernetes Pods, since the Cluster CA passed in has a flag indicating certs have been removed.
 
-#### Fig 6: New cluster create flow
+#### Fig 6: New CA certificate flow
 
 ![Cluster CA private key update flow](./images/073-cert-update-proposed.png)
 
