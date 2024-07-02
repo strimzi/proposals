@@ -193,7 +193,7 @@ Notes:
   ```
   The operator will leave the annotation on the KafkaConnector resource until either the patch operation succeeds, or the user removes the annotation.
   This means the operator will retry the patch on every reconciliation, allowing the condition to remain present for the user to see.
-* Strimzi will shortcut and automatically fail to do the reset if the KafkaConnector resource does not have it's `state` set as `stopped`.
+* Strimzi will shortcut and automatically fail to alter the offsets if the KafkaConnector resource does not have it's `state` set as `stopped`.
   Similar to if Connect returns on error, the operator will add a condition stating that the operation has failed because the connector is not stopped and therefore offsets cannot be altered, and leave the annotation on the resource.
   The user can update the KafkaConnector to stop the connector and alter the offsets at the same time.
   In that case the operator will first stop the connector, and once that API call returns, then it will make the call to alter the offsets.
@@ -222,7 +222,12 @@ In that case the operator will first stop the connector, and once that API call 
 
 ## Affected/not affected projects
 
-This only affects the Connect parts of the cluster-operator.
+This proposal only affects the Connect parts of the cluster-operator.
+This proposal does not apply to the use of the KafkaMirrorMaker2 Custom Resource.
+If users are using a KafkaConnector Custom Resource to manage the Mirror Maker connectors, they can manage offsets using the method described in this proposal.
+We should have a different proposal to cover how we might support managing offsets for Mirror Maker connectors that are managed via the KafkaMirrorMaker2 Custom Resource.
+This is because the structure of the offsets JSON object for these connectors is known, so Strimzi can provide a more guided experience for altering offsets.
+For example, by allowing the user to specify the value of specific fields in the offset JSON, rather than them having to construct the full JSON object themselves.
 
 ## Compatibility
 
