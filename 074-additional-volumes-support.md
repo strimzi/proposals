@@ -62,9 +62,9 @@ It is proposed to not add support in the following locations - if `volumes` or `
 
 Support will also not be added to the following locations which are no longer supported:
 
-|Kafka           |Kafka           |spec -> jmxTrans -> template -> pod/container            |^M
-|EntityOperator  |Kafka           |spec -> entityOperator -> template -> tlsSidecarContainer|^M
-|CruiseControl   |Kafka           |spec -> cruiseControl -> template -> tlsSidecarContainer |^M
+|Kafka           |Kafka           |spec -> jmxTrans -> template -> pod/container            |
+|EntityOperator  |Kafka           |spec -> entityOperator -> template -> tlsSidecarContainer|
+|CruiseControl   |Kafka           |spec -> cruiseControl -> template -> tlsSidecarContainer |
 
 
 An example configuration could look as follows:
