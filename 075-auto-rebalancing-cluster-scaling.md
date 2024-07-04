@@ -285,7 +285,7 @@ Because the rebalancing runs across several reconciliations, different scenarios
   The newly added brokers' IDs are compared with the one in the `Kafka.status.autoRebalance.modes.brokers` field.
   If they are equal, nothing to do (even if this situation should not be possible).
   If they are different, the user could have asked for another scale up right after a previous one.
-  The operator has to stop the current rebalancing, by applying the `strimzi.io/rebalance: stop` annotation on the corresponding `KafkaRebalance` custom resource, and start a new rebalancing, by applying the `strimzi.io/rebalance: refresh` annotation, with a consistent list of brokers defined by the multiple requested scales up.
+  The operator has to stop the current rebalancing and start a new one, by applying the `strimzi.io/rebalance: refresh` annotation on the corresponding `KafkaRebalance` custom resource, with a consistent list of brokers defined by the multiple requested scales up.
 
 During the above flow, errors can happen after the scaling up:
 
@@ -295,7 +295,7 @@ During the above flow, errors can happen after the scaling up:
 In both scenarios, the reconciliation ends with the `KafkaRebalance` custom resource in the `NotReady` state which is reflected into the `Kafka.status.autoRebalance.state` field.
 
 On the next reconciliation, the scaling up is done already, but the rebalancing cannot run because of the `KafkaRebalance` custom resource in the `NotReady` state.
-The user can fix it by deleting the `KafkaRebalance` custom resource so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource getting the added brokers from the `status.autoRebalancing.brokers` for the `add-brokers` mode.
+The user can fix it by deleting the `KafkaRebalance` custom resource, because the operator removed the corresponding finalizer, so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource getting the added brokers from the `status.autoRebalancing.brokers` for the `add-brokers` mode.
 Another approach the user can take is removing the `spec.cruiseControl.autoRebalance` (other than deleting the `KafkaRebalance` custom resource) in order to run a manual rebalancing later on.
 
 ### Auto-rebalancing on scaling down
@@ -331,7 +331,7 @@ Because the rebalancing runs across several reconciliations, different scenarios
   The removed brokers' IDs are compared with the `Kafka.status.autoRebalance.modes.brokers` field.
   If they are equal, it's the normal flow, so just checking the rebalancing state.
   If they are different, the user could have asked for another scale down right after a previous one.
-  The operator has to stop the current rebalancing, by applying the `strimzi.io/rebalance: stop` annotation on the corresponding `KafkaRebalance` custom resource, and start a new rebalancing, by applying the `strimzi.io/rebalance: refresh` annotation, with a consistent list of brokers defined by the multiple requested scales down.
+  The operator has to stop the current rebalancing and start a new one, by applying the `strimzi.io/rebalance: refresh` annotation on the corresponding `KafkaRebalance` custom resource, with a consistent list of brokers defined by the multiple requested scales down.
 
 During the above flow, errors can happen before the scaling down:
 
@@ -343,7 +343,7 @@ In both scenarios, the reconciliation ends with the `KafkaRebalance` custom reso
 The reconcile ends but the scale down cannot proceed because the brokers to be removed are still hosting some partition replicas.
 On the next reconciliation, the cluster operator will try to do a scale down again, so going through the same flow.
 The scale down check fails but the rebalancing cannot run because of the `KafkaRebalance` custom resource in the `NotReady` state.
-The user can fix it by deleting the `KafkaRebalance` custom resource so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource.
+The user can fix it by deleting the `KafkaRebalance` custom resource, because the operator removed the corresponding finalizer, so that on the next reconciliation, the operator will be able to retry an auto-rebalancing, by recreating a new `KafkaRebalance` custom resource.
 Another approach the user can take is removing the `spec.cruiseControl.autoRebalance` (other than deleting the `KafkaRebalance` custom resource) in order to run a manual rebalancing later on.
 
 ## Affected/not affected projects
