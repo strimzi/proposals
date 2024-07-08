@@ -80,6 +80,7 @@ Strimzi should approach adoption of Kafka 4.0 in the following way:
    * Removing the ZooKeeper reconciler and all other parts of the code relevant to ZooKeeper
    * Remove the migration code
    * Remove ZooKeeper related system tests
+   * Remove ZooKeeper related content from docs
 
    As upgrade to Strimzi 0.4z will not be possible without migration to KRaft, we will know for sure that the clusters run by Strimzi 0.4z had to be previously run by recent Strimzi versions.
    That will also allow us to remove other legacy code.
@@ -156,7 +157,7 @@ If the decision to add Kafka 3.10 is done before the Strimzi 0.4y release when w
 
 This proposal affects the Strimzi operator.
 Mainly the Cluster Operator which deals with KRaft and ZooKeeper.
-But to some extent, it also affects other parts of the project (such as the API, container images, examples, system tests etc.)
+But to some extent, it also affects other parts of the project (such as the API, container images, examples, system tests, documentation etc.)
 The Topic and User operators as well as the Bridge, Drain Cleaner or configuration providers should not be affected by this proposal as they do not have any direct dependency on ZooKeeper.
 
 ## Backwards compatibility
