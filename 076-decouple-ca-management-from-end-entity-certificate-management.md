@@ -14,7 +14,7 @@ These CAs are only used for Kafka clusters and a unique instance of each CA is u
 The cluster CA issues certificates for the following Strimzi components:
 * ZooKeeper nodes
 * Kafka nodes
-* User and Topic operators
+* Cluster, User and Topic operators
 * Cruise Control
 * Kafka Exporter
 
