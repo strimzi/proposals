@@ -78,21 +78,21 @@ Sink connector format is:
 
 ### New annotation
 
-All three actions will make use of a new annotation called `strimzi.io/connectorOffsets`.
+All three actions will make use of a new annotation called `strimzi.io/connector-offsets`.
 The possible values will be `list`, `alter` and `reset`.
 
 ### Listing offsets
 
-To list the current offsets the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connectorOffsets` set to `list`.
+To list the current offsets the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connector-offsets` set to `list`.
 After the annotation is added, on the next reconciliation the operator will fetch the current offsets and create a Kubernetes ConfigMap containing the JSON response.
 The operator will add an owner reference to the Kubernetes ConfigMap pointing to the KafkaConnector resource that was annotated.
-If the ConfigMap already exists the operator will replace the data with the updated data and not add an owner reference.
+If the ConfigMap already exists the operator will replace the `data` in the ConfigMap with the updated data and not add an owner reference.
 The operator will then remove the annotation from the KafkaConnector CR.
 
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
 
 The name of the ConfigMap the operator creates/updates will be set by the user in the KafkaConnector CR.
-The KafkaConnector CRD will be updated to contain a new property called `listOffsets` that must be set for the `strimzi.io/connectorOffsets=list` annotation to take effect.
+The KafkaConnector CRD will be updated to contain a new property called `listOffsets` that must be set for the `strimzi.io/connector-offsets=list` annotation to take effect.
 The structure of the `listOffsets` property will be as below, to allow it to be extended in future if required:
 
 ```yaml
@@ -110,6 +110,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: my-source-connector-offsets
+  ownerReferences:
+    - apiVersion: kafka.strimzi.io/v1beta2
+      blockOwnerDeletion: false
+      controller: false
+      kind: KafkaConnector
+      name: my-source-connector
+      uid: 1234
 data:
   offsets.json: |
     {
@@ -133,6 +140,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: my-sink-connector-offsets
+  ownerReferences:
+    - apiVersion: kafka.strimzi.io/v1beta2
+      blockOwnerDeletion: false
+      controller: false
+      kind: KafkaConnector
+      name: my-sink-connector
+      uid: 5678
 data:
   offsets.json: |
     {
@@ -151,7 +165,7 @@ data:
 ```
 
 Notes:
-* If the `listOffsets` property is missing from the KafkaConnector CR when the `strimzi.io/connectorOffsets=list` annotation is added the operator will update the KafkaConnector CR status to include a warning message:
+* If the `listOffsets` property is missing from the KafkaConnector CR when the `strimzi.io/connector-offsets=list` annotation is added the operator will update the KafkaConnector CR status to include a warning message:
   ```yaml
   - lastTransitionTime: "2024-06-04T08:44:15.913138115Z"
     message: Failed to list the connector offsets due to missing property listOffsets in KafkaConnector CR.
@@ -164,7 +178,7 @@ Notes:
 
 ### Altering offsets
 
-To alter offsets the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connectorOffsets` set to `alter`.
+To alter offsets the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connector-offsets` set to `alter`.
 After the annotation is added, on the next reconciliation the operator will call the PATCH /connectors/{connector}/offsets endpoint to alter the offsets.
 Once the patch is complete the operator will then remove the annotation from the KafkaConnector CR.
 
@@ -172,7 +186,7 @@ The operator will read in the entry called `offsets.json` from the ConfigMap.
 The entry name matches the entry name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets be altered using that same ConfigMap.
 
 The name of the ConfigMap the operator will use to construct the request body will be set by the user in the KafkaConnector CR.
-The KafkaConnector CRD will be updated to contain a new property called `alterOffsets` that must be set for the `strimzi.io/connectorOffsets=alter` annotation to take effect.
+The KafkaConnector CRD will be updated to contain a new property called `alterOffsets` that must be set for the `strimzi.io/connector-offsets=alter` annotation to take effect.
 The structure of the `alterOffsets` property will be as below, to allow it to be extended in future if required:
 
 ```yaml
@@ -182,7 +196,7 @@ alterOffsets:
 ```
 
 Notes:
-* The format of the request body will be validated to make sure it is valid JSON, but the operator won't perform any further validation, instead relying on the API endpoint to return a reasonable error message.
+* The format of the request body will be validated to make sure it is syntactically valid JSON, but the operator won't perform any further validation, instead relying on the API endpoint to return a reasonable error message.
 * If the request to the Connect API fails the operator will add a condition to the KafkaConnector CR status with a warning message that includes the response from the API, e.g.
   ```yaml
   - lastTransitionTime: "2024-06-04T08:44:15.913138115Z"
@@ -197,10 +211,12 @@ Notes:
   Similar to if Connect returns on error, the operator will add a condition stating that the operation has failed because the connector is not stopped and therefore offsets cannot be altered, and leave the annotation on the resource.
   The user can update the KafkaConnector to stop the connector and alter the offsets at the same time.
   In that case the operator will first stop the connector, and once that API call returns, then it will make the call to alter the offsets.
+* If the specified ConfigMap `data` does not contain an entry called `offsets.json` this will be treated as an error.
+* The operator will only examine the contents of the `offsets.json` entry in the ConfigMap, ignoring any other fields.
 
 ### Resetting offsets
 
-To reset the offsets for a particular connector the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connectorOffsets` set to `reset`.
+To reset the offsets for a particular connector the user will annotate the KafkaConnector resource with the new annotation `strimzi.io/connector-offsets` set to `reset`.
 When the operator observes this annotation it will use the DELETE /connectors/{connector}/offsets endpoint to reset all offsets for the connector.
 When the reset has been completed the operator will remove this annotation from the resource.
 
