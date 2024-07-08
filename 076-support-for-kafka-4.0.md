@@ -8,7 +8,7 @@ This proposal discusses how Strimzi will handle the release of Apache Kafka 4.0 
 
 ### Strimzi
 
-Strimzi currently does a new release every roughly every 2 months.
+Strimzi currently does a new minor release every roughly every 2 months.
 Each release supports at least two last Kafka minor versions.
 For example 3.6.x and 3.7.x.
 For each minor version, multiple patch releases might be supported, depending on their availability in Apache Kafka.
@@ -105,6 +105,8 @@ In Strimzi 0.4z and newer versions we will check the Kafka clusters for the meta
 For any cluster not using KRaft it will immediately raise an error instead of trying to reconcile the cluster.
 The check will be done based on the `Kafka` CR `.status` section.
 Users will have to downgrade the operator, migrate the cluster and upgrade the operator again.
+
+Newly deployed Kafka clusters will be expected to be KRaft only.
 
 ### Extended support for Kafka 3.9
 
