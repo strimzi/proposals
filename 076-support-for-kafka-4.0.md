@@ -19,13 +19,13 @@ But in some cases, there might be more Strimzi releases in between (for example,
 Once a new minor Strimzi version is released, we will stop supporting the previous Strimzi release.
 There are some exception, especially in case of:
 * Serious bug or CVE
-* The latest minor Strimzi release is new and not anyone might have yet change to upgrade to is
+* The latest minor Strimzi release is new and some people might not have had chance to upgrade to it
 
 #### KRaft support
 
 Strimzi currently supports both ZooKeeper- and KRaft-based Apache Kafka clusters.
 It also supports migration of ZooKeeper-based clusters to KRaft.
-The current limitations to the KRaft support are based on limitations in Apache Kafka it self.
+The current limitations to the KRaft support are based on limitations in Apache Kafka itself.
 At the time of writing this proposal, they include:
 * Scaling of KRaft controller nodes up or down is not supported
 * Unregistering Kafka nodes removed from the Kafka cluster
