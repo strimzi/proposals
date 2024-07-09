@@ -24,7 +24,7 @@ The cluster CA root certificate is added to the trust stores of Strimzi componen
 
 #### Fig 1: Cluster CA certificate and component relationships
 
-![Cluster CA relationships](./images/073-cluster-ca.svg)
+![Cluster CA relationships](./images/076-cluster-ca.svg)
 
 > Fig 1: In the diagram, the red lines show trust.
 > For example, because the Kafka broker trusts the Cluster CA certificate,
@@ -37,7 +37,7 @@ The clients CA root certificate is added to the broker trust stores too, so that
 
 #### Fig 2: Clients CA certificate and component relationships
 
-![Clients CA relationships](./images/073-clients-ca.svg)
+![Clients CA relationships](./images/076-clients-ca.svg)
 
 ### Existing Kubernetes Secrets
 
@@ -123,7 +123,7 @@ When a new cluster is first created the flow is:
 
 #### Fig 3: New cluster create flow
 
-![New cluster create flow](./images/073-cert-new-existing.png)
+![New cluster create flow](./images/076-cert-new-existing.png)
 
 > Fig 3: The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations.
@@ -144,7 +144,7 @@ When the Cluster CA private key is updated by the user, either by using the forc
 
 #### Fig 4: Cluster CA private key update flow
 
-![Cluster CA private key update flow](./images/073-cert-update-existing.png)
+![Cluster CA private key update flow](./images/076-cert-update-existing.png)
 
 > Fig 4: The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations, the EntityOperator, CruiseControl and KafkaExporter reconcilers, and the removal of trust of the old CA certificate and key.
@@ -276,7 +276,7 @@ When a new cluster is first created the flow is (new/altered steps in bold):
 
 #### Fig 5: New cluster create flow
 
-![New cluster create flow](./images/073-cert-new-proposed.png)
+![New cluster create flow](./images/076-cert-new-proposed.png)
 
 > Fig 5: The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations and the EntityOperator, CruiseControl and KafkaExporter reconcilers.
@@ -304,7 +304,7 @@ When the Cluster CA private key is updated by the user, either by using the forc
 
 #### Fig 6: New CA certificate flow
 
-![Cluster CA private key update flow](./images/073-cert-update-proposed.png)
+![Cluster CA private key update flow](./images/076-cert-update-proposed.png)
 
 > Fig 6: The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations and the EntityOperator, CruiseControl and KafkaExporter reconcilers, and the removal of trust of the old CA certificate and key.
