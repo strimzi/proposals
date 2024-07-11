@@ -27,8 +27,8 @@ Strimzi currently supports both ZooKeeper- and KRaft-based Apache Kafka clusters
 It also supports migration of ZooKeeper-based clusters to KRaft.
 The current limitations to the KRaft support are based on limitations in Apache Kafka itself.
 At the time of writing this proposal, limitations include:
-* Scaling of KRaft controller nodes up or down is not supported
-* Unregistering Kafka nodes removed from the Kafka cluster
+* Scaling of KRaft controller nodes up or down is not supported (should be addressed in [KIP-853](https://cwiki.apache.org/confluence/display/KAFKA/KIP-853%3A+KRaft+Controller+Membership+Changes))
+* Unregistering Kafka nodes removed from the Kafka cluster (should be addressed in [KAFKA-17094](https://issues.apache.org/jira/browse/KAFKA-17094))
 
 In addition to the limitations, we are waiting for some further improvements in Apache Kafka:
 * Ability to connect to KRaft controller nodes and manage them without rolling updates
