@@ -64,16 +64,14 @@ When a new reconciliation starts up, a context object is created for each node t
  - <i>lastTransitionTime</i>: System.nanoTime of last observed state transition.
 
  The following table illustrates possible states for `lastKnownState` field and the next states it can transition into:
- | State            | Description      | Possible transitions |
+ | State            | Description      | Next possible transitions |
  | :--------------- | :--------------- | :----------- |
- | UNKNOWN               | The initial state when creating `Context` for a node. We expect to transition from this state fairly quickly after creating the context for nodes.  | `NOT_RUNNING` `NOT_READY` `RECOVERING` `READY` |
- | NOT_RUNNING           | Node is not running (Kafka process is not running). This is determined via Kubernetes API, more details for it below. | `NOT_READY`, `NOT_RUNNING`. | `RESTARTED` `READY` | 
- | NOT_READY             | Node is running but not ready to serve requests which is determined by Kubernetes readiness probe (broker state < 2 OR == 127 OR controller is not listening on port). | `RESTARTED` `READY` |
- | RESTARTED             | After successful `kubectl delete pod`. | `NOT_RUNNING` `NOT_READY` `RECOVERING` `READY` |
- | RECONFIGURED          | After successful Kafka node config update via Admin client. | `NOT_RUNNING` `NOT_READY` `RESTARTED` `READY` |
- | RECOVERING            | Node has started but is in log recovery (broker state == 2). This is determined via the KafkaAgent. | `READY` |
- | READY               | Node is in running state and ready to serve requests which is determined by Kubernetes readiness probe (broker state >= 3 AND != 127 OR controller is listening on port). | `LEADING_ALL_PREFERRED` `NOT_READY` `NOT_RUNNING` |
- | LEADING_ALL_PREFERRED | Node is leading all the partitions that it is the preferred leader for. Node's state can transition into this only from `READY` state.  | `NOT_READY` `NOT_RUNNING`
+ | UNKNOWN               | The initial state when creating `Context` for a node or state just after the node gets restarted/reconfigured. We expect to transition from this state fairly quickly.  | `NOT_RUNNING` `NOT_READY` `RECOVERING` `READY` |
+ | NOT_RUNNING           | Node is not running (Kafka process is not running). This is determined via Kubernetes API, more details for it below. | `READY` `UNKNOWN` `NOT_READY` `RECOVERING` | 
+ | NOT_READY             | Node is running but not ready to serve requests which is determined by Kubernetes readiness probe (broker state < 2 OR == 127 OR controller is not listening on port). | `READY` `UNKNOWN` `NOT_RUNNING` `RECOVERING` |
+ | RECOVERING            | Node has started but is in log recovery (broker state == 2). This is determined via the KafkaAgent. | `READY` `NOT_RUNNING` `NOT_READY` |
+ | READY               | Node is in running state and ready to serve requests which is determined by Kubernetes readiness probe (broker state >= 3 AND != 127 OR controller is listening on port). | `LEADING_ALL_PREFERRED` `UNKNOWN` |
+ | LEADING_ALL_PREFERRED | Node is leading all the partitions that it is the preferred leader for. Node's state can transition into this only from `READY` state.  | This is the final state we expect
 
 Context about broker states and restart reasons:
 - To determine if the node is ready or performing a log recovery, we use the [Broker States](https://github.com/apache/kafka/blob/3.7/metadata/src/main/java/org/apache/kafka/metadata/BrokerState.java) metric emitted by Kafka. KafkaAgent collects and exposes this metric via REST Endpoint. This is what the current KafkaRoller does already, and the new roller will use it the same way.
@@ -102,116 +100,90 @@ The following are the configuration options for the new KafkaRoller. If exposed 
 | maxReconfigAttempts    | 3             | No              | The maximum number of times a node can be dynamically reconfigured before restarting it. This is checked against the node's `numReconfigAttempts`.                                                                                                                        |
 | maxRetries             | 10            | No              | The maximum number of times a node can be retried after not meeting the safety conditions e.g. availability check failed.  This is checked against the node's `numRetries`.                                                                                                                      |
 | operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an operation in each retry. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
-| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`.                                                                                                                                                                                        |
+| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`.     
+| postRestartDelay  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will also help JIT to reach a steady state and to reduce impact on clients.   
+| restartAndPreferredLeaderElectionDelay  | 10 seconds             | No             | Delay between restart and triggering partition leader election so that just-rolled broker is leading all the partitions it is the preferred leader for. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
 
 ### Algorithm
 
-1. Initialise a context object for each node with the following data:
-```
-Context: {
-         nodeRef: <NodeRef object passed from KafkaReconciler>
-         nodeRoles: <This will be set using the pod labels `strimzi.io/controller-role` and `strimzi.io/broker-role>
-         state: UNKNOWN
-         lastTransition: <SYSTEM_TIME>
-         reason: <Result of the predicate function passed from KafkaReconciler>
-         numRestartAttempts: 0
-         numReconfigAttempts: 0
-         numRetries: 0
-}
-```
-Contexts are recreated in each reconciliation with the initial data above.
+1. **Initialize Context for Each Node:**
+   Create a context object with the following data:
+   ```
+   Context: {
+       nodeRef: <NodeRef from KafkaReconciler>,
+       nodeRoles: <Set using pod labels `strimzi.io/controller-role` and `strimzi.io/broker-role`>,
+       state: UNKNOWN,
+       lastTransition: <SYSTEM_TIME>,
+       reason: <Result of predicate function from KafkaReconciler>,
+       numRestartAttempts: 0,
+       numReconfigAttempts: 0,
+       numRetries: 0
+   }
+   ```
+   Contexts are recreated in each reconciliation with the above initial data.
 
-2. Observe and transition each node's state to the corresponding state based on the information collected from the abstracted sources which is further explained [here](#node-state) . If it can't retrieve any information from the sources, the reconciliation fails and the next reconciliation would start from step 1.
+2. **Transition Node States:**
+   Update each node's state based on information from abstracted sources. If failed to retrieve information, the reconciliation fails and restarts from step 1.
 
-3. If there are nodes in `NOT_READY` state, wait for them to have `READY` within the `operationTimeoutMs`.  
-   We want to give nodes chance to get ready before we try to connect to them or consider them for rolling. This is important especially for nodes which were just started.
-   This is consistent with how the current roller handles unready nodes.
-   - If the timeout is reached, proceed to the next step and check if any of the nodes need to be restarted.
+3. **Handle `NOT_READY` Nodes:**
+   Wait for `NOT_READY` nodes to become `READY` within `operationTimeoutMs`. If the timeout is reached, check if nodes need to be restarted.
 
-4. Group the nodes into the following categories based on their state and connectivity:
-   - `RESTART_FIRST` - Nodes that have `NOT_READY` or `NOT_RUNNING` state in their contexts. The nodes that we cannot connect to via Admin API will also be put into this group with its reason updated with `POD_UNRESPONSIVE`.
-   - `WAIT_FOR_LOG_RECOVERY` -  Nodes that have `RECOVERING` state.
-   - `MAYBE_RECONFIGURE_OR_RESTART` - Broker nodes (including mixed nodes) that have an empty list of reasons and not been restarted or reconfigured yet (Context.numReconfigAttempts == 0 || Context.numRestartAttempts == 0). This nodes in this group then will be further refined and put into `RECONFIGURE` or `RESTART` categories later.
-   - `RESTART` - Nodes that have non-empty list of reasons from the predicate function and have not been restarted yet (Context.numRestartAttempts == 0).
-   - `NOP` - Nodes that have at least one restart or reconfiguration attempt (Context.numRestartAttempts > 0 || Context.numReconfigAttempts > 0 ) and have either
-             `LEADING_ALL_PREFERRED` or `READY` state. This means no operation is needed for this node.
+4. **Categorize Nodes:**
+   Group nodes based on their state and connectivity:
+   - `RESTART_NOT_RUNNING`: Nodes in `NOT_READY` state.
+   - `WAIT_FOR_LOG_RECOVERY`: Nodes in `RECOVERING` state.
+   - `RESTART_UNRESPONSIVE`: Nodes unresponsive via Admin API.
+   - `MAYBE_RECONFIGURE_OR_RESTART`: Broker nodes with empty reason lists and no previous restarts/reconfigurations.
+   - `RESTART`: Nodes with reasons for restart and no previous restarts.
+   - `NOP`: Nodes needing no operation.
 
-5. Wait for nodes in `WAIT_FOR_LOG_RECOVERY` group to finish performing log recovery. 
-   - Wait for nodes to have `READY` within the `operationTimeoutMs`. 
-   - If the timeout is reached for a node and its `numRetries` is greater than or equal to `maxRetries`, throw `UnrestartableNodesException` with the log recovery progress (number of remaining logs and segments). Otherwise increment node's `numRetries` and repeat from step 2.
+5. **Wait for Log Recovery:**
+   Wait for `WAIT_FOR_LOG_RECOVERY` nodes to become `READY` within `operationTimeoutMs`. If timeout is reached and `numRetries` exceeds `maxRetries`, throw `UnrestartableNodesException`. Otherwise, increment `numRetries` and repeat from step 2.
 
-6. Restart nodes in `RESTART_FIRST` category:
-   - if one or more nodes have `NOT_RUNNING` state, we first need to check 2 special conditions:
-      - If all of the nodes are mixed and are in `NOT_RUNNING` state, restart them in parallel to give the best chance of forming the quorum.
+6. **Restart `RESTART_NOT_RUNNING` Nodes:**
+   Restart nodes in `NOT_RUNNING` state, considering special conditions:
+   - If all controller nodes are `NOT_RUNNING`, restart them in parallel to form a quorum.
       > This is to address the issue described in https://github.com/strimzi/strimzi-kafka-operator/issues/9426.
-
-      - If a node is in `NOT_RUNNING` state, the restart it only if it has `POD_HAS_OLD_REVISION` or `POD_UNRESPONSIVE` reason. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date.
+   - Restart `NOT_RUNNING` nodes with `POD_HAS_OLD_REVISION` in parallel. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date.
       > For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
+   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
 
-      - At this point either we started nodes or decided not to because nodes did not have `POD_HAS_OLD_REVISION` reason. Regardless, wait for nodes to have `READY` within `operationTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 2. 
+7. **Restart `RESTART_UNRESPONSIVE` Nodes:**
+   Restart unresponsive nodes one by one in the order: pure controller, mixed, and broker nodes. Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
 
-   
-   - Otherwise the nodes will be attempted to restart one by one in the following order:
-      - Pure controller nodes
-      - Mixed nodes
-      - Broker only nodes
-      
-   - Wait for the restarted node to have `READY` within `operationTimeoutMs`. If the timeout is reached and the node's `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. Otherwise increment node's `numRetries` and repeat from step 2. 
+8. **Refine `MAYBE_RECONFIGURE_OR_RESTART` Nodes:**
+   Describe Kafka configurations via Admin API:
+   - Nodes with dynamic config changes go to `RECONFIGURE`.
+   - Nodes with non dynamic config changes, go to `RESTART`.
+   - Nodes with no config changes go to `NOP`.
 
-7. Further refine the broker nodes in `MAYBE_RECONFIGURE_OR_RESTART` group:
-   - Describe Kafka configurations for each node via Admin API and compare them against the desired configurations. This is essentially the same mechanism we use today for the current KafkaRoller.
-   - If a node has configuration changes and they can be dynamically updated, add the node into another group called `RECONFIGURE`.
-   - If a node has configuration changes but they cannot be dynamically updated, add the node into the `RESTART` group.
-   - If a node has no configuration changes, put the node into the `NOP` group.
+9. **Reconfigure Nodes:**
+   Reconfigure nodes in the `RECONFIGURE` group:
+   - If `numReconfigAttempts` exceeds `maxReconfigAttempts`, add a restart reason and repeat from step 2.
+   - Send `incrementalAlterConfig` request, transition state to `UNKNOWN`, and increment `numReconfigAttempts`.
+   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, repeat from step 2.
 
-8. Reconfigure each node in `RECONFIGURE` group:
-   - If `numReconfigAttempts` of a node is greater than the configured `maxReconfigAttempts`, add a restart reason to its context and repeat from step 2. This will cause the Otherwise continue.
-   - Send `incrementalAlterConfig` request with its config updates.
-   - Transitions the node's state to `RECONFIGURED` and increment its `numReconfigAttempts`.
-   - If the request to update the configuration failed, it will retry the node by repeating from step 2.
-   - Wait for each node that got configurations updated until they have `READY` within the `operationTimeoutMs`.
-   - If the `operationTimeoutMs` is reached, repeat from step 2.
+10. **Check for `NOT_READY` Nodes:**
+   If `RESTART` group is empty and no nodes are `NOT_READY`, reconciliation is successful. Otherwise, wait for `NOT_READY` nodes' state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
 
-9. If at this point, the `RESTART` group is empty and if there is no nodes that is in `NOT_READY` state, the reconciliation will be completed successfully.
-   - If there are nodes in `NOT_READY` state, wait for them to have `READY` within the `operationTimeoutMs`. 
-   - If the timeout is reached for a node and its `numRetries` is greater than or equal to `maxRetries`, throw `TimeoutException`. 
-   - Otherwise increment node's `numRetries` and repeat from step 2.
-   This is consistent with how the current roller handles unready nodes.
+11. **Batch and Restart Nodes:**
+   Categorize and batch nodes for restart:
+   - Ensure controllers are restarted sequentially in an order of pure controllers, mixed nodes and the active controller to maintain quorum.
+   - Group broker nodes without common partitions for parallel restart to maintain availability.
+   - If no safe nodes to restart, check `numRetries`. If exceeded, throw `UnrestartableNodesException`.Otherwise, increment `numRetries` and repeat from step 2.  More on safety conditions below.
 
-10. Otherwise, batch nodes in `RESTART` group and get the next batch to restart:
-   - Further categorize nodes based on their roles so that the following restart order can be enforced:
-       1. `NON_ACTIVE_CONTROLLER` - Pure controller that is not the active controller
-       2. `MIXED_AND_NOT_ACTIVE_CONTROLLER` - Mixed node (both controller and broker) and is not the active controller
-       3. `ACTIVE_CONTROLLER` - Pure controller that is the active controller (the quorum leader)
-       4. `MIXED_AND_ACTIVE_CONTROLLER` - Mixed node (both controller and broker) and is the active controller (the quorum leader)
-       5. `BROKER` - Pure broker
+12. **Restart Nodes in Parallel:**
+   Restart broker nodes in the batch:
+   - If `numRestartAttempts` exceeds `maxRestartAttempts`, throw `MaxRestartsExceededException`.
+   - Restart nodes, transition state to `UNKNOWN`, and increment `numRestartAttempts`.
+   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
+   - After nodes are `READY`, apply `restartAndPreferredLeaderElectionDelay` and trigger preferred leader elections. Wait for nodes to transition to `LEADING_ALL_PREFERRED` state within `operationTimeoutMs`.
 
-      We expect only one of `ACTIVE_CONTROLLER` and `MIXED_AND_ACTIVE_CONTROLLER` categories to be non-empty as there is only one active controller.
-       
-      > The batch returned will comprise only one node for all groups except 'BROKER', ensuring that controllers are restarted sequentially. This approach is taken to mitigate the risk of losing quorum when restarting multiple controller nodes simultaneously. A failure to establish quorum due to unhealthy controller nodes directly impacts the brokers and consequently the availability of the cluster. However, restarting broker nodes can be executed without affecting availability. If concurrently restarting brokers do not share any topic partitions, the in-sync replicas (ISRs) of topic partitions will lose no more than one replica, thus preserving availability.
-  
-   - If `NON_ACTIVE_CONTROLLER` group is non empty, return the first node that can be restarted without impacting the quorum health (more on this later).
-   - If `MIXED_AND_NOT_ACTIVE_CONTROLLER` group is non empty, return the first node that can be restarted without impacting the quorum health and the availability.
-   - If `ACTIVE_CONTROLLER` group is non empty, return the node if it can be restarted without impacting the quorum health. Otherwise return an empty set.
-   - If `MIXED_AND_ACTIVE_CONTROLLER`  group is non empty, return the node if it can be restarted without impacting the quorum health and the availability. Otherwise return an empty set.
-   - If `BROKER` group is non empty, batch the broker nodes:
-       - build a map of nodes and their replicating partitions by sending describeTopics request to Admin API
-       - batch the nodes that do not have any partitions in common therefore can be restarted together
-       - remove nodes that have an impact on the availability from the batches (more on this later)
-       - return the largest batch
-   - If an empty batch is returned, that means none of the nodes met the safety conditions such as availability and qourum health impact. In this case, check their `numRetries` and if any of them is equal to or greater than `maxRetries`, throw `UnrestartableNodesException`. Otherwise increment their `numRetries` and repeat from step 2.
+13. **Handle Exceptions:**
+   If no exceptions are thrown, reconciliation is successful. If exceptions occur, reconciliation fails.
 
-11. Restart the nodes from the returned batch in parallel:
-   - If `numRestartAttempts` of a node is larger than `maxRestartAttempts`, throw `MaxRestartsExceededException`.
-   - Otherwise, restart each node and transition its state to `RESTARTED` and increment its `numRestartAttempts`.
-   - After restarting all the nodes in the batch, wait for their states to become `READY` until the configured `operationTimeoutMs` is reached.
-   - If the timeout is reached, throw `TimeoutException`. If a node's `numRetries` is greater than or equal to `maxRetries`. Otherwise increment their `numRetries` and repeat from step 2.
-   - After all the nodes are in `READY` state, trigger preferred leader elections via Admin client. Wait for their states to become `LEADING_ALL_PREFERRED` until the configured `operationTimeoutMs` is reached. If the timeout is reached, log a `WARN` message. 
-
-
-12. If there are no exceptions thrown at this point, the reconciliation completes successfully. If there were `UnrestartableNodesException`, `TimeoutException`, `MaxRestartsExceededException` or any other unexpected exceptions throws, the reconciliation fails. 
-
-13. When the reconciliation completes either successfully or unsuccessfully, the next reconciliation will start from step 1 of this algorithm.
+14. **Repeat Reconciliation:**
+   Start the next reconciliation from step 1.
 
 #### Quorum health check
 
