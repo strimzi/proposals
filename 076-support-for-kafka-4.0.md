@@ -122,7 +122,7 @@ This extended support should include:
 The extended support will not include back-porting any new features.
 It is also not expected to include any changes for compatibility with new Kubernetes versions released only after the Strimzi release.
 
-Releases of new patch versions will be not be done with a frequency higher than 2 months and should be driven based on user demand.
+Releases of new patch versions will not be done with a frequency higher than 2 months and should be driven based on user demand.
 
 The extended support will be done at most for as long as the Kafka 3.9 version is supported by the Apache Kafka project (i.e. 1 year after the Kafka 3.9 release).
 But it might be terminated sooner in case we run into major issues with fixing any bugs or CVEs that would require unreasonably high effort.
