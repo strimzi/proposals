@@ -1,14 +1,14 @@
 # Support for Apache Kafka 4.0
 
 Apache Kafka is planning a new major release - Apache Kafka 4.0.
-Unlike previous major releases that Strimzi handled before (2.0 and 3.0), this one is "special" because it drops the support for ZooKeeper-based clusters.
+Unlike previous major releases that Strimzi handled before (2.x and 3.x), this one is "special" because it drops the support for ZooKeeper-based clusters.
 This proposal discusses how Strimzi will adopt the release of Apache Kafka 4.0 and transition from Apache Kafka 3.x to 4.x.
 
 ## Current situation
 
 ### Strimzi
 
-Strimzi currently does a new minor release every roughly every 2 months.
+Strimzi currently does a new minor release roughly every 2 months.
 Each release supports at least the two last Kafka minor versions.
 For example 3.6.x and 3.7.x.
 For each minor version, multiple patch releases might be supported, depending on their availability in Apache Kafka.
@@ -67,6 +67,7 @@ Strimzi should approach adoption of Kafka 4.0 in the following way:
    We will release it as part of a Strimzi release 0.4x which will support both Kafka 3.8.x and 3.9.x.
    This version will support both ZooKeeper- and KRaft-based clusters.
    This version will also add warnings to all users using ZooKeeper that it will be removed in the next Kafka release and that they should do the migration.
+   The warnings will be in Cluster Operator log as well as in the status of the `Kafka` custom resources.
 
 2) Given the expected timeline of 3-4 months between Kafka 3.9 and 4.0, we will do another minor Strimzi release 0.4y.
    This version might add support for some of the new features added to KRaft in Kafka 3.9.0.
@@ -93,6 +94,16 @@ Strimzi should approach adoption of Kafka 4.0 in the following way:
 
 4) The Strimzi releases after 0.4z will continue with the 1-2 months release cycles, as usual, and will continue to adopt the Kafka patch releases.
    Once Apache Kafka 4.1 is released, Strimzi will adopt Kafka 4.1 and continue its releases with support for Kafka 4.0 and 4.1.
+
+The following table provides the overview of the different versions:
+
+| Version | Supported Kafka versions | Supported metadata modes | Extended support |
+| :-----: |:-------------------------|:-------------------------|:-----------------|
+| ...     | 3.7.x, 3.8.x             | ZooKeeper, KRaft         | no               |
+| 0.4x    | 3.8.x, 3.9.x             | ZooKeeper, KRaft         | no               |
+| 0.4y    | 3.8.x, 3.9.x             | ZooKeeper, KRaft         | **yes**          |
+| 0.4z    | 3.9.x, 4.0.x             | KRaft                    | no               |
+| ...     | 4.0.x, 4.1.x             | KRaft                    | no               |
 
 ### Enforcing the migration to KRaft
 
@@ -128,10 +139,12 @@ The extended support will be done at most for as long as the Kafka 3.9 version i
 But it might be terminated sooner in case we run into major issues with fixing any bugs or CVEs that would require unreasonably high effort.
 (While it is rare, addressing certain CVEs might require significant dependency updates that require major changes to the codebase.)
 
+Based on this proposal, the Strimzi version referenced as 0.4y (based on Kafka 3.8 and 3.9) will be the one that will receive the extended support.
+
 ### System tests
 
 With the removal of the ZooKeeper support from the production code, we should also proceed and remove it from the system tests.
-We will also remove the `kraft-regression` CI pipeline from the `main` branch and use the `regression` branch for running Kraft-based system tests.
+We will also remove the `migration` and `kraft-regression` CI pipelines from the `main` branch and use the `regression` branch for running Kraft-based system tests.
 The system test pipelines will remain unchanged in the 0.4y release branch for the extended support.
 Given the extended support for the Strimzi 0.4y version, we should consider adding a dedicated upgrade test from a KRaft-based Strimzi 0.4y cluster to the latest Strimzi version as some users are expected to run Strimzi 0.4y for extended time and later migrate directly to a newer Strimzi version.
 
