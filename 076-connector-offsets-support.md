@@ -223,7 +223,7 @@ When the reset has been completed the operator will remove this annotation from 
 If the request to the Connect API fails the operator will add a condition to the KafkaConnector CR status with a warning message that includes the response from the API, e.g.
   ```yaml
   - lastTransitionTime: "2024-06-04T08:44:15.913138115Z"
-    message: Failed to alter the connector offsets due to "message from endpoint".
+    message: Failed to reset the connector offsets due to "message from endpoint".
     reason: ResetOffsets
     status: "True"
     type: Warning
