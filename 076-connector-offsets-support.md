@@ -40,7 +40,7 @@ The alter offsets operation uses a ConfigMap for the input.
 
 The response body received when using the GET endpoint, and the request body used when calling the PATCH endpoint have identical structures to allow users to easily fetch and then alter offsets.
 The structure of the body is different for source and sink connectors.
-This is because sink connectors use regular Kafka offsets, whereas source connectors determine their own structure for offsets.
+This is because sink connectors use regular Kafka offsets, whereas source connectors determine their own structure for offsets depending on the source system they are integrating with.
 This difference is reflected in the approaches outlined in this proposal.
 
 Source connector format is:
@@ -153,7 +153,7 @@ data:
       "offsets": [
         {
           "partition": {
-            "kafka_topic": "my-topic"
+            "kafka_topic": "my-topic",
               "kafka_partition": 2
           },
           "offset": {
@@ -183,7 +183,7 @@ After the annotation is added, on the next reconciliation the operator will call
 Once the patch is complete the operator will then remove the annotation from the KafkaConnector CR.
 
 The operator will read in the entry called `offsets.json` from the ConfigMap.
-The entry name matches the entry name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets be altered using that same ConfigMap.
+The entry name matches the entry name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets to be altered using that same ConfigMap.
 
 The name of the ConfigMap the operator will use to construct the request body will be set by the user in the KafkaConnector CR.
 The KafkaConnector CRD will be updated to contain a new property called `alterOffsets` that must be set for the `strimzi.io/connector-offsets=alter` annotation to take effect.
@@ -240,8 +240,8 @@ In that case the operator will first stop the connector, and once that API call 
 
 This proposal only affects the Connect parts of the cluster-operator.
 This proposal does not apply to the use of the KafkaMirrorMaker2 Custom Resource.
-If users are using a KafkaConnector Custom Resource to manage the Mirror Maker connectors, they can manage offsets using the method described in this proposal.
-We should have a different proposal to cover how we might support managing offsets for Mirror Maker connectors that are managed via the KafkaMirrorMaker2 Custom Resource.
+If users are using a KafkaConnector Custom Resource to manage the MirrorMaker connectors, they can manage offsets using the method described in this proposal.
+We should have a different proposal to cover how we might support managing offsets for MirrorMaker connectors that are managed via the KafkaMirrorMaker2 Custom Resource.
 This is because the structure of the offsets JSON object for these connectors is known, so Strimzi can provide a more guided experience for altering offsets.
 For example, by allowing the user to specify the value of specific fields in the offset JSON, rather than them having to construct the full JSON object themselves.
 
@@ -259,7 +259,7 @@ In addition, it seems likely that listing offsets will be used most often as a o
 ### Listing offsets in the KafkaConnector status
 
 A previous version of this proposal suggested using the KafkaConnector status field to list the returned offsets.
-This was rejected because updating the status would trigger an addition reconcile and the response from the endpoint may be a very large size if there are many partitions.
+This was rejected because updating the status would trigger an additional reconcile and the response from the endpoint may be a very large size if there are many partitions.
 By using a ConfigMap, if the data is too large to fit into the ConfigMap the KafkaConnector CR can be updated to indicate this error, rather than risking updating the CR with a partial response.
 In addition, since this proposal suggests using a ConfigMap to alter the offsets, the user can update an existing ConfigMap for altering offsets, rather than needing to copy and paste content.
 
@@ -279,7 +279,7 @@ Having separate resources means users can also provide different permissions for
 
 ### Allowing users to reset offsets when the connector is removed
 
-A previous version of this proposal suggested introducing a new property on the KafkaConnector resource to allow users to request the offsets be reset when the connector is removed.
+A previous version of this proposal suggested introducing a new property on the KafkaConnector resource to allow users to request the offsets to be reset when the connector is removed.
 This was rejected because it would be hard to guarantee the operator can always successfully take this action.
 For example if the operator was down when the KafkaConnector resource was deleted it would not know the value the property was set to when it came to delete the connector in Connect later.
 
