@@ -6,7 +6,7 @@ This endpoint will allow us to move the data between two JBOD disks.
 ## Current situation
 
 Currently, we get a multiple requests from community users to add the ability for moving all Kafka logs between two disks on the JBOD storage array. This feature can be useful in following scenarios:
-- The current disk is too big and the user wants to use a smaller one and vice versa is true.
+- The current disk is too small and the user wants to use a bigger one, or vice versa.
 - When we want to use a different Storage Class with different parameters or different storage types.
 - In case of disk removal to reduce the total storage.
 
@@ -19,7 +19,7 @@ This feature will also allow us to remove the disks without the loss of data.
 
 ## Proposal
 
-Cruise Control provides `remove_disks` HTTP REST endpoint to move replicas from a specified disk to other disks of the same broker.
+Cruise Control provides `remove_disks` HTTP REST endpoint to move replicas from a specified disk to other disks of the same broker. It always uses intra-broker re-balancing.
 This endpoint triggers a rebalancing operation by moving replicas in a size-based manner to the remaining disks, from the largest to the smallest, while checking the following constraint:
 ```sh
 1 - (remainingUsageAfterRemoval / remainingCapacity) > errorMargin
@@ -36,7 +36,7 @@ In order to use the `remove_disks` endpoint in the Strimzi cluster operator, it 
 ### Implementation
 
 To implement this feature, we will be adding a new mode to the `KafkaRebalanceMode` class.
-* `remove_disks`: It moves replicas from a specified disk to other disks of the same broker
+* `remove_disks`: It moves replicas from a specified disk to other disks of the same broker. It always uses intra-broker re-balancing.
 You can use this mode by changing the `spec.mode` to `remove_disks` in the `KafkaRebalance` resource.
 
 A `KafkaRebalance` custom resource would look like this.
@@ -49,12 +49,12 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  mode: remove_disks
-  brokerAndVolumeIds:
+  mode: remove-disks
+  brokersAndVolumes:
     - brokerId: 0
-      volumeId: 2
-    - brokerId: 1
-      volumeId: 0
+      volumeIds: [1, 2]
+    - brokerId: 2
+      volumeIds: [1]
 # ...
 ```
 
