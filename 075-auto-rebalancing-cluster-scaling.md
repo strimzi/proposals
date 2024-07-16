@@ -40,7 +40,7 @@ The `Kafka` custom resource is extended by adding a new `spec.cruiseControl.auto
 By default, without such field, no auto-rebalancing runs on scaling.
 
 The `spec.cruiseControl.autoRebalance` field allows to specify a list of rebalancing modes with the corresponding configuration to be used.
-For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (`add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a "template" `KafkaRebalance` custom resource (read later for more details), by using the `spec.cruiseControl.autoRebalance.config` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
+For each entry in the list, the mode is defined by the `spec.cruiseControl.autoRebalance.mode` field (`add-brokers` or `remove-brokers`) and the corresponding rebalancing configuration is defined as a reference to a "template" `KafkaRebalance` custom resource (read later for more details), by using the `spec.cruiseControl.autoRebalance.template` field as a [LocalObjectReference](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/local-object-reference/).
 This field is optional and if not specified, the auto-rebalancing runs with the default Cruise Control configuration.
 
 In the following example, a user can decide to use the same rebalancing configuration when adding or removing brokers.
@@ -58,9 +58,11 @@ spec:
     autoRebalance:
       # using the same rebalancing configuration when adding or removing brokers
       - mode: add-brokers
-        config: my-add-remove-brokers-rebalancing-config
+        template:
+          name: my-add-remove-brokers-rebalancing-template
       - mode: remove-brokers
-        config: my-add-remove-brokers-rebalancing-config
+        template:
+          name: my-add-remove-brokers-rebalancing-template
 ```
 
 Furthermore, it is possible to use the default Cruise Control rebalancing configuration by omitting the corresponding field.
@@ -97,21 +99,23 @@ spec:
     autoRebalance:
       # using specific configuration when adding brokers
       - mode: add-brokers
-        config: my-add-brokers-rebalancing-config
+        template: 
+          name: my-add-brokers-rebalancing-template
       # using different configuration when removing brokers  
       - mode: remove-brokers
-        config: my-remove-brokers-rebalancing-config
+        template: 
+          name: my-remove-brokers-rebalancing-template
 ```
 
 The user could even decide to have auto-rebalancing only when adding or removing brokers but not for both.
 This way provides the greatest flexibility to describe in which case to run the auto-rebalancing and with which configuration.
 
-The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.config` property in the `Kafka` custom resource is provided through a `KafkaRebalance` custom resource defined as a "template".
+The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.template` property in the `Kafka` custom resource is provided through a `KafkaRebalance` custom resource defined as a "template".
 That is a `KafkaRebalance` custom resource with the `strimzi.io/rebalance: template` annotation set.
 When it is created, the `KafkaRebalanceAssemblyOperator` doesn't run any rebalancing.
 This is because it doesn't represent an "actual" rebalance request to get an optimization proposal, but it's just the place where configuration related to auto-rebalancing is defined.
 The user can specify rebalancing goals and options, such as `skipHardGoalCheck`, within the resource.
-When such a "template" `KafkaRebalance` custom resource is referenced by the `spec.cruiseControl.autoRebalance.config` field for one or more modes, the operator asks to Cruise Control for an optimization proposal with such configuration.
+When such a "template" `KafkaRebalance` custom resource is referenced by the `spec.cruiseControl.autoRebalance.template` field for one or more modes, the operator asks to Cruise Control for an optimization proposal with such configuration when scaling up/down happens.
 If the `mode` and `brokers` fields are set, they will be just ignored because the resource doesn't represent an "actual" rebalancing.
 Even the `rebalanceDisk` field will be ignored because it doesn't make sense to run an intra-broker related rebalancing on brokers being removed/added.
 
@@ -119,7 +123,7 @@ Even the `rebalanceDisk` field will be ignored because it doesn't make sense to 
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaRebalance
 metadata:
-  name: my-rebalance-config
+  name: my-rebalance-template
   annotations:
     strimzi.io/rebalance: template # specifies that this KafkaRebalance is a rebalance configuration template
 spec:
@@ -141,7 +145,7 @@ When the `spec.cruiseControl.autoRebalance` is set and a specific rebalancing mo
 If it doesn't, the operator logs a warning about auto-rebalancing being ignored (as it wasn't set at all) because referring to a non existing "template" `KafkaRebalance` custom resource.
 In this case, the scaling process proceeds as usual: the scale up just runs (without any following rebalance) while the scale down could be blocked (because no rebalance ran to get topics' partitions off the brokers to remove).
 
-If the referenced "template" `KafkaRebalance` custom resource exists, the operator automatically creates a corresponding `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
+If the referenced "template" `KafkaRebalance` custom resource exists, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
 The operator copies over goals and rebalancing options from the referenced "template" resource to the "actual" rebalancing one and also adds the `spec.mode` and `spec.brokers` to it, based on the scaling operation the user asked for and on which brokers.
 This is the reason way the same fields specified in the "template" `KafkaRebalance` custom resource are ignored.
 The "actual" `KafkaRebalance` custom resource will be named as `<my-cluster-name>-auto-rebalancing-<mode>` where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `<mode>` is referring to which rebalancing has to run (add or remove brokers).
@@ -178,7 +182,7 @@ They could define different goals based on the status of the Kafka cluster or sk
 As already mentioned, specifying goals but more in general customizing the optimization proposal request is already possible in the current usage of a `KafkaRebalance` custom resource so it should be allowed for the auto-rebalancing as well.
 
 The idea of using a "template" `KafkaRebalance` custom resource could be also extended to the manual rebalancing operations started by the user when they create a new `KafkaRebalance` custom resource.
-It would mean a change on the `KafkaRebalance` custom resource by adding a new `spec.config` field to reference the rebalancing "template" and deprecating all the other fields used today (i.e. `spec.goals`, ...).
+It would mean a change on the `KafkaRebalance` custom resource by adding a new `spec.template` field to reference the rebalancing "template" and deprecating all the other fields used today (i.e. `spec.goals`, ...).
 Another option could be leaving both the ways living together.
 If this proposal is considered valid, doing such a change on the `KafkaRebalance` custom resource would help the proposal itself because the operator should not copy over the entire configuration from the "template" resource to the actual rebalance resource but just set the configuration reference.
 Of course, such a change would need a different proposal to be approved before this one.
@@ -223,6 +227,12 @@ Its value is defined by a Finite State Machine (FSM) described in the next secti
 The `lastTransitionTime` field provides the timestamp of the latest auto-rebalancing state update.
 The `error` field provides a message if a previous auto-rebalancing failed.
 The `modes` field lists the enabled rebalancing modes, as defined through the `spec.cruiseControl.autoRebalance.mode` field, with the corresponding `brokers` list containing the brokers' IDs that are part of the scaling (up/down) actions to be useful across reconciliations.
+The `modes` field is used to store a list of brokers' IDs that were part of the scaling (up/down) action that triggered an auto-rebalance to be used by the operator across reconciliations.
+For each enabled rebalancing mode, as defined through the `spec.cruiseControl.autoRebalance.mode` field, it contains either:
+
+* the brokers' IDs relevant to the current ongoing auto-rebalance, or
+* the brokers' IDs relevant to a queued auto-rebalance (if a previous auto-rebalance is still in progress)
+
 The brokers being added/removed are provided by the `KafkaClusterCreator` and stored within the `KafkaAssemblyOperator` for later use in the auto-rebalancing.
 
 ### Auto-rebalancing execution
@@ -237,12 +247,12 @@ It means that the auto-rebalancing can start in the same reconciliation, being s
 Of course, the rebalancing will take time going through several reconciliations.
 
 For the scaling down, if the brokers to be removed are hosting topics' partitions, the operation is reverted before calling the `KafkaReconciler.reconcile()` method which is called with the original replicas count as if the cluster was never scaled down.
-If the brokers to be removed are not hosting any topics' partitions, the `KafkaReconciler.reconcile()` method will be called with the new replicas count and the scaling down is triggered by the `scaleDown()` call which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of removing the brokers.
 In this case, the auto-rebalancing can start in the same reconciliation to take topics' partitions off but going through several reconciliations.
 When the auto-rebalancing ends, the triggered pods deletion takes some time but it doesn't have any impact on the rebalancing already done.
+If the brokers to be removed are not hosting any topics' partitions, the `KafkaReconciler.reconcile()` method will be called with the new replicas count and the scaling down is triggered by the `scaleDown()` call which updates the involved `StrimziPodSet`(s) so that the corresponding controller will take care of removing the brokers.
 Of course, if the scale down check doesn't fail, it means that no topics' partitions are hosted on the brokers to be removed and no auto-rebalancing is needed.
 
-The idea is about having a new `KafkaAutoRebalancingReconciler` class with its own `reconcile()` method which is called by the `KafkaAssemblyOperator` as one of the last steps in the reconciliation loop, so that:
+The proposal is about having a new `KafkaAutoRebalancingReconciler` class with its own `reconcile()` method which is called by the `KafkaAssemblyOperator` as one of the last steps in the reconciliation loop, so that:
 
 * we can get all the information about the brokers removed or added, which are available through the `KafkaClusterCreator` class (read later for more details).
 * we are sure that, in case of scaling up, the Cruise Control pod was restarted and it's now up and running again so it can accept new rebalancing requests.
@@ -279,13 +289,15 @@ On each reconciliation, the logic will be like this:
 1. The `KafkaClusterCreator` creates the `KafkaCluster` instance and it includes:
 
    * checking the scale down (if brokers cannot be removed because they host topics' partitions) and reverting replicas count if it fails.
-   * collecting removed (scale down) and added nodes (scale up). Let's call these lists as `removedNodes` and `addedNodes`.
+   * collecting the nodes reverted from scale down and the nodes added by scale up. Let's call these lists as `toBeRemovedNodes` and `addedNodes`.
 
 2. The `KafkaReconciler.scaleDown()` scales the cluster down if the check didn't fail, or isn't aware of any scale down at all because it was just reverted within the `KafkaClusterCreator`.
 
 3. The `KafkaReconciler.podSet()` scales the cluster up with the newly added brokers being ready, together with all the corresponding services, before starting an auto-rebalancing.
 
-4. The `KafkaAutoRebalancingReconciler.reconcile()` being involved and using the FSM to run rebalancing operations, if requested and in the following order:
+4. Taking into account the changes needed for the capacity configuration due to newly added brokers (or even because of the removed ones, if the check didn't fail), the Cruise Control pod is rolled at this point.
+
+5. The `KafkaAutoRebalancingReconciler.reconcile()` being involved and using the FSM to run rebalancing operations, if requested and in the following order:
 
    * rebalancing on scale down
    * rebalancing on scale up
@@ -301,14 +313,14 @@ The `KafkaAutoRebalancingReconciler.reconcile()` loads the `Kafka.status.autoReb
 
 The FSM is initialized based on the `state` field.
 
-The `Kafka.status.autoRebalance.modes[add-brokers|remove-brokers].brokers` list is filled or updated based on its current content and what's coming from `removeNodes` and `addedNodes`.
+The `Kafka.status.autoRebalance.modes[add-brokers|remove-brokers].brokers` list is filled or updated based on its current content and what's coming from `toBeRemovedNodes` and `addedNodes`.
 
-Check the `removeNodes`:
+Check the `toBeRemovedNodes`:
 
   * if empty
     * no further action and stay with the current `Kafka.status.autoRebalance.modes[remove-brokers].brokers` list (which could mean being empty/not existing too).
   * if not empty
-    * update the `Kafka.status.autoRebalance.modes[remove-brokers].brokers` by producing a consistent list with its current content and what is in the `removeNodes` list. This cover the case that while rebalancing scale down running, the user requests an update on an already running one.
+    * update the `Kafka.status.autoRebalance.modes[remove-brokers].brokers` by using the full content from the `toBeRemovedNodes` list which always contains the nodes involved in a scale down operation. This cover the case that while rebalancing scale down running, the user requests an update on an already running one.
 
 Check the `addedNodes`:
 
