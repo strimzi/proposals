@@ -36,8 +36,8 @@ In order to use the `remove_disks` endpoint in the Strimzi cluster operator, it 
 ### Implementation
 
 To implement this feature, we will be adding a new mode to the `KafkaRebalanceMode` class.
-* `remove_disks`: It moves replicas from a specified disk to other disks of the same broker. It always uses intra-broker re-balancing.
-You can use this mode by changing the `spec.mode` to `remove_disks` in the `KafkaRebalance` resource.
+* `remove-disks`: It moves replicas from a specified disk to other disks of the same broker. It always uses intra-broker re-balancing.
+You can use this mode by changing the `spec.mode` to `remove-disks` in the `KafkaRebalance` resource.
 
 A `KafkaRebalance` custom resource would look like this.
 
@@ -61,12 +61,12 @@ spec:
 ### Flow
 
 - The user should be using the `Kafka` resource with JBOD configured. Make sure that you have more than one disk configured on the brokers.
-- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove_disks` and the list of the broker and the corresponding logdirs to move in the `spec.brokerandlogdirs` field.
+- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and the list of the brokers and the corresponding volumes to move in the `spec.brokersAndVolumes` field.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to generate an optimization proposal (by using the dryrun feature).
 - You can use `strimzi.io/rebalance-auto-approval:true` annotation on the `KafkaRebalance` resource for auto-approval of proposal. In case you want to do it manually you can do it by applying the `strimzi.io/rebalance=approve` annotation on it.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to perform the actual rebalancing.
 
-Note: The optimization proposal will not show the load before optimization, it will only show the load after optimization. This is because in upstream Cruise Control, we don't have the verbose tag enabled  with the `remove_disks` endpoint.
+Note: The optimization proposal will not show the load before optimization, it will only show the load after optimization. This is because in upstream Cruise Control, we don't have the verbose tag enabled with the `remove_disks` endpoint.
 
 ### Other Scenarios
 
