@@ -46,7 +46,7 @@ The objective of this proposal is to introduce a new KafkaRoller with more struc
 
 KafkaRoller decisions would be informed by observations coming from different sources (e.g. Kubernetes API, KafkaAgent, Kafka Admin API). These sources will be abstracted so that KafkaRoller is not dependent on their specifics as long as it's getting the information it needs. The abstractions also enable much better unit testing.
 
-Nodes would categorised based on the observed states, the roller will perform specific actions on nodes in each category. Those actions should cause a subsequent observation to cause a state transition. This iterative process continues until each node's state aligns with the desired state.
+Nodes would be categorized based on the observed states, the roller will perform specific actions on nodes in each category. Those actions should cause a subsequent observation to cause a state transition. This iterative process continues until each node's state aligns with the desired state.
 
 In addition, the new KafkaRoller will introduce an algorithm to restart brokers in parallel when safety conditions are met. These conditions ensure Kafka producer availability and minimize the impact on controllers and overall cluster stability. It will also wait for partitions to be reassigned to their preferred leaders to avoid triggering unnecessary partition leader elections.
 
@@ -57,7 +57,7 @@ When a new reconciliation starts up, a context object is created for each node t
  - <i>nodeRef</i>: NodeRef object that contains Node ID.
  - <i>currentNodeRole</i>: Currently assigned process roles for this node (e.g. controller, broker).
  - <i>lastKnownState</i>: It contains the last known state of the node based on information collected from the abstracted sources (Kubernetes API, KafkaAgent and Kafka Admin API). The table below describes the possible states.
- - <i>restartReason</i>: It is updated based on the current predicate logic from the `Reconciler`. For example, an update in the Kafka CR is detected.
+ - <i>restartReason</i>: It is updated based on the current predicate logic passed from the `KafkaReconciler` class. For example, an update in the Kafka CR is detected.
  - <i>numRestartAttempts</i>: The value is incremented each time the node has been restarted or attempted to be restarted.
  - <i>numReconfigAttempts</i>: The value is incremented each time the node has been reconfigured or attempted to be reconfigured.
  - <i>numRetries</i>: The value is incremented each time the node is evaluated/processed but was not restarted/reconfigured due to not meeting safety conditions for example, availability check failed, log recovery or timed out waiting for pod to become ready.
@@ -68,9 +68,9 @@ When a new reconciliation starts up, a context object is created for each node t
  | :--------------- | :--------------- | :----------- |
  | UNKNOWN               | The initial state when creating `Context` for a node or state just after the node gets restarted/reconfigured. We expect to transition from this state fairly quickly.  | `NOT_RUNNING` `NOT_READY` `RECOVERING` `READY` |
  | NOT_RUNNING           | Node is not running (Kafka process is not running). This is determined via Kubernetes API, more details for it below. | `READY` `UNKNOWN` `NOT_READY` `RECOVERING` | 
- | NOT_READY             | Node is running but not ready to serve requests which is determined by Kubernetes readiness probe (broker state < 2 OR == 127 OR controller is not listening on port). | `READY` `UNKNOWN` `NOT_RUNNING` `RECOVERING` |
+ | NOT_READY             | Node is running but not ready to serve requests which is determined by Kubernetes readiness probe (broker state is not RUNNING OR controller is not listening on port). | `READY` `UNKNOWN` `NOT_RUNNING` `RECOVERING` |
  | RECOVERING            | Node has started but is in log recovery (broker state == 2). This is determined via the KafkaAgent. | `READY` `NOT_RUNNING` `NOT_READY` |
- | READY               | Node is in running state and ready to serve requests which is determined by Kubernetes readiness probe (broker state >= 3 AND != 127 OR controller is listening on port). | `LEADING_ALL_PREFERRED` `UNKNOWN` |
+ | READY               | Node is in running state and ready to serve requests which is determined by Kubernetes readiness probe (broker state is RUNNING OR controller is listening on port). | `LEADING_ALL_PREFERRED` `UNKNOWN` |
  | LEADING_ALL_PREFERRED | Node is leading all the partitions that it is the preferred leader for. Node's state can transition into this only from `READY` state.  | This is the final state we expect
 
 Context about broker states and restart reasons:
@@ -87,8 +87,9 @@ If one of the following is true, then node's state is `NOT_RUNNING`:
 - the pod has container status `ContainerStateWaiting` with `CrashLoopBackOff` or `ImagePullBackOff` reason
 If none of the above is true but the node is not ready, then its state would be `NOT_READY`.
 
-#### Flow diagram describing the overall flow of the states
+#### High level flow diagram describing the flow of the states
 ![The new roller flow](./images/06x-new-roller-flow.png)
+
 
 
 ### Configurability
@@ -96,11 +97,11 @@ The following are the configuration options for the new KafkaRoller. If exposed 
 
 | Configuration          | Default value | Exposed to user | Description                                                                                                                                                                                                                                                   |
 |:-----------------------|:--------------|:----------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| maxRestartAttempts     | 3             | No              | The maximum number of times a node can be restarted before failing the reconciliation. This is checked against the node's `numRestartAttempts`.                                                                                                               |
-| maxReconfigAttempts    | 3             | No              | The maximum number of times a node can be dynamically reconfigured before restarting it. This is checked against the node's `numReconfigAttempts`.                                                                                                                        |
+| maxRestartAttempts     | 3             | No              | The maximum number of restart attempts per node before failing the reconciliation. This is checked against node's `numRestartAttempts`.                                                                                                               |
+| maxReconfigAttempts    | 3             | No              | The maximum number of dynamic reconfiguration attempts per node before restarting the node. This is checked against node's `numReconfigAttempts`.                                                                                                                        |
 | maxRetries             | 10            | No              | The maximum number of times a node can be retried after not meeting the safety conditions e.g. availability check failed.  This is checked against the node's `numRetries`.                                                                                                                      |
 | operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an operation in each retry. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
-| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`.     
+| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`. However, if there are multiple brokers in `NOT_RUNNING` state, they may get restarted in parallel despite this configuration for a faster recovery.    
 | postRestartDelay  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will also help JIT to reach a steady state and to reduce impact on clients.   
 | restartAndPreferredLeaderElectionDelay  | 10 seconds             | No             | Delay between restart and triggering partition leader election so that just-rolled broker is leading all the partitions it is the preferred leader for. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
 
@@ -114,7 +115,7 @@ The following are the configuration options for the new KafkaRoller. If exposed 
        nodeRoles: <Set using pod labels `strimzi.io/controller-role` and `strimzi.io/broker-role`>,
        state: UNKNOWN,
        lastTransition: <SYSTEM_TIME>,
-       reason: <Result of predicate function from KafkaReconciler>,
+       restartReason: <Result of predicate function from KafkaReconciler>,
        numRestartAttempts: 0,
        numReconfigAttempts: 0,
        numRetries: 0
@@ -123,10 +124,10 @@ The following are the configuration options for the new KafkaRoller. If exposed 
    Contexts are recreated in each reconciliation with the above initial data.
 
 2. **Transition Node States:**
-   Update each node's state based on information from abstracted sources. If failed to retrieve information, the reconciliation fails and restarts from step 1.
+   Update each node's state based on information from abstracted sources. If failed to retrieve information, the current reconciliation immediately fails. When the next reconciliation is triggered, it will restart from step 1.
 
 3. **Handle `NOT_READY` Nodes:**
-   Wait for `NOT_READY` nodes to become `READY` within `operationTimeoutMs`. If the timeout is reached, check if nodes need to be restarted.
+   Wait for `NOT_READY` nodes to become `READY` within `operationTimeoutMs`.
 
 4. **Categorize Nodes:**
    Group nodes based on their state and connectivity:
@@ -153,24 +154,24 @@ The following are the configuration options for the new KafkaRoller. If exposed 
 
 8. **Refine `MAYBE_RECONFIGURE_OR_RESTART` Nodes:**
    Describe Kafka configurations via Admin API:
-   - Nodes with dynamic config changes go to `RECONFIGURE`.
-   - Nodes with non dynamic config changes, go to `RESTART`.
-   - Nodes with no config changes go to `NOP`.
+   - Nodes with dynamic config changes are added to `RECONFIGURE` group.
+   - Nodes with non dynamic config changes are added `RESTART` group.
+   - Nodes with no config changes are added to `NOP` group.
 
 9. **Reconfigure Nodes:**
    Reconfigure nodes in the `RECONFIGURE` group:
-   - If `numReconfigAttempts` exceeds `maxReconfigAttempts`, add a restart reason and repeat from step 2.
+   - Check if `numReconfigAttempts` exceeds `maxReconfigAttempts`. If exceeded, add a restart reason and repeat from step 2. Otherwise, continue.
    - Send `incrementalAlterConfig` request, transition state to `UNKNOWN`, and increment `numReconfigAttempts`.
-   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, repeat from step 2.
+   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, repeat from step 2, otherwise continue.
 
 10. **Check for `NOT_READY` Nodes:**
-   If `RESTART` group is empty and no nodes are `NOT_READY`, reconciliation is successful. Otherwise, wait for `NOT_READY` nodes' state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
+   If `RESTART` group is empty and no nodes are `NOT_READY`, reconciliation is successful. Otherwise, wait for `NOT_READY` nodes' state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2. Otherwise, continue.
 
-11. **Batch and Restart Nodes:**
+11. **Categorize and Batch Nodes:**
    Categorize and batch nodes for restart:
    - Ensure controllers are restarted sequentially in an order of pure controllers, mixed nodes and the active controller to maintain quorum.
    - Group broker nodes without common partitions for parallel restart to maintain availability.
-   - If no safe nodes to restart, check `numRetries`. If exceeded, throw `UnrestartableNodesException`.Otherwise, increment `numRetries` and repeat from step 2.  More on safety conditions below.
+   - If no safe nodes to restart, check `numRetries`. If exceeded, throw `UnrestartableNodesException`. Otherwise, increment `numRetries` and repeat from step 2.  More on safety conditions below.
 
 12. **Restart Nodes in Parallel:**
    Restart broker nodes in the batch:
@@ -221,7 +222,7 @@ All the nodes except `mixed-3` have the following Context with `nodeRef` being t
          nodeRoles: controller
          state: READY
          lastTransition: 0123456
-         reason: MANUAL_ROLLING_UPDATE
+         restartReason: MANUAL_ROLLING_UPDATE
          numRestartAttempts: 0
          numReconfigAttempts: 0
          numRetries: 0
@@ -232,18 +233,18 @@ The `mixed-3` node has the following context because the operator could not esta
          nodeRoles: controller,broker
          state: NOT_RUNNING
          lastTransition: 0123456
-         reason: POD_UNRESPONSIVE
+         restartReason: POD_UNRESPONSIVE
          numRestartAttempts: 0
          numReconfigAttempts: 0
          numRetries: 0
 ```
-2. The roller checks if all of the controller nodes are mixed and in `NOT_RUNNING` state. Since they are not and it has `POD_UNRESPONSIVE` reason, it restarts `mixed-3` node and waits for it to have `READY` state. The `mixed-3`'s context becomes:
+2. The roller checks if all of the controller nodes are in `NOT_RUNNING` state. Since they are not and `mixed-3` node has `POD_UNRESPONSIVE` reason, it is restarted and waited to have `READY` state. The `mixed-3`'s context becomes:
 ```
          nodeRef: mixed-3/3
          nodeRoles: controller,broker
          state: RESTARTED
          lastTransition: 654987
-         reason: POD_UNRESPONSIVE
+         restartReason: POD_UNRESPONSIVE
          numRestartAttempts: 1
          numReconfigAttempts: 0
          numRetries: 0
@@ -277,7 +278,7 @@ topic("topic-E"), Replicas(6, 10, 11), ISR(6, 10, 11), MinISR(2)
          nodeRoles: broker
          state: RECOVERING
          lastTransition: 987456
-         reason:
+         restartReason:
          numRestartAttempts: 1
          numReconfigAttempts: 0
          numRetries: 10
@@ -294,7 +295,7 @@ topic("topic-E"), Replicas(6, 10, 11), ISR(6, 10, 11), MinISR(2)
 
 ### Switching from the old KafkaRoller to the new KafkaRoller
 
-The new KafkaRoller will only work with KRaft clusters therefore when running in Zookeeper mode, the current KafkaRoller will be used. Kafka CR's `KafkaMetadataState` represents where the metadata is stored for the cluster. It is set to `KRaft` when a cluster is fully migrated to KRaft or was created in KRaft mode. `KafkaReconciler` will be updated to switch to the new roller based on this state. This means the old KafkaRoller will be used during migration of existing clusters from Zookeeper to KRaft mode and the new roller is used only after the migration is completed and for new clusters created in KRaft mode.
+The new KafkaRoller will only work with KRaft clusters therefore when running in Zookeeper mode, the current KafkaRoller will be used. Kafka CR's `KafkaMetadataState` represents where the metadata is stored for the cluster. It is set to `KRaft` when a cluster is fully migrated to KRaft or was created in KRaft mode. `KafkaReconciler` class will be updated to switch to the new roller based on this state. This means the old KafkaRoller will be used during migration of existing clusters from Zookeeper to KRaft mode and the new roller is used only after the migration is completed and for new clusters created in KRaft mode.
 
 ### Future improvement
 
