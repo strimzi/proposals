@@ -331,7 +331,32 @@ This affects the strimzi-kafka-operator project only.
 
 ## Compatibility
 
-Call out any future or backwards compatibility considerations this proposal has accounted for.
+When the operator is upgraded to a version that includes this proposal it will automatically use this new mechanism for all new and existing Kafka clusters.
+This means for existing Kafka clusters once the operator is upgraded it will automatically generate new certificates for the components.
+This is because the operator has no way of knowing whether the trust-state Kubernetes Secret is missing because this is a new cluster, or because we are doing an upgrade.
+This will only happen the first time upgrading the operator, since in future the trust-state Kubernetes Secret will already exist.
+
+For an existing Kafka cluster the flow will be (this is the same whether the CA is managed by Strimzi or by the user):
+
+1. The CaReconciler takes the Cluster CA certificate from the <CLUSTER_NAME>-cluster-ca-cert Kubernetes Secret and places it in the trust-state Kubernetes Secret with the state UNTRUSTED.
+2. The CaReconciler places the Cluster CA certificate in the trusted-certs Kubernetes Secret.
+3. The CaReconciler rolls the Kafka and ZooKeeper Kubernetes Pods since it believes they do not trust the new CA certificate, then it updates the trust-state Kubernetes Secret to put the CA certificate into TRUSTED_UNUSED.
+4. The ZooKeeper and Kafka reconcilers:
+   1. Generate new certificates signed by the CA key.
+   2. Update the cluster-ca-cert-generation and server-cert-hash annotations on the StrimziPodSets.
+   3. Since the Kubernetes Secrets mounted onto the pods has changed, roll the Kubernetes Pods for ZooKeeper and Kafka.
+      This will also mean they use the new certificates.
+5. The EntityOperator, CruiseControl and KafkaExporter reconcilers generate new certificates signed by the CA key and roll the Kubernetes Pods to mount the new trusted-certs Kubernetes Secret and use the new certificates.
+6. A new reconciliation starts.
+7. The CaReconciler sees there is a CA certificate in the state TRUSTED_UNUSED in the trust-state Kubernetes Secret.
+   It checks if the cluster-ca-cert-generation annotation on the Kafka and ZooKeeper Kubernetes Pods matches the current CA cert generation.
+   It does, so it updates the CA certificate state to TRUSTED_IN_USE.
+8. Since the CA certificate state is TRUSTED_IN_USE the CaReconciler updates the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret with a new certificate signed by the new CA certificate.
+
+As you can see this will result in two rolling updates for Kafka and ZooKeeper.
+Since this proposal changes the Kubernetes Secrets that are mounted (from <CLUSTER_NAME>-cluster-ca-cert to <CLUSTER_NAME>-trusted-certs) at least one rolling update is required.
+The second one is done due to the trust-state Kubernetes Secret being missing.
+The alternative would be to put some special handling in to avoid the additional rolling update, however this is not suggested in this proposal to avoid having additional code that is only relevant for this specific upgrade.
 
 ## Rejected alternatives
 
