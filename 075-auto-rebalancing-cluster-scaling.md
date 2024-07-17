@@ -147,7 +147,7 @@ In this case, the scaling process proceeds as usual: the scale up just runs (wit
 
 If the referenced "template" `KafkaRebalance` custom resource exists, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource when the user scales the cluster, by adding and/or removing brokers.
 The operator copies over goals and rebalancing options from the referenced "template" resource to the "actual" rebalancing one and also adds the `spec.mode` and `spec.brokers` to it, based on the scaling operation the user asked for and on which brokers.
-This is the reason way the same fields specified in the "template" `KafkaRebalance` custom resource are ignored.
+This is the reason why the same fields specified in the "template" `KafkaRebalance` custom resource are ignored.
 The "actual" `KafkaRebalance` custom resource will be named as `<my-cluster-name>-auto-rebalancing-<mode>` where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `<mode>` is referring to which rebalancing has to run (add or remove brokers).
 
 ```yaml
@@ -266,14 +266,14 @@ In terms of rebalancing, after the scaling up happens, the rebalancing for broke
 
 The auto-rebalancing mechanism runs through a Finite State Machine (FSM) made by the following states:
 
-* **Idle**: Initial state with a new auto-rebalancing going to run because scaling down/up operations were requested. This is also the ending state after an auto-rebalancing completed successfully or failed.
+* **Idle**: Initial state with a new auto-rebalancing initiated when scaling down/up operations were requested. This is also the ending state after an auto-rebalancing completed successfully or failed.
 * **RebalanceOnScaleDown**: a rebalancing related to a scale down operation is running.
 * **RebalanceOnScaleUp**: a rebalancing related to a scale up operation is running.
 
 The FSM states' transitions are the following:
 
 * from **Idle** to:
-  * **RebalanceOnScaleDown**: if a scale down operation was requested. This transition happens even if a scale up was requested at the same time but the rebalancing on scaling down has the precedence. The rebalancing on scale up is queued. They will run sequentially one after the other.
+  * **RebalanceOnScaleDown**: if a scale down operation was requested. This transition happens even if a scale up was requested at the same time but the rebalancing on scaling down has the precedence. The rebalancing on scale up is queued. They will run sequentially.
   * **RebalanceOnScaleUp**: if only a scale up operation was requested. There was no scale down operation requested.
 * from **RebalanceOnScaleDown** to:
   * **RebalanceOnScaleDown**: if a rebalancing on scale down is still running or another one was requested while the first one ended.
@@ -293,7 +293,7 @@ On each reconciliation, the logic will be like this:
 
 2. The `KafkaReconciler.scaleDown()` scales the cluster down if the check didn't fail, or isn't aware of any scale down at all because it was just reverted within the `KafkaClusterCreator`.
 
-3. The `KafkaReconciler.podSet()` scales the cluster up with the newly added brokers being ready, together with all the corresponding services, before starting an auto-rebalancing.
+3. The `KafkaReconciler.podSet()` scales the cluster up, ensuring newly added brokers are ready, together with all the corresponding services, before starting an auto-rebalancing.
 
 4. Taking into account the changes needed for the capacity configuration due to newly added brokers (or even because of the removed ones, if the check didn't fail), the Cruise Control pod is rolled at this point.
 
@@ -320,14 +320,14 @@ Check the `toBeRemovedNodes`:
   * if empty
     * no further action and stay with the current `Kafka.status.autoRebalance.modes[remove-brokers].brokers` list (which could mean being empty/not existing too).
   * if not empty
-    * update the `Kafka.status.autoRebalance.modes[remove-brokers].brokers` by using the full content from the `toBeRemovedNodes` list which always contains the nodes involved in a scale down operation. This cover the case that while rebalancing scale down running, the user requests an update on an already running one.
+    * update the `Kafka.status.autoRebalance.modes[remove-brokers].brokers` by using the full content from the `toBeRemovedNodes` list which always contains the nodes involved in a scale down operation. This covers the case that while rebalancing scale down running, the user requests an update on an already running one.
 
 Check the `addedNodes`:
 
   * if empty
     * no further action and stay with the current `Kafka.status.autoRebalance.modes[add-brokers].brokers` list (which could mean being empty/not existing too)
   * if not empty
-    * update the `Kafka.status.autoRebalance.modes[add-brokers].brokers` by producing a consistent list with its current content and what is in the `addedNodes` list. This cover the case that while rebalancing scale down running, the user requests a new scale up or an update on an already queued one. Or even the case that while rebalancing scale up running, the user requests an update on an already running one.
+    * update the `Kafka.status.autoRebalance.modes[add-brokers].brokers` by producing a consistent list with its current content and what is in the `addedNodes` list. This covers the case that while rebalancing scale down running, the user requests a new scale up or an update on an already queued one. Or even the case that while rebalancing scale up running, the user requests an update on an already running one.
 
 During the FSM processing, the `Kafka.status.autoRebalance.modes[add-brokers|remove-brokers].brokers` list is compared with the corresponding `KafkaRebalance.spec.brokers` list for the current rebalancing to determine if there were changes.
 Those changes could mean several use cases: a new scale down/up requested while another one is running, a scale up requested while a scale down is running and so on.
@@ -337,7 +337,8 @@ Remember that starting a rebalancing always means creating a corresponding "actu
 
 #### Idle
 
-This is when `Kafka.status.autoRebalance` is empty or `Kafka.status.autoRebalance.state` is `Idle` because of a previous successfully completed or failed auto-rebalancing.
+This state is set since the beginning when a `Kafka` custom resource is created with the `spec.cruiseControl.autoRebalance` field for a future auto-rebalancing on scaling the cluster.
+It is also the end state of a previous successfully completed or failed auto-rebalancing.
 If failed, the `Kafka.status.autoRebalance.state.error` contains an error message.
 
 From this state:
@@ -376,7 +377,7 @@ Check the current `KafkaRebalance` status:
 
 * if `Ready`, the rebalancing scale up was successful.
   * if there is a queued rebalancing scale down (`Kafka.status.autoRebalance.modes[remove-brokers]` exists), start the rebalancing scale down and transition to **RebalanceOnScaleDown**.
-  * If no queued rebalancing scale down, check if `Kafka.status.autoRebalance.modes[add-brokers].brokers` was updated compared to the current running rebalancing scale up. If no changes, no further actions. If different, update the corresponding `KafkaRebalance` in order to take into account the updated brokers list and refresh it by applying the `strimzi.io/rebalance: refresh` annotation. Stay in **RebalanceOnScaleUp**.
+  * If no queued rebalancing scale down, check if `Kafka.status.autoRebalance.modes[add-brokers].brokers` was updated compared to the current running rebalancing scale up. If no changes, no further actions but just transition to **Idle** and clean `Kafka.status.autoRebalance.modes`. If different, update the corresponding `KafkaRebalance` in order to take into account the updated brokers list and refresh it by applying the `strimzi.io/rebalance: refresh` annotation. Stay in **RebalanceOnScaleUp**.
 * if `PendingProposal`, `ProposalReady` or `Rebalancing`, the rebalancing scale up is still running.
   * if there is a queued rebalancing scale down (`Kafka.status.autoRebalance.modes[remove-brokers]` exists), stop the current rebalancing scale up by applying the `strimzi.io/rebalance: stop` annotation on the corresponding `KafkaRebalance`. Start the rebalancing scale down and transition to **RebalanceOnScaleDown**.
   * If no queued rebalancing scale down, check if `Kafka.status.autoRebalance.modes[add-brokers].brokers` was updated compared to the current running rebalancing scale up. If no changes, no further actions. If different, update the corresponding `KafkaRebalance` in order to take into account the updated brokers list and refresh it by applying the `strimzi.io/rebalance: refresh` annotation. Stay in **RebalanceOnScaleUp**.
