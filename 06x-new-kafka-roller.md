@@ -76,7 +76,7 @@ When a new reconciliation starts up, a context object is created for each node t
 Context about broker states and restart reasons:
 - To determine if the node is ready or performing a log recovery, we use the [Broker States](https://github.com/apache/kafka/blob/3.7/metadata/src/main/java/org/apache/kafka/metadata/BrokerState.java) metric emitted by Kafka. KafkaAgent collects and exposes this metric via REST Endpoint. This is what the current KafkaRoller does already, and the new roller will use it the same way.
 
-- If Kafka pod is ready, the restart reasons is checked to determine whether it needs to be restarted The definitions of the possible restart reasons can be found via the following link: [Restart Reasons](https://github.com/strimzi/strimzi-kafka-operator/blob/0.40.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/RestartReason.java). This is also what the current KafkaRoller roller does and the new roller will use it the same way.
+- If Kafka pod is ready, the restart reasons is checked to determine whether it needs to be restarted. The definitions of the possible restart reasons can be found via the following link: [Restart Reasons](https://github.com/strimzi/strimzi-kafka-operator/blob/0.40.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/RestartReason.java). This is also what the current KafkaRoller roller does and the new roller will use it the same way.
 
 #### NOT_RUNNING state
 
@@ -231,7 +231,7 @@ The `mixed-3` node has the following context because the operator could not esta
 ```
          nodeRef: mixed-3/3
          nodeRoles: controller,broker
-         state: NOT_RUNNING
+         state: NOT_READY
          lastTransition: 0123456
          restartReason: POD_UNRESPONSIVE
          numRestartAttempts: 0
@@ -242,7 +242,7 @@ The `mixed-3` node has the following context because the operator could not esta
 ```
          nodeRef: mixed-3/3
          nodeRoles: controller,broker
-         state: RESTARTED
+         state: UNKNOWN
          lastTransition: 654987
          restartReason: POD_UNRESPONSIVE
          numRestartAttempts: 1
