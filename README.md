@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 77  | [Support for Apache Kafka 4.0](./077-support-for-kafka-4.0.md) |
 | 76  | [Connector Offsets Support](./076-connector-offsets-support.md) |
 | 75  | [Support of additional volumes](./075-additional-volumes-support.md) |
 | 74  | [Extend Feature Gates to all Strimzi operators](./074-extend-feature-gates-to-all-operators.md) |
