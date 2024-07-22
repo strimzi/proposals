@@ -225,8 +225,7 @@ status:
 The `state` field provides the current state of the rebalancing process.
 Its value is defined by a Finite State Machine (FSM) described in the next sections which evolves even based on the status of the corresponding "actual" `KafkaRebalance` custom resource that was created for that purpose. 
 The `lastTransitionTime` field provides the timestamp of the latest auto-rebalancing state update.
-The `modes` field lists the enabled rebalancing modes, as defined through the `spec.cruiseControl.autoRebalance.mode` field, with the corresponding `brokers` list containing the brokers' IDs that are part of the scaling (up/down) actions to be useful across reconciliations.
-The `modes` field is used to store a list of brokers' IDs that were part of the scaling (up/down) action that triggered an auto-rebalance to be used by the operator across reconciliations.
+The `modes` field is used to store, for each enabled rebalancing modes as defined through the `spec.cruiseControl.autoRebalance.mode` field, the list of brokers' IDs that are part of the scaling (up/down) action that triggered an auto-rebalance to be used by the operator across reconciliations.
 For each enabled rebalancing mode, as defined through the `spec.cruiseControl.autoRebalance.mode` field, it contains either:
 
 * the brokers' IDs relevant to the current ongoing auto-rebalance, or
