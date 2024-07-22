@@ -366,6 +366,9 @@ Checking the current `KafkaRebalance` status:
 * if `NotReady`
   * the rebalancing scale down failed, transition to **Idle** and also removing the corresponding mode and brokers list from the status. The operator also deletes the "actual" `KafkaRebalance` custom resource.
 
+If, during an ongoing auto-rebalancing, the `KafkaRebalance` custom resource is not there anymore on the next reconciliation, it could mean the user deleted it while the operator was stopped/crashed/not running.
+In this case, the FSM will assume it as `NotReady` so falling in the last case above.
+
 #### RebalanceOnScaleUp
 
 In this state, a rebalancing scale up is running.
@@ -380,6 +383,9 @@ Check the current `KafkaRebalance` status:
   * If no queued rebalancing scale down, check if `Kafka.status.autoRebalance.modes[add-brokers].brokers` was updated compared to the current running rebalancing scale up. If no changes, no further actions. If different, update the corresponding `KafkaRebalance` in order to take into account the updated brokers list and refresh it by applying the `strimzi.io/rebalance: refresh` annotation. Stay in **RebalanceOnScaleUp**.
 * if `NotReady`
   * the rebalancing scale up failed, transition to **Idle** and also removing the corresponding mode and brokers list from the status. The operator also deletes the "actual" `KafkaRebalance` custom resource.
+
+If, during an ongoing auto-rebalancing, the `KafkaRebalance` custom resource is not there anymore on the next reconciliation, it could mean the user deleted it while the operator was stopped/crashed/not running.
+In this case, the FSM will assume it as `NotReady` so falling in the last case above.
 
 ## Affected/not affected projects
 
