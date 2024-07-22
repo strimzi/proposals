@@ -109,6 +109,7 @@ spec:
 
 The user could even decide to have auto-rebalancing only when adding or removing brokers but not for both.
 This way provides the greatest flexibility to describe in which case to run the auto-rebalancing and with which configuration.
+While auto-rebalancing on scale down is need to remove the brokers, on scale up the user would like to use the new brokers just for new topics and not moving the existing topics' partitions on them.
 
 The auto-rebalance configuration for the `spec.cruiseControl.autoRebalance.template` property in the `Kafka` custom resource is provided through a `KafkaRebalance` custom resource defined as a "template".
 That is a `KafkaRebalance` custom resource with the `strimzi.io/rebalance: template` annotation set.
