@@ -76,6 +76,8 @@ Note: The optimization proposal will not show the load before optimization, it w
 - This feature works fine with KafkaNodePools. 
 - This feature work with Kraft only if Kafka version is greater than 3.7.0, as that version supports multiple JBOD disks on brokers.
 
+The errors in the above scenarios are reported by Cruise Control. Based on those we move the `KafkaRebalance` resource to `NotReady` state and update the `KafkaRebalance` status with the corresponding error message.
+
 ## Affected/not affected projects
 
 This change impacts the Cruise Control API related classes and the `KafkaRebalanceAssemblyOperator` class.
