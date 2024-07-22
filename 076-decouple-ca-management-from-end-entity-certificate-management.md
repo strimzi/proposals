@@ -1,5 +1,3 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Decouple CA certificate management from end-entity certificate management
 
 This proposal aims to decouple the management of the cluster CA certificate from the rolling out of trust of the CA certificate to components in a Strimzi cluster.
@@ -20,13 +18,14 @@ The cluster CA issues certificates for the following Strimzi components:
 
 The clients CA issues certificates for user applications using the User Operator, or through another external mechanism chosen by the user.
 
-The cluster CA root certificate is added to the trust stores of Strimzi components.  This ensures that, for example, ZooKeeper nodes trust each other's certificates as well as the certificates of brokers, and brokers trust certificates issued to other brokers.
+As shown in Fig 1, the cluster CA root certificate is added to the trust stores of Strimzi components.
+This ensures that, for example, ZooKeeper nodes trust each other's certificates as well as the certificates of brokers, and brokers trust certificates issued to other brokers.
 
-#### Fig 1: Cluster CA certificate and component relationships
-
-![Cluster CA relationships](./images/076-cluster-ca.svg)
-
-> Fig 1: In the diagram, the red lines show trust.
+> ![Cluster CA relationships](./images/076-cluster-ca.svg)
+> 
+> Fig 1: Cluster CA certificate and component relationships
+>
+> In the diagram, the red lines show trust.
 > For example, because the Kafka broker trusts the Cluster CA certificate,
 > and the Cluster CA certificate signed the ZK EE certificate
 > the broker will trust the ZK EE certificate presented by the ZK node
@@ -34,10 +33,11 @@ The cluster CA root certificate is added to the trust stores of Strimzi componen
 
 The cluster CA root certificate also needs to be trusted by Kafka clients connecting to the cluster so that clients trust the certificates presented by the brokers.
 The clients CA root certificate is added to the broker trust stores too, so that the brokers will trust certificates issued to Kafka client applications that they present to brokers when mutual TLS is enabled on a listener.
+Similar to Fig 1, Fig 2 shows the lines of trust, but for the Clients CA certificate.
 
-#### Fig 2: Clients CA certificate and component relationships
-
-![Clients CA relationships](./images/076-clients-ca.svg)
+> ![Clients CA relationships](./images/076-clients-ca.svg)
+> 
+> Fig 2: Clients CA certificate and component relationships
 
 ### Existing Kubernetes Secrets
 
@@ -97,7 +97,7 @@ Currently, as part of a reconciliation loop, the CaReconciler handles four thing
    2. If Strimzi is **not** managing the CA, it checks that the Kubernetes Secrets for the CA certificate and private key are present in the cluster.
 2. Reconciles the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret used by the cluster operator's Admin client when connecting to Kafka and ZooKeeper.
    1. This only occurs if all pods in the cluster have the correct strimzi.io/cluster-ca-key-generation annotation, meaning the Cluster CA certificate that is being used to sign the certificate that will be put into the Kubernetes Secret is already trusted by all components.
-3. Maybe triggering a rolling update of the ZooKeeper and Kafka nodes to trust a new Cluster CA certificate. This only happens if either:
+3. Maybe triggering a rolling update of the ZooKeeper and Kafka nodes, and the EntityOperator, Kafka Exporter and Cruise Control pods, (if they exist) to trust a new Cluster CA certificate. This only happens if either:
    1. The Cluster CA key got replaced during the current reconciliation, or
    2. One or more Kubernetes Pods have the wrong strimzi.io/cluster-ca-key-generation annotation, meaning they do not trust the latest Cluster CA certificate.
       This is only expected to occur if the operator previously updated the Cluster CA key and a rolling update was started during a previous reconciliation, but it was not completed.
@@ -111,7 +111,7 @@ ZooKeeperReconciler and KafkaReconciler classes:
    2. cluster-ca-key-generation set to the current values passed in with the Cluster CA.
    3. server-cert-hash set to the full SHA1-hash of the certificate that was generated.
 
-EntityOperatorReconciler, CruiseControlReconciler and KafkaExporterReconciler generate the certificates they will use to authenticate with Kafka and ZooKeeper and store them in the Kubernetes Secrets listed above, with the cluster-ca-cert-generation set to the current value passed in with the Cluster CA.
+EntityOperatorReconciler, CruiseControlReconciler and KafkaExporterReconciler generate the certificates they will use to authenticate with Kafka and ZooKeeper (and for Cruise Control, present to clients using its API) and store them in the Kubernetes Secrets listed above, with the cluster-ca-cert-generation set to the current value passed in with the Cluster CA.
 
 ### Example flows
 
@@ -121,11 +121,11 @@ When a new cluster is first created the flow is:
 2. The CaReconciler generates the Cluster Operator EE certificate (signed by the newly generated Cluster CA certificate) and stores it in the <CLUSTER_NAME>-cluster-operator-certs Kubernetes Secret.
 3. The component reconcilers (KafkaReconciler, ZooKeeperReconciler, EntityOperatorReconciler etc) generate their corresponding EE certificates (signed by the newly generated Cluster CA certificate), store them in Kubernetes Secrets and annotate the Kubernetes Secrets and Pods with the cert and key generations, and (for ZooKeeper and Kafka) the certificate hash.
 
-#### Fig 3: New cluster create flow
-
-![New cluster create flow](./images/076-cert-new-existing.png)
-
-> Fig 3: The numbers in the diagram match the numbers in the full description of the steps.
+> ![New cluster create flow](./images/076-cert-new-existing.png)
+>
+> Fig 3: New cluster create flow
+> 
+> The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations.
 
 When the Cluster CA private key is updated by the user, either by using the force-replace annotation, or the ca-cert-generation annotation:
@@ -142,11 +142,11 @@ When the Cluster CA private key is updated by the user, either by using the forc
 8. The CaReconciler removes the old CA certificates and keys that have been named ca-YYYY-MM-DDTHH-MM-SSZ.crt.
 9. The component reconcilers roll their Kubernetes Pods, since the Cluster CA passed in has a flag indicating certs have been removed.
 
-#### Fig 4: Cluster CA private key update flow
-
-![Cluster CA private key update flow](./images/076-cert-update-existing.png)
-
-> Fig 4: The numbers in the diagram match the numbers in the full description of the steps.
+> ![Cluster CA private key update flow](./images/076-cert-update-existing.png)
+>
+> Fig 4: Cluster CA private key update flow
+> 
+> The numbers in the diagram match the numbers in the full description of the steps.
 > The diagram omits the use of annotations, the EntityOperator, CruiseControl and KafkaExporter reconcilers, and the removal of trust of the old CA certificate and key.
 
 The existing logic assumes a few things:

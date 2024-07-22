@@ -9,7 +9,6 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
-<<<<<<< HEAD
 | 76  | [Decouple CA management from end-entity certificate management](./076-decouple-ca-management-from-end-entity-certificate-management.md) |
 | 75  | [Support of additional volumes](./075-additional-volumes-support.md) |
 | 74  | [Extend Feature Gates to all Strimzi operators](./074-extend-feature-gates-to-all-operators.md) |
