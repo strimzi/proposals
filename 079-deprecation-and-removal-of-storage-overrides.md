@@ -60,7 +60,7 @@ Later, in the Strimzi version where support for ZooKeeper-based Kafka clusters i
 The overrides will remain in the CRD API for backwards compatibility but will not be used by the operator code.
 Finally, when moving the new `v1` CRD API in the future, the fields will be completely removed.
 
-Kubernetes do not allow changing storage class for an existing persistent volumes. 
+Kubernetes do not allow changing storage class for existing persistent volumes. 
 If any user doesn't migrate from the overrides in time, the existing Kafka nodes and persistent volumes will not be affected.
 Only when the PVC/PV is deleted or when new nodes will be added during a scale-up, the overrides will be ignored and the default storage class will be used.
 So the impact on existing users should be minimal.
@@ -79,7 +79,7 @@ This proposal affects the Strimzi Cluster Operator only.
 
 This proposal removes the support for storage overrides in Kafka clusters.
 It will impact all users using it and they will have to migrate to node pools with different storage classes.
-Kafka clusters not using the overrides or and any other operands supported by Strimzi will nto be impacted in any way.
+Kafka clusters not using the overrides and any other operands supported by Strimzi will not be impacted in any way.
 
 ## Rejected alternatives
 
@@ -87,9 +87,9 @@ Kafka clusters not using the overrides or and any other operands supported by St
 
 The timeline between the deprecation of the overrides and the removal of their support is relatively short (likely 3-4 Strimzi versions).
 If we think this is a problem, we can choose a different timeline.
-For example, we can deprecated the overrides right now, but postpone when we drop the support for them:
+For example, we can deprecate the overrides right now, but postpone when we drop the support for them:
 * Drop the support only at a later version (e.g. first Strimzi release after June 2025)
 * Drop the support only when we migrate to the `v1` CRD API
 
 This might give users more time to handle it.
-However, while the time window for the migration is relatively short, I believe it is sufficient as it for most existing users includes the migration to KRaft and to node pools and provides a good opportunity to get rid of this legacy feature.
+However, while the migration time window is relatively short, I believe it is sufficient for most existing users, as it includes the migration to KRaft and node pools, and provides a good opportunity to remove this legacy feature.
