@@ -8,7 +8,7 @@ This proposal discusses its removal from Strimzi.
 Apache Kafka currently supports two versions of Mirror Maker.
 Mirror Maker 1, which is the original Mirror Maker version.
 And Mirror Maker 2 that is a newer replacement for Mirror Maker 1 with new architecture and features.
-Strimzi currently support both Mirror Maker versions
+Strimzi currently supports both Mirror Maker versions
 
 Mirror Maker 1 is currently deprecated in Apache Kafka as well as in Strimzi.
 In Apache Kafka, it is planned to be removed in Apache Kafka 4.0 release.
@@ -61,7 +61,7 @@ Users will be also responsible for deleting the `KafkaMirrorMaker` CRD once they
 ### Strimzi changes
 
 The following changes will be done to Strimzi to remove support for Mirror Maker 1:
-* Remove the `KafkaMirrorMaker` CRD from Strimzi installation files, Helm Chart and OperatorHub entires
+* Remove the `KafkaMirrorMaker` CRD from Strimzi installation files, Helm Chart and OperatorHub entries
 * Remove the environment variable for configuring the Mirror Maker 1 images from the Cluster Operator Deployment file
 * Remove Mirror Maker 1 from our examples (including the Mirror Maker 1 dashboard etc.)
 * Delete the Mirror Maker 1 API classes from the `api` module
