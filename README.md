@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 78  | [Auto-rebalancing on cluster scaling](./078-auto-rebalancing-cluster-scaling.md) |
 | 77  | [Support for Apache Kafka 4.0](./077-support-for-kafka-4.0.md) |
 | 76  | [Connector Offsets Support](./076-connector-offsets-support.md) |
 | 75  | [Support of additional volumes](./075-additional-volumes-support.md) |
