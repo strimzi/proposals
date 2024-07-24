@@ -53,7 +53,8 @@ Users will be responsible for migrating their Mirror Maker 1 clusters to Mirror 
 While it is possible to configure Mirror Maker 2 to closely resemble the functionality of Mirror Maker 1, this proposal does not cover the detailed steps of how users should migrate from Mirror Maker 1 to Mirror Maker 2.
 
 If the Mirror Maker 1 cluster is not migrated before upgrade to Strimzi 0.4z or later, Strimzi will stop operating it.
-But it will keep it running and not delete it.
+But it will not delete any Kubernetes resources belonging to the Mirror Maker 1 cluster (such as Config Maps or Deployments).
+So the Mirror Maker 1 cluster and its Pods will keep running.
 When the user is done with the migration, they can simply delete the `KafkaMirrorMaker` custom resource and that will also delete the old Mirror Maker 1 cluster and all its resources through Kubernetes garbage collection.
 
 Users will be also responsible for deleting the `KafkaMirrorMaker` CRD once they upgrade to Strimzi 0.4z or later (and once they migrate all of their remaining clusters, as the CRD deletion would also delete the custom resources and the related Deployments/Pods).
