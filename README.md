@@ -9,6 +9,7 @@ This repository list of proposals for the Strimzi project. A template for new pr
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 79  | [Removal of Mirror Maker 1](./079-removal-of-mirror-maker-1.md) |
 | 78  | [Auto-rebalancing on cluster scaling](./078-auto-rebalancing-cluster-scaling.md) |
 | 77  | [Support for Apache Kafka 4.0](./077-support-for-kafka-4.0.md) |
 | 76  | [Connector Offsets Support](./076-connector-offsets-support.md) |
