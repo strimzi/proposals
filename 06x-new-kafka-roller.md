@@ -102,7 +102,7 @@ The following are the configuration options for the new KafkaRoller. If exposed 
 | maxRetries             | 10            | No              | The maximum number of times a node can be retried after not meeting the safety conditions e.g. availability check failed.  This is checked against the node's `numRetries`.                                                                                                                      |
 | operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an operation in each retry. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
 | maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`. However, if there are multiple brokers in `NOT_RUNNING` state, they may get restarted in parallel despite this configuration for a faster recovery.    
-| postRestartDelay  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will also help JIT to reach a steady state and to reduce impact on clients.   
+| postRestartDelay  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will also help  Just-In-Time (JIT) compiler to reach a steady state and to reduce impact on clients.   
 | restartAndPreferredLeaderElectionDelay  | 10 seconds             | No             | Delay between restart and triggering partition leader election so that just-rolled broker is leading all the partitions it is the preferred leader for. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
 
 ### Algorithm
@@ -129,6 +129,8 @@ The following are the configuration options for the new KafkaRoller. If exposed 
 3. **Handle `NOT_READY` Nodes:**
    Wait for `NOT_READY` nodes to become `READY` within `operationTimeoutMs`.
 
+   This is to give an opportunity for a node to become ready in case it had just been restarted. If the node is still not ready after the timeout, it will fall through to the next step to determine the action to take on it.
+
 4. **Categorize Nodes:**
    Group nodes based on their state and connectivity:
    - `RESTART_NOT_RUNNING`: Nodes in `NOT_READY` state.
@@ -138,8 +140,14 @@ The following are the configuration options for the new KafkaRoller. If exposed 
    - `RESTART`: Nodes with reasons for restart and no previous restarts.
    - `NOP`: Nodes needing no operation.
 
+   Grouping the nodes into these categories makes it clearer to take actions on the them in the specific order. Also the category and node state is not always 1:1, for example, nodes might be unresponsive depsite having READY or NOT_READY state but need to be grouped together for sequential restarts. Grouping also makes it to easier to batch broker nodes for parallel restart.
+
 5. **Wait for Log Recovery:**
    Wait for `WAIT_FOR_LOG_RECOVERY` nodes to become `READY` within `operationTimeoutMs`. If timeout is reached and `numRetries` exceeds `maxRetries`, throw `UnrestartableNodesException`. Otherwise, increment `numRetries` and repeat from step 2.
+
+   A Kafka broker node can take a long time to become ready while performing log recovery and it's not easy to determine how long it might take. Therefore, it's important to avoid restarting the node during this process, as doing so would restart the entire log recovery, potentially causing the node to enter a loop of continuous restarts without becoming ready. Moreover, while a broker node is in recovery, no other node should be restarted, as this could impact cluster availability and affect the client.
+
+   We do not wait for the broker to rejoin the ISR after it becomes ready because the roller's responsibility is to restart the nodes safely, not to manage inter-broker replication. Additionally, we cannot guarantee that the broker will always be able to catch up within a reasonable time frame.
 
 6. **Restart `RESTART_NOT_RUNNING` Nodes:**
    Restart nodes in `NOT_RUNNING` state, considering special conditions:
