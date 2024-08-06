@@ -49,8 +49,10 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
+  # setting the mode as `remove-disks` to move data between the JBOD disks
   mode: remove-disks
-  brokersAndVolumes:
+  # providing the list of brokers, and the corresponding volumes from which you want to move the replicas
+  moveReplicasOffVolumes:
     - brokerId: 0
       volumeIds: [1, 2]
     - brokerId: 2
@@ -61,7 +63,7 @@ spec:
 ### Flow
 
 - The user should be using the `Kafka` resource with JBOD configured. Make sure that you have more than one disk configured on the brokers.
-- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and the list of the brokers and the corresponding volumes to move in the `spec.brokersAndVolumes` field.
+- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and provides list of the brokers, and the corresponding volumes from which you want to move the replicas in the `spec.moveReplicasOffVolumes` field.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to generate an optimization proposal (by using the dryrun feature).
 - You can use `strimzi.io/rebalance-auto-approval:true` annotation on the `KafkaRebalance` resource for auto-approval of proposal. In case you want to do it manually you can do it by applying the `strimzi.io/rebalance=approve` annotation on it.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to perform the actual rebalancing.
@@ -71,10 +73,10 @@ Note: The optimization proposal will not show the load before optimization, it w
 ### Other Scenarios
 
 - In case the user is not using JBOD storage and tries to generate the optimization proposal, the `KafkaRebalance` resource will move to `NotReady` state prompting invalid log dirs provided for the broker.
-- If you are using JBOD with single disk configured on the brokers, in that case `KafkaRebalance` will move to `NotReady` state prompting that you don't have enough log dirs to move the repicas to for that broker.
+- If you are using JBOD with single disk configured on the brokers, in that case `KafkaRebalance` will move to `NotReady` state prompting that you don't have enough log dirs to move the replicas for that broker.
 - If the disk capacity has exceeded for the broker, in that case `KafkaRebalance` will move to `NotReady` prompting that enough capacity is not remaining to move replicas for that broker.
 - This feature works fine with KafkaNodePools. 
-- This feature work with Kraft only if Kafka version is greater than 3.7.0, as that version supports multiple JBOD disks on brokers.
+- This feature works with Kraft only if Kafka version is greater than 3.7.0, as that version supports multiple JBOD disks on brokers.
 
 The errors in the above scenarios are reported by Cruise Control. Based on those we move the `KafkaRebalance` resource to `NotReady` state and update the `KafkaRebalance` status with the corresponding error message.
 
