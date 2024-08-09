@@ -11,7 +11,7 @@ For example, when you upgrade your cluster to a new Kafka minor version and try 
 
 Strimzi currently doesn't support the node unregistration.
 This has two main reasons:
-* Apache Kafka did not bother to properly document this process and we found out about it only by coincidence.
+* Apache Kafka did not properly document this process and we found out about it only by coincidence.
 * Apache Kafka has only limited support for unregistering nodes.
   While the Kafka Admin API supports unregistration of the nodes, it does not let you list the registered nodes.
   So you do not know what nodes should be unregistered.
@@ -34,13 +34,13 @@ It also outlines the future / long-term solution that will be used once the impl
 In order to be able to unregister the removed Kafka nodes, we need to be aware of the nodes that were removed.
 Strimzi Cluster Operator is aware of the scale-downs that it directly executed.
 These are the scale-downs resulting from changing the `.spec.replicas` field in the `KafkaNodePool` resources.
-But this information is not persisted anywhere and will not survive a crash or restart of the operator or an reconciliation failure that might happen between the nodes being scaled down and the node unregistration.
+But this information is not persisted anywhere and will not survive a crash or restart of the operator or a reconciliation failure that might happen between the nodes being scaled down and the node unregistration.
 Strimzi Cluster Operator is also not directly involved in some scale-down operations such as when a KafkaNodePool resource is deleted.
 In this case, the scale-down is done by Kubernetes garbage collection.
 
 To work around this limitation, the `Kafka` custom resource will be extended and will store a full list of the node IDs in its status section.
 During the reconciliation, this field will be used to get the information about the previously existing nodes.
-It will be compared with the nodes that are still in use the removed nodes will be unregistered.
+The _previously existing_ nodes from the status will be compared with the nodes that are still in use to determine which nodes were removed and should be unregistered.
 Only after unregistering the nodes, the node IDs will be removed from the field in the `Kafka` CR status section.
 
 This way, the information about the removed nodes:
@@ -56,7 +56,7 @@ The unregistration will use the corresponding Kafka Admin API method ([`unregist
 
 The new field in the `Kafka` CR will be called `nodeIds` (the same name as already used in `KafkaNodePool` CR).
 As the new field will be used only temporarily by the workaround implementation, the description of the field will make it clear that:
-* This file is supposed to be used for internal purposes only
+* This field is supposed to be used for internal purposes only
 * It will be removed in the future once it is not needed anymore
 
 The `.status` section with the new field will look something like this:
