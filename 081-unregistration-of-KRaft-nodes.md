@@ -6,16 +6,15 @@ This is one of the missing features in Strimzi's KRaft support.
 ## Current situation
 
 When removing Apache Kafka nodes from a KRaft-based cluster, the nodes should be unregistered using the Apache Kafka Admin API.
-When the nodes are not properly unregistered, the cluster will keep tracking them and they would cause problems later.
-For example, when you upgrade your cluster to a new Kafka minor version and try to also bump the metadata version, the metadata version update will be refused because the removed nodes that are still registered with the old Kafka version and do not support the new metadata version.
+When nodes are not properly unregistered, the cluster will continue to track them, which may cause problems later.
+For example, when you upgrade your cluster to a new Kafka minor version and try to also bump the metadata version, the metadata version update is refused because the removed nodes are still registered with the old Kafka version and do not support the new metadata version.
 
-Strimzi currently doesn't support the node unregistration.
-This has two main reasons:
-* Apache Kafka did not properly document this process and we found out about it only by coincidence.
+Strimzi currently doesn't support node unregistration for two main reasons:
+* Apache Kafka did not properly document this process and we found out about it only by chance.
 * Apache Kafka has only limited support for unregistering nodes.
   While the Kafka Admin API supports unregistration of the nodes, it does not let you list the registered nodes.
   So you do not know what nodes should be unregistered.
-  This is causing a problems to stateless management tools such as Strimzi operators who might not reliably know what nodes existed before.
+  This is causing a problems to stateless management tools such as Strimzi operators, which might not reliably know what nodes existed before.
   The proper solution for this is part of the [KIP-1073](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1073%3A+Return+inactive+observer+nodes+in+DescribeQuorum+response) that is currently under discussion.
 
 ## Motivation
@@ -35,7 +34,7 @@ In order to be able to unregister the removed Kafka nodes, we need to be aware o
 Strimzi Cluster Operator is aware of the scale-downs that it directly executed.
 These are the scale-downs resulting from changing the `.spec.replicas` field in the `KafkaNodePool` resources.
 But this information is not persisted anywhere and will not survive a crash or restart of the operator or a reconciliation failure that might happen between the nodes being scaled down and the node unregistration.
-Strimzi Cluster Operator is also not directly involved in some scale-down operations such as when a KafkaNodePool resource is deleted.
+Strimzi Cluster Operator is also not directly involved in some scale-down operations such as when a `KafkaNodePool` resource is deleted.
 In this case, the scale-down is done by Kubernetes garbage collection.
 
 To work around this limitation, the `Kafka` custom resource will be extended and will store a full list of the node IDs in its status section.
@@ -102,7 +101,7 @@ This proposal is fully backwards compatible.
 ### Wait until the implementation is complete in Apache Kafka
 
 The main alternative that was considered was to do nothing for the time being and wait until Apache Kafka completes the KRaft implementation.
-Once that would be available, we use implement the node unregistration fully relying on the Apache Kafka Admin API.
+Once that would be available, we implement the node unregistration fully relying on the Apache Kafka Admin API.
 Until then, users will need to _unregister_ the nodes manually.
 
 However, there is a lot of uncertainty over when will this be implemented in Apache Kafka.
