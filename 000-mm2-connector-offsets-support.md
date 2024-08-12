@@ -1,4 +1,4 @@
-# Connector Offsets Support
+# MirrorMaker Connector Offsets Support
 
 Update the KafkaMirrorMaker2 resource to allow users to manage offsets
 
@@ -22,7 +22,7 @@ However it did not cover the KafkaMirrorMaker2 resource.
 
 ## Motivation
 
-Previously if users wanted to list, update or delete offsets for a MirrorMaker connector they had to directly write to the Kafka Connect internal offsets topic.
+Previously if users wanted to list, update or delete offsets for a MirrorMaker connector they had to directly read/write from/to the Kafka Connect internal offsets topic.
 [KIP-875][kip] adds new endpoints to let the user do this more easily.
 There are multiple reasons a user might want to manage offsets, for example (as listed in the KIP):
 * Resetting the offsets for a connector while iterating rapidly in a development environment (so that the connector does not have to be renamed each time)
@@ -142,16 +142,32 @@ The operator will then remove the annotations from the KafkaMirrorMaker2 CR.
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
 
 The name of the ConfigMap the operator creates/updates will be set by the user in the KafkaMirrorMaker2 CR.
-The KafkaMirrorMaker2 CRD will be updated to contain a new top-level (i.e. directly under `spec`) property called `listOffsets` that must be set for the `strimzi.io/connector-offsets=list` annotation to take effect.
+The KafkaMirrorMaker2 CRD will be updated to contain a new connector property called `listOffsets` that must be set for the `strimzi.io/connector-offsets=list` annotation to take effect.
 The structure of the `listOffsets` property will be as below, to allow it to be extended in future if required:
 
 ```yaml
-listOffsets:
-  toConfigMap:
-    name: my-connector-offsets
+spec:
+  #...
+  mirrors:
+    - sourceConnector:
+        #...
+        listOffsets:
+          toConfigMap:
+            name: my-connector-offsets
+      checkpointConnector:
+        #...
+        listOffsets:
+          toConfigMap:
+            name: my-connector-offsets
+      heartbeatConnector:
+        #...
+        listOffsets:
+          toConfigMap:
+            name: my-connector-offsets
 ```
 
 The ConfigMap will contain a single entry for each connector, containing the response received from the GET /connectors/{connector}/offsets endpoint.
+This will make it possible to use the same ConfigMap for different connectors.
 The name of the entry will be based on the connector name, however since 
 [`>` characters are not allowed in ConfigMap keys](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-object) the name will be altered to replace `->` with `,`.
 For example a connector called `east-kafka->west-kafka.MirrorSourceConnector` will have offsets placed under `east-kafka,west-kafka.MirrorSourceConnector.json`.
@@ -264,13 +280,28 @@ The entry name matches the entry name used in the list operation, so that a user
 This means the connector name expected will have `->` replaced with `,`, similar to in the list offsets operation.
 
 The name of the ConfigMap the operator will use to construct the request body will be set by the user in the KafkaMirrorMaker2 CR.
-The KafkaMirrorMaker2 CRD will be updated to contain a new top-level (i.e. directly under `spec`) property called `alterOffsets` that must be set for the `strimzi.io/connector-offsets=alter` annotation to take effect.
+The KafkaMirrorMaker2 CRD will be updated to contain a new connector property called `alterOffsets` that must be set for the `strimzi.io/connector-offsets=alter` annotation to take effect.
 The structure of the `alterOffsets` property will be as below, to allow it to be extended in future if required:
 
 ```yaml
-alterOffsets:
-  fromConfigMap:
-    name: my-connector-offsets
+spec:
+  #...
+  mirrors:
+    - sourceConnector:
+        #...
+        alterOffsets:
+          fromConfigMap:
+            name: my-connector-offsets
+      checkpointConnector:
+        #...
+        alterOffsets:
+          fromConfigMap:
+            name: my-connector-offsets
+      heartbeatConnector:
+        #...
+        alterOffsets:
+          fromConfigMap:
+            name: my-connector-offsets
 ```
 
 The data supplied by the user will be validated and augmented with information from the KafkaMirrorMaker2 resource before it is submitted to the Connect API.
