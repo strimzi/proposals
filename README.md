@@ -5,10 +5,11 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 [![Twitter Follow](https://img.shields.io/twitter/follow/strimziio?style=social)](https://twitter.com/strimziio)
 
-This repository list of proposals for the Strimzi project. A template for new proposals can be found [here](./000-template.md).
+This repository lists proposals for the Strimzi project. A template for new proposals can be found [here](./000-template.md).
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 81  | [Unregistration of KRaft nodes](./081-unregistration-of-KRaft-nodes.md) |
 | 80  | [Deprecation and removal of Storage overrides](./080-deprecation-and-removal-of-storage-overrides.md) |
 | 79  | [Removal of Mirror Maker 1](./079-removal-of-mirror-maker-1.md) |
 | 78  | [Auto-rebalancing on cluster scaling](./078-auto-rebalancing-cluster-scaling.md) |
