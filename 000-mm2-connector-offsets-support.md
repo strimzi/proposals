@@ -158,8 +158,8 @@ spec:
 The ConfigMap(s) will contain a single entry for each connector, containing the response received from the GET /connectors/{connector}/offsets endpoint.
 This will make it possible to use the same ConfigMap for different connectors.
 The name of the entry will be based on the connector name, however since 
-[`>` characters are not allowed in ConfigMap keys](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-object) the name will be altered to replace `->` with `,`.
-For example a connector called `east-kafka->west-kafka.MirrorSourceConnector` will have offsets placed under `east-kafka,west-kafka.MirrorSourceConnector.json`.
+[`>` characters are not allowed in ConfigMap keys](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-object) the name will be altered to replace `->` with `--`.
+For example a connector called `east-kafka->west-kafka.MirrorSourceConnector` will have offsets placed under `east-kafka--west-kafka.MirrorSourceConnector.json`.
 
 For example for a MirrorSourceConnector the ConfigMap might look like:
 
@@ -176,7 +176,7 @@ metadata:
       name: my-mm2
       uid: 1234
 data:
-  east-kafka,west-kafka.MirrorSourceConnector.json: |
+  east-kafka--west-kafka.MirrorSourceConnector.json: |
     {
       "offsets": [
         {
@@ -208,7 +208,7 @@ metadata:
       name: my-mm2
       uid: 5678
 data:
-  east-kafka,west-kafka.MirrorCheckpointConnector.json: |
+  east-kafka--west-kafka.MirrorCheckpointConnector.json: |
     {
       "offsets": [
         {
@@ -240,7 +240,7 @@ metadata:
       name: my-mm2
       uid: 5678
 data:
-  east-kafka,west-kafka.MirrorHeartbeatConnector.json: |
+  east-kafka--west-kafka.MirrorHeartbeatConnector.json: |
     {
       "offsets": [
         {
@@ -280,7 +280,7 @@ This will make it easier to recover from errors.
 
 The operator will read in the entry called `<CONNECTOR_NAME>.json` from the ConfigMap.
 The entry name matches the entry name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets to be altered using that same ConfigMap.
-This means the connector name expected will have `->` replaced with `,`, similar to in the list offsets operation.
+This means the connector name expected will have `->` replaced with `--`, similar to in the list offsets operation.
 
 The name of the ConfigMap the operator will use to construct the request body will be set by the user in the KafkaMirrorMaker2 CR.
 The KafkaMirrorMaker2 CRD will be updated to contain a new connector property called `alterOffsets` that must be set for the `strimzi.io/connector-offsets=alter` annotation to take effect.
@@ -442,6 +442,14 @@ A previous version of this proposal described more complex validation of the JSO
 This included validating the specific fields that are needed, and even not requiring fields that the operator could infer.
 
 However, this would make the operator vulnerable to changes in the way the MirrorMaker connectors store their offsets so was rejected in favour of less strict validation.
+
+### Preventing the user from altering or reseting offsets for the MirrorCheckpointConnector and MirrorHeartbeatConnector
+
+The MirrorCheckpointConnector and MirrorHeartbeatConnector both store offsets in Kafka, however they do not actually use those offsets.
+MirrorMaker users may still track offsets to track the progress of those connectors, but since they are not used, it isn't immediately obvious why a user would want to reset or alter them.
+This [Apache Kafka PR](https://github.com/apache/kafka/pull/14005) talks about some of the reasons why these operations may still be desired by users.
+In addition, it is possible that in future these connectors will make use of these offsets.
+For these reasons this proposal explicitly allows users to perform list/alter/reset on all MirrorMaker connectors.
 
 [kip]: https://cwiki.apache.org/confluence/display/KAFKA/KIP-875%3A+First-class+offsets+support+in+Kafka+Connect
 [proposal-76]: 076-connector-offsets-support.md
