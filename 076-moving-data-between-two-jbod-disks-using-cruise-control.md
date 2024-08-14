@@ -63,7 +63,7 @@ spec:
 ### Flow
 
 - The user should be using the `Kafka` resource with JBOD configured. Make sure that you have more than one disk configured on the brokers.
-- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and provides list of the brokers, and the corresponding volumes from which you want to move the replicas in the `spec.moveReplicasOffVolumes` field.
+- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and provides list of the brokers, and the corresponding volumes from which you want to move the replicas in the `spec.moveReplicasOffVolumes` field. In case, the `spec.moveReplicasOffVolumes` field is not set, then the `KafkaRebalance` resource will move to `NotReady` state prompting that `spec.moveReplicasOffVolumes` field is missing.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to generate an optimization proposal (by using the dryrun feature).
 - You can use `strimzi.io/rebalance-auto-approval:true` annotation on the `KafkaRebalance` resource for auto-approval of proposal. In case you want to do it manually you can do it by applying the `strimzi.io/rebalance=approve` annotation on it.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to perform the actual rebalancing.
