@@ -10,7 +10,7 @@ Currently, we get a multiple requests from community users to add the ability fo
 - When we want to use a different Storage Class with different parameters or different storage types.
 - In case of disk removal to reduce the total storage.
 
-For now, we can do this using the Kafka CLI tool i.e. `kafka-reassign-partitions.sh` tool, but it takes a lot of manual steps which is time-consuming and not so user-friendly.
+For now, we can do this using the Kafka CLI `kafka-reassign-partitions.sh` tool, but it takes a lot of manual steps which is time-consuming and not so user-friendly.
 
 ## Motivation
 
@@ -19,8 +19,8 @@ This feature will also allow us to remove the disks without the loss of data.
 
 ## Proposal
 
-Cruise Control provides `remove_disks` HTTP REST endpoint to move replicas from a specified disk to other disks of the same broker. It always uses intra-broker re-balancing.
-This endpoint triggers a rebalancing operation by moving replicas in a size-based manner to the remaining disks, from the largest to the smallest, while checking the following constraint:
+Cruise Control provides the `remove_disks` HTTP REST endpoint to move replicas from a specified disk to other disks for the same broker. The operation is only for intra-broker rebalancing, not moving data between brokers.
+This endpoint triggers a rebalancing operation that moves replicas, starting with the largest and proceeding to the smallest, to the remaining disks while ensuring the following constraint is met:
 ```sh
 1 - (remainingUsageAfterRemoval / remainingCapacity) > errorMargin
 ```
@@ -31,7 +31,7 @@ remainingCapacity = sum of capacities of the remaining disks
 errorMargin = configurable property (default 0.1); it makes sure that a disk percentage is always free when moving replicas
 ```
 
-In order to use the `remove_disks` endpoint in the Strimzi cluster operator, it would be added to the [`CruiseControlApi`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/resource/cruisecontrol/CruiseControlApi.java) interface and developing the corresponding implementation.
+To use the `remove_disks` endpoint in the Strimzi cluster operator, it should be added to the [`CruiseControlApi`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/resource/cruisecontrol/CruiseControlApi.java) interface, and the corresponding implementation developed.
 
 ### Implementation
 
@@ -62,23 +62,24 @@ spec:
 
 ### Flow
 
-- The user should be using the `Kafka` resource with JBOD configured. Make sure that you have more than one disk configured on the brokers.
-- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and provides list of the brokers, and the corresponding volumes from which you want to move the replicas in the `spec.moveReplicasOffVolumes` field. In case, the `spec.moveReplicasOffVolumes` field is not set, then the `KafkaRebalance` resource will move to `NotReady` state prompting that `spec.moveReplicasOffVolumes` field is missing.
+- The user should be using the `Kafka` resource with JBOD configured, making sure that they have more than one disk configured on the brokers.
+- When the Kafka cluster is ready, the user creates a `KafkaRebalance` custom resource with the `spec.mode` field as `remove-disks` and provides a list of the brokers, and the corresponding volumes from which they want to move the replicas in the `spec.moveReplicasOffVolumes` field. In case, the `spec.moveReplicasOffVolumes` field is not set, then the `KafkaRebalance` resource will move to `NotReady` state prompting that `spec.moveReplicasOffVolumes` field is missing.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to generate an optimization proposal (by using the dryrun feature).
 - You can use `strimzi.io/rebalance-auto-approval:true` annotation on the `KafkaRebalance` resource for auto-approval of proposal. In case you want to do it manually you can do it by applying the `strimzi.io/rebalance=approve` annotation on it.
 - The `KafkaRebalanceAssemblyOperator` interacts with Cruise Control via the `/remove_disks` endpoint to perform the actual rebalancing.
 
-Note: The optimization proposal will not show the load before optimization, it will only show the load after optimization. This is because in upstream Cruise Control, we don't have the verbose tag enabled with the `remove_disks` endpoint.
+> **NOTE** The optimization proposal will not show the load before optimization, it will only show the load after optimization. This is because in upstream Cruise Control we don't have the verbose tag enabled with the `remove_disks` endpoint.
 
 ### Other Scenarios
 
 - In case the user is not using JBOD storage and tries to generate the optimization proposal, the `KafkaRebalance` resource will move to `NotReady` state prompting invalid log dirs provided for the broker.
 - If you are using JBOD with single disk configured on the brokers, in that case `KafkaRebalance` will move to `NotReady` state prompting that you don't have enough log dirs to move the replicas for that broker.
 - If the disk capacity has exceeded for the broker, in that case `KafkaRebalance` will move to `NotReady` prompting that enough capacity is not remaining to move replicas for that broker.
-- This feature works fine with KafkaNodePools. 
-- This feature works with Kraft only if Kafka version is greater than 3.7.0, as that version supports multiple JBOD disks on brokers.
+- This feature works fine with `KafkaNodePool` resources.
+- This feature works with KRaft only if Kafka version is greater than 3.7.0, as that version supports multiple JBOD disks on brokers.
 
-The errors in the above scenarios are reported by Cruise Control. Based on those we move the `KafkaRebalance` resource to `NotReady` state and update the `KafkaRebalance` status with the corresponding error message.
+Errors for these scenarios are reported by Cruise Control.
+Based on these errors, we transition the `KafkaRebalance` resource to the `NotReady` state and update its status with the corresponding error message.
 
 ## Affected/not affected projects
 
