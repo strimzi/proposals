@@ -112,7 +112,7 @@ The possible values will be `list`, `alter`, and `reset`.
 
 A second new annotation will be added called `strimzi.io/mirrormaker-connector`.
 It will be required when `strimzi.io/connector-offsets` is set.
-The value will be the name of the connector to apply the action to, for example `east-kafka->west-kafka.MirrorSourceConnector,east-kafka->west-kafka.MirrorCheckpointConnector`.
+The value will be the name of the connector to apply the action to, for example `east-kafka->west-kafka.MirrorSourceConnector`.
 
 If the `strimzi.io/mirrormaker-connector` annotation is set, but the `strimzi.io/connector-offsets` annotation is missing the operator will take no action but add a warning message.
 
