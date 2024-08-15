@@ -112,25 +112,22 @@ The possible values will be `list`, `alter`, and `reset`.
 
 A second new annotation will be added called `strimzi.io/mirrormaker-connector`.
 It will be required when `strimzi.io/connector-offsets` is set.
-The value will be a comma separated list of the names of the connectors to apply the action to, for example `east-kafka->west-kafka.MirrorSourceConnector,east-kafka->west-kafka.MirrorCheckpointConnector`.
+The value will be the name of the connector to apply the action to, for example `east-kafka->west-kafka.MirrorSourceConnector,east-kafka->west-kafka.MirrorCheckpointConnector`.
 
 If the `strimzi.io/mirrormaker-connector` annotation is set, but the `strimzi.io/connector-offsets` annotation is missing the operator will take no action but add a warning message.
 
 ### Listing offsets
 
 To list the current offsets the user will annotate the KafkaMirrorMaker2 resource with the new annotation `strimzi.io/connector-offsets` set to `list`, and the `strimzi.io/mirrormaker-connector` annotation.
-After the annotations are added, on the next reconciliation the operator will fetch the current offsets for the connector(s) and create Kubernetes ConfigMap(s) containing the JSON response(s).
-The operator will add an owner reference to the Kubernetes ConfigMap(s) pointing to the KafkaMirrorMaker2 resource that was annotated.
-If the ConfigMap(s) already exist the operator will patch the ConfigMap(s) with updated data and not add an owner reference.
-This means any existing keys in the ConfigMap(s) that the operator is not updating will remain as before.
-
-Since the operator reconciles connectors one-by-one, after each list operation the operator will update the `strimzi.io/mirrormaker-connector` annotation to remove the connector it has just listed offsets for.
-Once all list operations are complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
-This will make it easier to recover from errors.
+After the annotations are added, on the next reconciliation the operator will fetch the current offsets for the connector and create a Kubernetes ConfigMap containing the JSON response.
+The operator will add an owner reference to the Kubernetes ConfigMap pointing to the KafkaMirrorMaker2 resource that was annotated.
+If the ConfigMap already exists the operator will patch the ConfigMap with updated data and not add an owner reference.
+This means any existing keys in the ConfigMap that the operator is not updating will remain as before.
+Once all list operation is complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
 
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
 
-The name of the ConfigMap(s) the operator creates/updates will be set by the user in the KafkaMirrorMaker2 CR.
+The name of the ConfigMap the operator creates/updates will be set by the user in the KafkaMirrorMaker2 CR.
 The KafkaMirrorMaker2 CRD will be updated to contain a new connector property called `listOffsets` that must be set for the `strimzi.io/connector-offsets=list` annotation to take effect.
 The structure of the `listOffsets` property will be as below, to allow it to be extended in future if required:
 
@@ -155,11 +152,11 @@ spec:
             name: my-connector-offsets
 ```
 
-The ConfigMap(s) will contain a single entry for each connector, containing the response received from the GET /connectors/{connector}/offsets endpoint.
-This will make it possible to use the same ConfigMap for different connectors.
+The ConfigMap will contain a single entry, containing the response received from the GET /connectors/{connector}/offsets endpoint.
 The name of the entry will be based on the connector name, however since 
 [`>` characters are not allowed in ConfigMap keys](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-object) the name will be altered to replace `->` with `--`.
 For example a connector called `east-kafka->west-kafka.MirrorSourceConnector` will have offsets placed under `east-kafka--west-kafka.MirrorSourceConnector.json`.
+This will make it possible to use the same ConfigMap for different connectors.
 
 For example for a MirrorSourceConnector the ConfigMap might look like:
 
@@ -272,11 +269,8 @@ Notes:
 ### Altering offsets
 
 To alter offsets the user will annotate the KafkaMirrorMaker2 resource with the new annotation `strimzi.io/connector-offsets` set to `alter`, and the `strimzi.io/mirrormaker-connector` annotation.
-After the annotations are added, on the next reconciliation the operator will call the PATCH /connectors/{connector}/offsets endpoint to alter the offsets for the connector(s).
-
-Since the operator reconciles connectors one-by-one, after each patch operation the operator will update the `strimzi.io/mirrormaker-connector` annotation to remove the connector it has just altered offsets for.
-Once all patch operations are complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
-This will make it easier to recover from errors.
+After the annotations are added, on the next reconciliation the operator will call the PATCH /connectors/{connector}/offsets endpoint to alter the offsets for the connector.
+Once the patch operation is complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
 
 The operator will read in the entry called `<CONNECTOR_NAME>.json` from the ConfigMap.
 The entry name matches the entry name used in the list operation, so that a user can list offsets, then edit the ConfigMap the operator created, then request the offsets to be altered using that same ConfigMap.
@@ -388,11 +382,9 @@ Notes:
 ### Resetting offsets
 
 To reset connector offsets the user will annotate the KafkaMirrorMaker2 resource with the new annotation `strimzi.io/connector-offsets` set to `reset`, and the `strimzi.io/mirrormaker-connector` annotation.
-When the operator observes these annotations it will use the DELETE /connectors/{connector}/offsets endpoint to reset all offsets for the connector(s).
+When the operator observes these annotations it will use the DELETE /connectors/{connector}/offsets endpoint to reset all offsets for the connector.
 
-Since the operator reconciles connectors one-by-one, after each delete operation the operator will update the `strimzi.io/mirrormaker-connector` annotation to remove the connector it has just reset offsets for.
-Once all delete operations are complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
-This will make it easier to recover from errors.
+Once the delete operation is complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
 
 If the request to the Connect API fails the operator will add a condition to the KafkaMirrorMaker2 CR status with a warning message that includes the response from the API, e.g.
   ```yaml
@@ -425,10 +417,12 @@ N/A
 
 ### Applying actions to multiple connectors
 
-Instead of making the `strimzi.io/mirrormaker-connector` required, we could make it optional.
+Instead of making the `strimzi.io/mirrormaker-connector` required, we could make it optional or a comma-separated list.
 
-In that case, if only the `strimzi.io/connector-offsets` annotation is present, the action would be applied to all mirroring routes and all connectors within mirroring routes that are configured in the KafkaMirrorMaker2 resource.
+In the case where it was optional, if only the `strimzi.io/connector-offsets` annotation is present, the action would be applied to all mirroring routes and all connectors within mirroring routes that are configured in the KafkaMirrorMaker2 resource.
 If the `strimzi.io/mirrormaker-connector` annotation is also present, the action would only be applied to the connector identified in the annotation.
+
+In the case where it was a comma-separated list it would be required and explicitly list the connectors to apply the action to.
 
 This would be a nice feature to allow users to quickly list, alter and reset offsets for many connectors at once.
 Particularly for listing and resetting offsets this seems very useful.
