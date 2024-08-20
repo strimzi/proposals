@@ -123,7 +123,7 @@ After the annotations are added, on the next reconciliation the operator will fe
 The operator will add an owner reference to the Kubernetes ConfigMap pointing to the KafkaMirrorMaker2 resource that was annotated.
 If the ConfigMap already exists the operator will patch the ConfigMap with updated data and not add an owner reference.
 This means any existing keys in the ConfigMap that the operator is not updating will remain as before.
-Once all list operation is complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
+Once the list operation is complete the operator will then remove both the `strimzi.io/mirrormaker-connector` and `strimzi.io/connector-offsets` annotations from the KafkaMirrorMaker2 CR.
 
 If the user wants to see an updated set of offsets they will need to re-annotate the resource.
 
@@ -397,7 +397,7 @@ If the request to the Connect API fails the operator will add a condition to the
 The operator will leave the annotations on the KafkaMirrorMaker2 resource until either the delete operation succeeds, or the user removes the annotations.
 This means the operator will retry the delete on every operation, allowing the condition to remain present for the user to see.
 
-Strimzi will shortcut and automatically fail to do the reset if the connector does not have it's `state` set as `stopped` in the KafkaMirrorMaker2 resource.
+Strimzi will shortcut and automatically fail to do the reset if the connector does not have its `state` set as `stopped` in the KafkaMirrorMaker2 resource.
 Similar to if Connect returns on error, the operator will add a condition stating that the operation has failed because the connector is not stopped and therefore offsets cannot be reset, and leave the annotation on the resource.
 The user can update the KafkaMirrorMaker2 to stop the connector and reset the offsets at the same time.
 In that case the operator will first stop the connector, and once that API call returns, then it will make the call to reset the offsets.
