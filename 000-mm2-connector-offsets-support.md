@@ -48,7 +48,7 @@ In addition, a separate new annotation is proposed to allow the user to select w
 ### Request/Response from the API endpoints
 
 The response body received when using the GET endpoint, and the request body used when calling the PATCH endpoint have identical structures to allow users to easily fetch and then alter offsets.
-The structure of the body is not fully defined for generic source connectors.
+The structure of the request/response body is not fully defined for all Kafka Connect source connectors.
 This is because source connectors determine their own structure for offsets depending on the source system they are integrating with.
 However, for each of the MirrorMaker connectors (MirrorSourceConnector, MirrorCheckpointConnector, MirrorHeartbeatConnector) we know the expected structure.
 
@@ -113,8 +113,6 @@ The possible values will be `list`, `alter`, and `reset`.
 A second new annotation will be added called `strimzi.io/mirrormaker-connector`.
 It will be required when `strimzi.io/connector-offsets` is set.
 The value will be the name of the connector to apply the action to, for example `east-kafka->west-kafka.MirrorSourceConnector`.
-
-If the `strimzi.io/mirrormaker-connector` annotation is set, but the `strimzi.io/connector-offsets` annotation is missing the operator will take no action but add a warning message.
 
 ### Listing offsets
 
