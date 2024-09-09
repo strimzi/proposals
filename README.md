@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 83  | [MirrorMaker Connector Offsets Support](./083-mm2-connector-offsets-support.md) |
 | 82  | [Moving data between two JBOD disks using Cruise Control](./082-moving-data-between-two-jbod-disks-using-cruise-control.md) |
 | 81  | [Unregistration of KRaft nodes](./081-unregistration-of-KRaft-nodes.md) |
 | 80  | [Deprecation and removal of Storage overrides](./080-deprecation-and-removal-of-storage-overrides.md) |
