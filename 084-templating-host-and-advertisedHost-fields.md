@@ -88,7 +88,7 @@ This proposal suggests adding two new fields to the `configuration` section of t
 These fields will be strings that will be used to configure templates that will be used to generate the hostnames.
 The templates will support several different _variables_:
 * `{nodeId}` will be replaced with the ID of the Kafka node to which the template is applied
-* `{nodeName}` will be replaced with the name of the Kafka node (name of the Kubernetes Pod used for this node) to which the template is applied
+* `{nodePodName}` will be replaced with the name of the Kafka node (name of the Kubernetes Pod used for this node) to which the template is applied
 
 Strimzi will take these template fields and replace the variables with the corresponding value for each Kafka node.
 And the resulting value would be used for the (advertised) hostnames.
@@ -120,7 +120,7 @@ listeners:
     configuration:
       bootstrap:
         host: my-cluster-bootstrap.myingress.com
-      hostTemplate: "{nodeName}.myingress.com"
+      hostTemplate: "{nodePodName}.myingress.com"
 ```
 
 The YAML from the Gateway API blog post could be simplified as follows:
