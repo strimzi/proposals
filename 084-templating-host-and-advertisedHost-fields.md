@@ -93,9 +93,9 @@ These templates will support variables, allowing for flexible configurations:
 Strimzi will take these template fields and replace the variables with the corresponding value for each Kafka node.
 And the resulting value would be used for the (advertised) hostnames.
 
-The templates will be applied only to the per-broker values.
-The hostname for the bootstrap Ingress resource would still need to be specified directly and will never be generated from the template.
-(Advertised hostnames can be used only as per-broker configuration)
+The templates will only be applied to per-broker values. 
+The hostname for the bootstrap Ingress resource must be specified manually and will not be generated from the template. 
+The advertised hostnames are used only for per-broker configurations and cannot be configured for bootstrap.
 
 ### Handling conflicts
 
