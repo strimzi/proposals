@@ -42,57 +42,42 @@ Those classes are:
 5. KafkaReconciler
 6. ZooKeeperReconciler
 
-In each of this classes, we basically do the following:
+In each of these classes, we essentially do the following:
+
 ```java
 result.featureGatesEnvVarValue = config.featureGates().toEnvironmentVariable()
 ```
-where we parse currently configured `FeatureGates` based on the `STRIMZI_FEATURE_GATES` environment variable and assign to 
-specific classes (e.g., `EntityTopicOperator` class).
- 
-Moreover, if we go more deeply into implementation details in `UserOperator` class we get feature gates.
+
+Here, we parse the currently configured `FeatureGates` from the `STRIMZI_FEATURE_GATES` environment variable and assign it to specific classes (e.g., the `EntityTopicOperator` class).
+Furthermore, if we dive deeper into the implementation of the `UserOperator` class, we retrieve the feature gates as follows:
 ```java
 /**
- * @return  Feature gates configuration
+ * @return Feature gates configuration
  */
-public FeatureGates featureGates()  {
+public FeatureGates featureGates() {
     return get(FEATURE_GATES);
 }
 ```
-Those are directly fetch from `ConfigParameter`, which is encapsulation of the map implementation with some more auxiliary methods
-(e.g., parser to converting its string representation into specified type).
-In this case we have `FeatureGates` type defined:
+These are fetched directly from `ConfigParameter`, which encapsulates a map implementation with additional utility methods (e.g., a parser to convert the string representation into a specified type).
+In this case, the `FeatureGates` type is defined as:
 ```java
  /**
  * Configuration string with feature gates settings
  */
 public static final ConfigParameter<FeatureGates> FEATURE_GATES = new ConfigParameter<>("STRIMZI_FEATURE_GATES", parseFeatureGates(), "", CONFIG_VALUES);
 ```
-where we have also defined `parseFeatureGates()` method, which invokes constructor of the `FeatureGates` class.
+Here, the `parseFeatureGates()` method is defined, which calls the constructor of the `FeatureGates` class.
 
-This is basic flow how it works now and my proposal is to modify this `FeatureGates` class to use `EnvVarProvider`, which
-would cover everything from the current implementation. 
-For that we would need to add a few dependencies (i.e., `dev.openfeature.sdk` and `dev.openfeature.contrib.providers.env-var`).
-Moreover, we can easily also add there other providers such as FlagDProvider for other users, which want to use flagging system.
-Everything would look like this:
+This is the basic flow of how it currently works, and my proposal is to modify the `FeatureGates` class to use `EnvVarProvider`, which would cover all aspects of the current implementation. 
+For this, we would need to add a few dependencies (e.g., `dev.openfeature.sdk` and `dev.openfeature.contrib.providers.env-var`).
+Additionally, we can easily extend support by adding other providers like `FlagDProvider` for users who want to use a feature flagging system (i.e., FlagD with its `OpenFeature` Operator). 
+
+The overall setup would look like this:
+
 ```java
-/*
- * Copyright Strimzi authors.
- * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
- */
-package io.strimzi.operator.common.featuregates;
-
-import dev.openfeature.contrib.providers.envvar.EnvVarProvider;
-import dev.openfeature.contrib.providers.flagd.FlagdProvider;
-import dev.openfeature.sdk.Client;
-import dev.openfeature.sdk.FeatureProvider;
-import dev.openfeature.sdk.OpenFeatureAPI;
-import io.strimzi.operator.common.InvalidConfigurationException;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-import static java.util.Arrays.asList;
+// ...
+// imports omitted for brevity
+// ...
 
 /**
  * Class for handling the configuration of feature gates
@@ -230,15 +215,20 @@ public class FeatureGates {
     }
 }
 ```
-In scope of `EnvVarProvider` that would be fairy simple and using just new provider and adapting this implementation it should 
-work as our current way how we do it.
-On the other hand using `FlagDProvider`, there are a few ways how to use it (a.) one can use FlagD as a sidecar in the pods
-(b.) deploy [OpenFeature Operator](https://github.com/open-feature/open-feature-operator) supporting FlagD flagging system.
-My proposal is that we rather left for an user to deploy OpenFeature Operator instead of deploying FlagD as a sidecar.
-One big advantage is centralized management and reduced operational complexity.
-With the OpenFeature Operator, you can manage feature flag configurations for all your services centrally at the cluster level, 
-without having to modify or scale each individual pod with a sidecar.
-Additionally, the operator provides native support for feature flag synchronization, making it easier to ensure that all services consistently use the correct flag configurations.
+In the context of `EnvVarProvider`, it should be fairly simple to implement. 
+By using the new provider and adapting the current implementation, it should function the same as our existing approach.
+Alternatively, when using `FlagDProvider`, there are a couple of options: (i) an user can deploy just standalone application FlagD as a deployment, 
+or (ii) deploy the [OpenFeature Operator](https://github.com/open-feature/open-feature-operator), which supports FlagD as one of its flagging systems. 
+While researching, I also discovered several other feature flagging systems, such as:
+1. [Go Feature Flag](https://gofeatureflag.org/)
+2. [CloudBees Feature Management](https://www.cloudbees.com/capabilities/feature-management)
+3. [Split](https://www.split.io/)
+4. [Harness](https://harness.io/products/feature-flags)
+5. [LaunchDarkly](https://launchdarkly.com/)
+6. [Flagsmith](https://flagsmith.com/)
+7. [Flipt](https://www.flipt.io/)
+
+In my experience, `OpenFeature` is the best fit for our needs, given its community, support, and its inclusion in the CNCF ecosystem.
 Conceptual design of the communication could be illustrated like this:
 
     +-------------------------------+      +--------------------------------+
@@ -255,40 +245,75 @@ Conceptual design of the communication could be illustrated like this:
 
 Where in each component (i.e., ClusterOperator, UserOperator and TopicOperator), we will
 fetch feature flags dynamically from the OpenFeature API, which is managed by OpenFeature Operator.
-Each operator’s logic that is controlled by FeatureGates (e.g., enabling new behaviors, managing rolling updates) 
+Each operator’s logic that is controlled and **centralized** by FeatureGates class (e.g., enabling new behaviors, managing rolling updates) 
 will dynamically receive flag updates from `FlagD` via the OpenFeature Operator.
 
+Example of the feature flags 
 This is configuration example of the current `STRIMZI_FEATURE_GATES`
 ```yaml
-apiVersion: openfeature.dev/v1alpha1
-kind: FeatureFlagConfiguration
+# Flags for our backend application
+apiVersion: core.openfeature.dev/v1beta1
+kind: FeatureFlag
 metadata:
-  name: strimzi-feature-flags
+  name: strimzi-feature-gates
+  labels:
+    app: strimzi-feature-gates
 spec:
-  flags:
-    ContinueReconciliationOnManualRollingUpdateFailure: true
-    AnotherFlag: false
+  flagSpec:
+    flags:
+      feature-gate-a:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'off'
+      feature-gate-b:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'on'
+        state: ENABLED
+#        ... and more
 ```
 
 Moreover, if we want to have different `FEATURE_GATES` in components (such as `UserOperator`) one would need to configure it 
 ```yaml
+# Flags for TopicOperator
 apiVersion: openfeature.dev/v1alpha1
-kind: FeatureFlagConfiguration
+kind: FeatureFlag
 metadata:
   name: topic-operator-feature-flags
+  labels:
+    app: topic-operator
 spec:
-  flags:
-    feature_A: true   # Used by TopicOperator
+  flagsSpec:
+      flags:
+        feature-gate-c:
+          variants:
+            'on': true
+            'off': false
+          defaultVariant: 'off'
+          state: ENABLED 
+ #        ... other flags for TopicOperator
 ```
 and for `UserOperator`
 ```yaml
+# Flags for UserOperator
 apiVersion: openfeature.dev/v1alpha1
-kind: FeatureFlagConfiguration
+kind: FeatureFlag
 metadata:
   name: user-operator-feature-flags
+  labels:
+    app: user-operator
 spec:
-  flags:
-    feature_B: true   # Used by UserOperator
+  flagsSpec:
+      flags:
+        feature-gate-d:
+          variants:
+            'on': true
+            'off': false
+          defaultVariant: 'on'
+          state: ENABLED
+ #        ... other flags for UserOperator
 ```
 and then we would need to implement in reconcile loop of each component call for OpenFeature API using its client.
 For `UserOperator` that's `UserControllerLoop` class.
@@ -317,13 +342,13 @@ class UserControllerLoop {
 
 // ...
 ```
-And updateFeatureGateStates() would change the state of inner FeatureGate instance for each component.
+And `maybeUpdateFeatureGateA()` would change the state of inner FeatureGate instance for each component.
 Meaning that for TopicOperator we will have different `FEATURE_GATES` as for `UserOperator` if necessary.
 ```java
 /**
  * Fetches and updates the feature gates state dynamically from the OpenFeature API.
  */
-public void updateFeatureGateStates() {
+public void maybeUpdateFeatureGateA() {
     if (isFlagDEnabled()) {
         // Fetch dynamically from FlagD and update internal states
         this.continueOnManualRUFailure.setValue(fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, true, Boolean.class));
@@ -380,11 +405,47 @@ Table showing feature gates support for each component for clarity.
 
 And that way we can follow the pattern for other components such as `Topic Operator` and `ClusterOperator`.
 
+### Potential configuration of Feature Gates per Kafka cluster
+
+With `OpenFeature` there is a possibility to define feature gates specific to each Kafka cluster by using the cluster name as part of the metadata or by associating flags with specific clusters. 
+This allows you to customize feature gates per cluster within the `ClusterOperator`.
+To design feature gates based on the Kafka cluster name for the `ClusterOperator`, we can extend the configuration to include cluster-specific feature gates. Here’s a potential design:
+
+#### Example YAML Configuration for Cluster-specific Feature Gates
+
+```yaml
+# Feature gates for Kafka clusters
+apiVersion: core.openfeature.dev/v1beta1
+kind: FeatureFlag
+metadata:
+  name: kafka-cluster-feature-flags
+  labels:
+    app: kafka-cluster
+spec:
+  flagSpec:
+    flags:
+      kafka-cluster-a-feature-gate-a:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'on'
+        state: ENABLED
+      kafka-cluster-b-feature-gate-b:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'off'
+        state: ENABLED
+    # Additional cluster-specific feature gates can be added here
+```
+
 ### Benefits
 
 - **Flexibility:** Users can toggle features without redeploying or restarting services.
-- **Speed:** Faster feature rollout and testing cycles.
-- **Control:** Granular control over feature states across different environments.
+- **Faster Iterations/Testing:** Features can be tested and rolled out quickly, speeding up development cycles.
+- **Centralized Management:** FlagD integration allows centralized control of feature flags, simplifying management across multiple components.
+- **Scalability:** The approach scales efficiently for larger deployments without adding operational complexity.
+- **Backwards Compatibility:** The proposal maintains support for the existing `STRIMZI_FEATURE_GATES` method, ensuring a smooth transition.
 
 ### Potential Challenges
 
@@ -393,7 +454,7 @@ And that way we can follow the pattern for other components such as `Topic Opera
 
 ## Affected/Not Affected Projects
 
-This proposal directly affects Strimzi's approach to feature flagging but is designed to be an optional extension, not altering existing deployments unless explicitly configured.
+`Cluster Operator`, `Topic Operator` and `User Operator`; meaning the modification will be done in scope of `strimzi-cluster-operator` project.
 
 ## Questions
 
