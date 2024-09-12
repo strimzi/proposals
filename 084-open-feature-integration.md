@@ -238,8 +238,8 @@ Conceptual design of the communication could be illustrated like this:
                   |                                        |
                   |                                        |
          +----------------+                      +---------------------------+
-         | FlagD Server   |                      | Cluster Operator, UO, TO  |
-         | Centralized    |   <-- API Calls -->  |  (No sidecar needed)      |
+         | FlagD Server   |                      | Cluster, Topic and User   |
+         | Centralized    |   <-- API Calls -->  |       Operator            |
          | Feature Flags  |                      +---------------------------+
          +----------------+
 
