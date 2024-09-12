@@ -68,7 +68,7 @@ Being required to specify these configurations for each broker has some negative
   The brokers might now have different numbers and might include gaps.
   The controller nodes share the same node ID space, but their hostnames do not need to be configured.
   All of these easily lead to confusion of how should this configuration look like.
-* When adding new brokers, user needs to make sure the `host` or `advertisedHost` fields will be added for the new brokers before scaling the cluster up.
+* When adding new brokers, users need to make sure the `host` or `advertisedHost` fields will be added for the new brokers before scaling the cluster up.
 
 But in most cases, the (advertised) hostnames often follow the same pattern.
 In the example above, you can see that the Ingress based listener uses the hostname pattern `my-cluster-kafka-<NODE-ID>.myingress.com`.
@@ -85,10 +85,10 @@ This proposal suggests adding two new fields to the `configuration` section of t
 * `advertisedHostTemplate`
 * `hostTemplate`
 
-These fields will be strings that will be used to configure templates that will be used to generate the hostnames.
-The templates will support several different _variables_:
-* `{nodeId}` will be replaced with the ID of the Kafka node to which the template is applied
-* `{nodePodName}` will be replaced with the name of the Kafka node (name of the Kubernetes Pod used for this node) to which the template is applied
+The fields will be strings used to define templates for generating hostnames.
+These templates will support variables, allowing for flexible configurations:
+* The `{nodeId}` variable will be replaced with the ID of the Kafka node to which the template is applied.
+* The `{nodePodName}` variable will be replaced with the Kubernetes pod name for the Kafka node where the template is applied.
 
 Strimzi will take these template fields and replace the variables with the corresponding value for each Kafka node.
 And the resulting value would be used for the (advertised) hostnames.
@@ -158,7 +158,7 @@ Originally, I considered supporting some additional variables in the template fi
 
 But at the end I decided to not include them in the proposal.
 These values do not differ between the different Kafka nodes and can be easily handled by the user.
-If the `Kafka` CR is generated from some kind template (e.g. Helm), the cluster name / namespace can be easily templated outside of Strimzi.
+If the `Kafka` CR is generated from some kind of template (e.g. Helm), the cluster name / namespace can be easily templated outside of Strimzi.
 If the `Kafka` CR is written manually, these can be easily specified by the user.
 
 If we see sufficient demand for these variables, we can easily add them later.
