@@ -22,7 +22,12 @@ already implemented by OpenFeature folks. Some of the common characteristics of 
 3. Requires rolling updates for changes.
 
 The third one is the most important for us because if we remove it, we will benefit it from in testing and also reducing 
-overall time during changes features, which user might want to include in their infrastructure.
+overall time during changes features, which users might want to include in their infrastructure.
+The third point is particularly crucial because the requirement for rolling updates introduces delays in the deployment process. 
+Every time a feature gate is changed or updated, the entire system needs to be restarted, which can slow down testing and development cycles. 
+By removing this constraint, we could dramatically enhance testing efficiency, allowing for more rapid iterations and immediate validation of feature changes. 
+Additionally, it would reduce the overall deployment time for any new feature or change, providing users with a infrastructure that responds faster to updates and modifications. 
+This would lead to smoother operations, potentially fewer disruptions, improving both developer and user experiences.
 
 On the other side for the more complex users with need of flagging system, we would support of [FlagD](https://github.com/open-feature/flagd),
 which is pretty known because [OpenFeature is CNCF Incubating project](https://www.cncf.io/projects/openfeature/).
@@ -83,9 +88,8 @@ The overall setup would look like this:
  * Class for handling the configuration of feature gates
  */
 public class FeatureGates {
-
     private static final String CONTINUE_ON_MANUAL_RU_FAILURE = "ContinueReconciliationOnManualRollingUpdateFailure";
-    private static final String FLAGD_ENABLED_ENV_VAR = "FLAGD_ENABLED"; // Environment variable to toggle FlagD
+    private static final String OPEN_FEATURE_PROVIDER_NAME_ENV = "OPEN_FEATURE_PROVIDER_NAME"; // Environment variable to choose OpenFeature provider
 
     private final Client featureClient;
     private final FeatureProvider provider;
@@ -100,52 +104,40 @@ public class FeatureGates {
      */
     public FeatureGates(String featureGateConfig) {
         // Set the appropriate provider based on the environment variable
-        this.provider = isFlagDEnabled() ? new FlagdProvider() : new EnvVarProvider();
+        this.provider = getProviderFromEnv();
         OpenFeatureAPI.getInstance().setProvider(this.provider);
         this.featureClient = OpenFeatureAPI.getInstance().getClient();
-
-        // Validate and parse the featureGateConfig if it's provided
-        if (featureGateConfig != null && !featureGateConfig.trim().isEmpty()) {
-            List<String> featureGates;
-
-            // Validate the format of the feature gate configuration string
-            if (featureGateConfig.matches("(\\s*[+-][a-zA-Z0-9]+\\s*,)*\\s*[+-][a-zA-Z0-9]+\\s*")) {
-                featureGates = asList(featureGateConfig.trim().split("\\s*,+\\s*"));
-            } else {
-                throw new InvalidConfigurationException(featureGateConfig + " is not a valid feature gate configuration");
-            }
-
-            // Validate each feature gate in the config to ensure it is recognized
-            for (String featureGate : featureGates) {
-                featureGate = featureGate.substring(1); // Remove the + or - sign
-
-                // Only validate feature gates but do not apply them manually
-                switch (featureGate) {
-                    case CONTINUE_ON_MANUAL_RU_FAILURE:
-                        // This is a valid feature gate; continue with processing
-                        break;
-                    default:
-                        throw new InvalidConfigurationException("Unknown feature gate " + featureGate + " found in the configuration");
-                }
-            }
-        }
-
-        // Fetch feature gates using OpenFeature
-        boolean continueOnManualRUFailureValue = fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, true, Boolean.class);
-        setValueOnlyOnce(continueOnManualRUFailure, continueOnManualRUFailureValue);
-
-        // Validate interdependencies (if any)
-        validateInterDependencies();
+        
+        // ...
     }
 
     /**
-     * Checks whether FlagD is enabled via environment variables.
+     * Maps the value of OPEN_FEATURE_PROVIDER_NAME to the corresponding provider.
      *
-     * @return True if FLAGD_ENABLED is set to "true", otherwise false.
+     * @return The corresponding FeatureProvider instance based on the environment variable.
      */
-    private boolean isFlagDEnabled() {
-        String flagDEnabled = System.getenv(FLAGD_ENABLED_ENV_VAR);
-        return flagDEnabled != null && flagDEnabled.equalsIgnoreCase("true");
+    private FeatureProvider getProviderFromEnv() throws InvalidOptions {
+        String providerName = System.getenv(OPEN_FEATURE_PROVIDER_NAME_ENV);
+
+        // Default to EnvVarProvider if the environment variable is not set
+        if (providerName == null || providerName.trim().isEmpty()) {
+            return new EnvVarProvider();
+        }
+
+        // Create a mapping between the environment variable and providers
+        Map<String, FeatureProvider> providerMap = new HashMap<>();
+        providerMap.put("flagd", new FlagdProvider());
+        providerMap.put("env-var", new EnvVarProvider());
+        providerMap.put("flagsmith", new FlagsmithProvider());
+        providerMap.put("configcat", new ConfigCatProvider());
+        providerMap.put("statsig", new StatsigProvider());
+        providerMap.put("unleash", new UnleashProvider());
+        providerMap.put("jsonlogic", new JsonlogicProvider());
+        providerMap.put("flipt", new FliptProvider());
+        providerMap.put("go-feature-flag", new GoFeatureFlagProvider());
+
+        // Return the corresponding provider or default to EnvVarProvider
+        return providerMap.getOrDefault(providerName.trim().toLowerCase(), new EnvVarProvider());
     }
 
     /**
@@ -177,19 +169,7 @@ public class FeatureGates {
         }
     }
 
-    /**
-     * Fetches and updates the feature gates state dynamically from the OpenFeature API.
-     */
-    public void updateFeatureGateStates() {
-        if (isFlagDEnabled()) {
-            // Fetch dynamically from FlagD and update internal states
-            this.continueOnManualRUFailure.setValue(fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, true, Boolean.class));
-        } else {
-            this.continueOnManualRUFailure.setValue(continueOnManualRUFailureEnabled());
-            // Fallback to static configuration if FlagD is not enabled
-        }
-    }
-
+    
     // other methods not mentioned for brevity
 
     /**
@@ -217,7 +197,7 @@ public class FeatureGates {
 ```
 In the context of `EnvVarProvider`, it should be fairly simple to implement. 
 By using the new provider and adapting the current implementation, it should function the same as our existing approach.
-Alternatively, when using `FlagDProvider`, there are a couple of options: (i) an user can deploy just standalone application FlagD as a deployment, 
+Alternatively, when using other `Provider` (e.g., FlagD), there are a couple of options: (i) an user can deploy just standalone application FlagD as a deployment, 
 or (ii) deploy the [OpenFeature Operator](https://github.com/open-feature/open-feature-operator), which supports FlagD as one of its flagging systems. 
 While researching, I also discovered several other feature flagging systems, such as:
 1. [Go Feature Flag](https://gofeatureflag.org/)
@@ -249,9 +229,7 @@ Each operator’s logic that is controlled and **centralized** by FeatureGates c
 will dynamically receive flag updates from `FlagD` via the OpenFeature Operator.
 
 Example of the feature flags 
-This is configuration example of the current `STRIMZI_FEATURE_GATES`
 ```yaml
-# Flags for our backend application
 apiVersion: core.openfeature.dev/v1beta1
 kind: FeatureFlag
 metadata:
@@ -368,31 +346,8 @@ and it would be accessible from `UserControllerLoop` class with form of getter.
 For now we do not have any `FEATURE_GATES` for `UserOperator` so there will be no such logic needed
 but maybe in the future we can simply add methods for each `FEATURE_GATE`; meaning for `UserOperator` we will have
 `featureGateA`, `featureGateB`, TopicOperator will have `featureGateB`, `featureGateC` and `ClusterOperator` has `featureGateD`
-and in each of their reconciles loop we would simply call just:
-```java
-// UserOperator reconcile() loop
-reconcile() {
-    // ...
-    maybeUpdateFeatureGateA();
-    maybeUpdateFeatureGateB();
-    // ...
-}
+and in each of their reconciles loop we would simply call `maybeUpdateFeatureGate<A-D>`.
 
-// TopicOperator reconcile() loop
-reconcile() {
-    // ...
-    maybeUpdateFeatureGateB();
-    maybeUpdateFeatureGateD();
-    // ...
-}
-
-// ClusterOperator reconcile() loop
-reconcile() {
-    // ...
-    maybeUpdateFeatureGateD();
-    // ...
-}
-```
 Table showing feature gates support for each component for clarity.
 
 | Operator            | Feature Gates  |
