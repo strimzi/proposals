@@ -8,7 +8,7 @@ This proposal introduces a new feature to allow configuring environment variable
 This includes mounting volumes based on Secrets and Config Maps.
 
 The [`ContainerEnvVar`](https://strimzi.io/docs/operators/latest/full/configuring.html#type-ContainerEnvVar-reference) API allows users to also specify environment variables for any container.
-But it currently allows users to set the environment variables only to plain text values directly inlined in the Strimzi custom resources.  
+Currently, it only supports setting environment variables as plain text values that are directly inlined in Strimzi custom resources.  
 The only exception to this are the Kafka Connect and MirrorMaker 2 containers, where additional environment variables based on Secret or Config Map can be added through the [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option.
 
 ## Motivation
@@ -19,18 +19,19 @@ For example passing credentials to various injected agents or passing decryption
 
 In addition, we now have an asymmetry in the Strimzi API design:
 * Users can now use Secrets and Config Maps as volumes in any container.
-* The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) part related to volumes has been deprecated and is planned to be removed in the future (with the v1 CRD API).
-* Environment variables in containers (except Kafka Connect and MirrorMaker 2 containers) can be defined only as plain values.
-* Environment variables based on Secrets and Config Maps can be defined for Kafka Connect and MirrorMaker 2 containers in the part of [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) related to environment variables.
+* The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option for volumes has been deprecated and will be removed with the v1 CRD API.
+* Users can set environment variables as plain values in containers, except for Kafka Connect and MirrorMaker 2 containers.
+* The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option for environment variables based on Secrets and Config Maps can be defined for Kafka Connect and MirrorMaker 2 containers.
   This part is currently not deprecated and not planned to be removed.
 
 ## Proposal
 
-The [`ContainerEnvVar`](https://strimzi.io/docs/operators/latest/full/configuring.html#type-ContainerEnvVar-reference) will be extended to allow creating environment variables from a Secret or ConfigMap.
+The [`ContainerEnvVar`](https://strimzi.io/docs/operators/latest/full/configuring.html#type-ContainerEnvVar-reference) will be extended to allow creating environment variables from a Secret or ConfigMap. 
+This extension will apply to all containers, including Kafka Connect and MirrorMaker 2, replacing the need to use the `ExternalConfiguration` schema for environment variables in these containers.
 To do this, a new field `valueFrom` would be added to this API.
 The `valueFrom` field would be configured together with the existing `value` field as `oneOf` alternatives, so that only one of them can be set.
 
-The `valueFrom` field will allow to reference a key inside a Secret of Config Map.
+The `valueFrom` field will allow a reference to a key inside a Secret of Config Map.
 This value under this key in the Secret or Config Map would be used as the environment variable in the container.
 Strimzi itself will not directly extrapolate the content of the Secret or Config Map.
 It will configure the container environment variables to reference the Secret or Config Map and leave the extrapolation to Kubernetes.
@@ -60,14 +61,14 @@ This is considered acceptable given this is an advanced option.
 
 ### Specifying environment variables based on other sources
 
-In addition to Secrets and Config Maps, Kubernetes also allows to set environment variables in containers based on other sources such as the Downward API.
+In addition to Secrets and Config Maps, Kubernetes also allows environment variables to be set in containers based on other sources such as the Downward API.
 Strimzi will currently not support any additional sources other than Secrets and Config Maps.
 These sources can be added later based on a separate proposal.
 
 ### Security risks
 
 The ability to use values from Secrets and Config Maps as environment variables is not validated against the RBAC rules of the user (or a service account) who creates the Strimzi custom resource.
-Following situation might occur and allow the user bypass the RBAC rights it has:
+The following situation might occur that allows the user to bypass the RBAC rights it has:
 
 1. Secret `my-secret` exists in a namespace watched by the Strimzi Cluster Operator
 2. User does not have the RBAC rights to read the Secret, but has the right to create Strimzi custom resources and exec into the Pods created by Strimzi
@@ -81,7 +82,7 @@ This risk should be considered acceptable, mainly because:
 * This can be already done while mounting the Secret or Config Map as a volume.
 * This risk already exists in Kafka Connect or MirrorMaker 2 through the external configuration.
 * The Secret or ConfigMap need to be in the same namespace as the Strimzi custom resource.
-  It would be rare that a user can create custom resources and exec into Pods in an namespace but cannot access some of its Secrets or Config Maps.
+  It would be rare situation that a user has permission to create custom resources and exec into Pods in an namespace but cannot access some of its Secrets or Config Maps.
 
 ### Deprecation of the external configuration API
 
