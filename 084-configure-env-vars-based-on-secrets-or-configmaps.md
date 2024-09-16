@@ -80,7 +80,7 @@ This risk should be considered acceptable, mainly because:
 * This is standard Kubernetes behavior as the same could be done with any Kubernetes Workload API.
 * This can be already done while mounting the Secret or Config Map as a volume.
 * This risk already exists in Kafka Connect or MirrorMaker 2 through the external configuration.
-* The Secret or ConfigMap need to be in the same namespace os the Strimzi custom resource.
+* The Secret or ConfigMap need to be in the same namespace as the Strimzi custom resource.
   It would be rare that a user can create custom resources and exec into Pods in an namespace but cannot access some of its Secrets or Config Maps.
 
 ### Deprecation of the external configuration API
