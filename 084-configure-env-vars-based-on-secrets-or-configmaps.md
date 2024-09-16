@@ -55,7 +55,7 @@ The enhanced `CointainerEnvVar` API would allow following options:
 
 In the same way as already done for the additional volumes, Strimzi will not validate the existence of the referenced Secret or Config Map.
 This validation will be done by Kubernetes when creating the Pod / Container.
-If the Secret or Config Map would not exist or would not contain the correct key, The Pod will not be started.
+If the Secret or Config Map would not exist or would not contain the correct key, the Pod will not be started.
 This is considered acceptable given this is an advanced option.
 
 ### Specifying environment variables based on other sources
@@ -68,6 +68,7 @@ These sources can be added later based on a separate proposal.
 
 The ability to use values from Secrets and Config Maps as environment variables is not validated against the RBAC rules of the user (or a service account) who creates the Strimzi custom resource.
 Following situation might occur and allow the user bypass the RBAC rights it has:
+
 1. Secret `my-secret` exists in a namespace watched by the Strimzi Cluster Operator
 2. User does not have the RBAC rights to read the Secret, but has the right to create Strimzi custom resources and exec into the Pods created by Strimzi
 3. The user creates any Strimzi custom resource and maps values from the Secret to environment variables
@@ -75,9 +76,10 @@ Following situation might occur and allow the user bypass the RBAC rights it has
 5. User execs into the container created by Strimzi and checks the value of the environment variable
 
 This risk should be considered acceptable, mainly because:
-* This is standard Kubernetes behavior as the same could be done with any Kubernetes Workload API.
+
+* This is standard Kubernetes behavior as the same could be done with any Kubernetes Workload API.
 * This can be already done while mounting the Secret or Config Map as a volume.
-* This risk already exists in Kafka Connect or MirrorMaker 2 through the external configuration.
+* This risk already exists in Kafka Connect or MirrorMaker 2 through the external configuration.
 * The Secret or ConfigMap need to be in the same namespace os the Strimzi custom resource.
   It would be rare that a user can create custom resources and exec into Pods in an namespace but cannot access some of its Secrets or Config Maps.
 
