@@ -17,12 +17,12 @@ The ability to specify environment variables for various containers based on Sec
 Often it is part of some advanced customization.
 For example passing credentials to various injected agents or passing decryption keys to files mounted from a Secret as a volume (for example when an encrypted certificate store is mounted as a volume and should be used).
 
-In addition, we now have an asymmetry in the Strimzi API design:
+In addition, we now have an inconsistency in the Strimzi API design:
 * Users can now use Secrets and Config Maps as volumes in any container.
 * The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option for volumes has been deprecated and will be removed with the v1 CRD API.
 * Users can set environment variables as plain values in containers, except for Kafka Connect and MirrorMaker 2 containers.
 * The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option for environment variables based on Secrets and Config Maps can be defined for Kafka Connect and MirrorMaker 2 containers.
-  This part is currently not deprecated and not planned to be removed.
+  Unlike the option for configuring volumes, this part of the [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) option is currently not deprecated and not planned to be removed.
 
 ## Proposal
 
@@ -95,9 +95,11 @@ This proposal affects the Strimzi Cluster Operator only.
 
 ## Backwards compatibility
 
-This proposal adds new API fields that are planned to be supported in the long term.
-The existing [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) API will be deprecated and scheduled for removal in the CRD v1 API.
-Until then, it will be supported and any environment variables configured through it will be used.
+This proposal adds new fields to the [`ContainerEnvVar`](https://strimzi.io/docs/operators/latest/full/configuring.html#type-ContainerEnvVar-reference) API to extend its functionality.
+The existing fields in this API will continue to be supported without any change as well.
+
+The [external configuration](https://strimzi.io/docs/operators/0.43.0/full/configuring.html#type-ExternalConfiguration-reference) API in the `KafkaConnect` and `KafkaMirrorMaker2` resources will be deprecated and scheduled for removal in the CRD v1 API.
+Until then, it will continue to be supported and any environment variables configured through it will be used.
 
 ## Rejected alternatives
 
