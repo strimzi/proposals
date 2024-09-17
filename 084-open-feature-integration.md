@@ -206,27 +206,26 @@ While researching, I also discovered several other feature flagging systems, suc
 6. [Flagsmith](https://flagsmith.com/)
 7. [Flipt](https://www.flipt.io/)
 
-In my experience, `OpenFeature` is the best fit for our needs, given its community, support, and its inclusion in the CNCF ecosystem.
-Conceptual design of the communication could be illustrated like this:
+Users have the flexibility to choose any feature flagging provider that suits their needs, thanks to the integration with OpenFeature, which supports multiple providers.
+Given its community support and inclusion in the CNCF ecosystem, OpenFeature offers a versatile solution for feature management.
 
-    +-------------------------------+      +--------------------------------+
-    |        OpenFeature Operator    |     |             Strimzi            |
-    |   (Manages Feature Flags/FlagD)|     | (Manages Kafka Cluster in K8s) |
-    +-------------------------------+      +--------------------------------+
-                  |                                        |
-                  |                                        |
-         +----------------+                      +---------------------------+
-         | FlagD Server   |                      | Cluster, Topic and User   |
-         | Centralized    |   <-- API Calls -->  |       Operator            |
-         | Feature Flags  |                      +---------------------------+
-         +----------------+
+Conceptually, the communication between Strimzi and a feature flagging system can be illustrated as:
+
+
+    +------------------------------+      +------------------------------------+
+    | Centralized Feature Flagging |      |               Strimzi              |
+    |            Server            |      | (Cluster, User and Topic Operator) |
+    +------------------------------+      +------------------------------------+
+                   |                                        |
+                   |                                        |
+                   |   <----------- API Calls ----------->  |
 
 Where in each component (i.e., ClusterOperator, UserOperator and TopicOperator), we will
-fetch feature flags dynamically from the OpenFeature API, which is managed by OpenFeature Operator.
+fetch feature flags dynamically from the OpenFeature API, which is managed by feature flagging server.
 Each operator’s logic that is controlled and **centralized** by FeatureGates class (e.g., enabling new behaviors, managing rolling updates) 
-will dynamically receive flag updates from `FlagD` via the OpenFeature Operator.
+will dynamically receive flag updates from feature flagging server.
 
-Example of the feature flags 
+Example of the feature flags with using `FlagD` within OpenFeature Operator.
 ```yaml
 apiVersion: core.openfeature.dev/v1beta1
 kind: FeatureFlag
@@ -308,9 +307,9 @@ class UserControllerLoop {
     protected void reconcile(Reconciliation reconciliation) {
         LOGGER.infoCr(reconciliation, "{} will be reconciled", reconciliation.kind());
 
-        //  update the state of feature gates dynamically from FlagD
+        //  update the state of feature gates dynamically from feature flagging system
         featureGates.updateFeatureGateStates();
-        LOGGER.infoCr(reconciliation, "Fetching from FlagD: continueOnManualRUFailureEnabled is enabled: {}", featureGates.continueOnManualRUFailureEnabled());
+        LOGGER.infoCr(reconciliation, "Fetching from feature flagging system: continueOnManualRUFailureEnabled is enabled: {}", featureGates.continueOnManualRUFailureEnabled());
 
         KafkaUser user = userLister.namespace(reconciliation.namespace()).get(reconciliation.name());
 
@@ -486,14 +485,14 @@ this.featureGates.fetchFeatureFlag("feature-gate-x", false, Boolean.class, evalu
 
 - **Flexibility:** Users can toggle features without redeploying or restarting services.
 - **Faster Iterations/Testing:** Features can be tested and rolled out quickly, speeding up development cycles.
-- **Centralized Management:** FlagD integration allows centralized control of feature flags, simplifying management across multiple components.
+- **Centralized Management:** feature flagging system integration allows centralized control of feature flags, simplifying management across multiple components.
 - **Scalability:** The approach scales efficiently for larger deployments without adding operational complexity.
 - **Backwards Compatibility:** The proposal maintains support for the existing `STRIMZI_FEATURE_GATES` method, ensuring a smooth transition.
 
 ### Potential Challenges
 
 - **Complexity:** Increased complexity in configuration management.
-- **Dependency:** Additional dependency on the FlagD service.
+- **Dependency:** Additional dependency on the feature flagging systems.
 
 ## Affected/Not Affected Projects
 
