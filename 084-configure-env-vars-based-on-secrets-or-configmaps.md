@@ -36,7 +36,7 @@ This value under this key in the Secret or Config Map would be used as the envir
 Strimzi itself will not directly extrapolate the content of the Secret or Config Map.
 It will configure the container environment variables to reference the Secret or Config Map and leave the extrapolation to Kubernetes.
 
-The enhanced `CointainerEnvVar` API would allow following options:
+The enhanced `ContainerEnvVar` API would allow following options:
 
 ```yaml
     env:
