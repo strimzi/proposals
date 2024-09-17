@@ -143,32 +143,32 @@ public class FeatureGates {
     /**
      * Fetches the feature flag using OpenFeature and applies a default value if not present.
      *
-     * @param flagName     The name of the feature flag
-     * @param defaultValue The default value if the flag isn't set
-     * @param <T>          The type of the feature flag (Boolean, String, Integer, etc.)
-     * @param returnType   The class of the return type for determining which get method to call
+     * @param flagName          The name of the feature flag
+     * @param defaultValue      The default value if the flag isn't set
+     * @param returnType        The class of the return type for determining which get method to call
+     * @param evaluationContext The evaluation context containing additional information
+     * @param <T>               The type of the feature flag (Boolean, String, Integer, etc.)
      * @return The value of the feature flag
      */
-    private <T> T fetchFeatureFlag(String flagName, T defaultValue, Class<T> returnType) {
+    public <T> T fetchFeatureFlag(String flagName, T defaultValue, Class<T> returnType, EvaluationContext evaluationContext) {
         try {
-            // Handle different types based on returnType
             if (returnType == Boolean.class) {
-                return returnType.cast(featureClient.getBooleanValue(flagName, (Boolean) defaultValue));
+                return returnType.cast(featureClient.getBooleanValue(flagName, (Boolean) defaultValue, evaluationContext));
             } else if (returnType == String.class) {
-                return returnType.cast(featureClient.getStringValue(flagName, (String) defaultValue));
+                return returnType.cast(featureClient.getStringValue(flagName, (String) defaultValue, evaluationContext));
             } else if (returnType == Integer.class) {
-                return returnType.cast(featureClient.getIntegerValue(flagName, (Integer) defaultValue));
+                return returnType.cast(featureClient.getIntegerValue(flagName, (Integer) defaultValue, evaluationContext));
             } else if (returnType == Double.class) {
-                return returnType.cast(featureClient.getDoubleValue(flagName, (Double) defaultValue));
+                return returnType.cast(featureClient.getDoubleValue(flagName, (Double) defaultValue, evaluationContext));
             } else {
                 throw new IllegalArgumentException("Unsupported feature flag type: " + returnType.getSimpleName());
             }
         } catch (Exception e) {
             // Fallback in case of any issues fetching the flag
+            System.out.println("Fallback returning default value: " + defaultValue);
             return defaultValue;
         }
     }
-
     
     // other methods not mentioned for brevity
 
@@ -176,10 +176,8 @@ public class FeatureGates {
      * Feature gate class represents individual feature fate
      */
     static class FeatureGate {
-        private final String name;
-        private final boolean defaultValue;
-        private Boolean value = null;
-
+        // ...
+        
         /**
          * Feature fate constructor
          *
@@ -298,10 +296,8 @@ For `UserOperator` that's `UserControllerLoop` class.
 ```java
 // UserControllerLoop.java content 
 class UserControllerLoop {
-
     private final FeatureGates featureGates;  // Add this to handle feature gates
     // ... other attributes not mentioned for brevity
-
 
     /**
      * The main reconciliation logic which handles the reconciliations.
@@ -327,13 +323,11 @@ Meaning that for TopicOperator we will have different `FEATURE_GATES` as for `Us
  * Fetches and updates the feature gates state dynamically from the OpenFeature API.
  */
 public void maybeUpdateFeatureGateA() {
-    if (isFlagDEnabled()) {
-        // Fetch dynamically from FlagD and update internal states
+    if (!this.isEnvVarProvider()) {
+        // Fetch dynamically from flagging system and update internal states
         this.continueOnManualRUFailure.setValue(fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, true, Boolean.class));
-    } else {
-        this.continueOnManualRUFailure.setValue(continueOnManualRUFailureEnabled());
-        // Fallback to static configuration if FlagD is not enabled
     }
+    // if using EnvVar provider there is no need to set such value twice 
 }
 ```
 After such update we can easily access those updated values by simply calling:
@@ -392,6 +386,100 @@ spec:
         defaultVariant: 'off'
         state: ENABLED
     # Additional cluster-specific feature gates can be added here
+```
+
+Moreover, other simplified implementation approach would be to use `single configuration for cluster-specific gates`. 
+Meaning, instead of creation separate configurations for each cluster, leverage labels or annotations to differentiate clusters within a single YAML configuration:
+```yaml
+apiVersion: core.openfeature.dev/v1beta1
+kind: FeatureFlag
+metadata:
+  name: kafka-cluster-feature-flags
+  labels:
+    app: kafka-cluster-feature-flags
+spec:
+  flagSpec:
+    flags:
+      feature-gate-x:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'off'
+        state: ENABLED
+        targeting:
+          targeting:
+          if:
+            - or:
+                - and:
+                    - "==":
+                        - var: clusterName
+                        - "kafka-cluster-a"
+                - and:
+                    - "==":
+                      - var: clusterName
+                      - "kafka-cluster-b"
+            - "on"
+            - "off"
+#  ...
+```
+In this case, we have defined `feature-gate-x`, which is by default disabled (i.e., defaultVariant is set to `off`).
+And, if we deploy Kafka cluster with `kafka-cluster-a` or `kafka-cluster-b` then such feature gate would be enabled (in case of deploying `kafka-cluster-c` is following the default value; meaning `off`).
+
+To extend this approach to be namespace-wide, we can introduce targeting rules that consider the namespace along with the cluster name. 
+This allows the feature flags to be applied to specific namespaces across different clusters.
+
+```yaml
+apiVersion: core.openfeature.dev/v1beta1
+kind: FeatureFlag
+metadata:
+  name: kafka-cluster-feature-flags
+  labels:
+    app: kafka-cluster-feature-flags
+spec:
+  flagSpec:
+    flags:
+      feature-gate-x:
+        variants:
+          'on': true
+          'off': false
+        defaultVariant: 'off'
+        state: ENABLED
+        targeting:
+          targeting:
+          if:
+            - or:
+                - and:
+                    - "==":
+                        - var: clusterName
+                        - "kafka-cluster-a"
+                    - "==":
+                        - var: namespace
+                        - "namespace-a"
+                - and:
+                    - "==":
+                        - var: clusterName
+                        - "kafka-cluster-b"
+                    - "==":
+                        - var: namespace
+                        - "namespace-b"
+            - "on"
+            - "off"
+#  ...
+```
+
+In the client code, we would handle this by `EvaluationContext`, which is provided by OpenFeature SDK. 
+That way for us, we would just call `fetchFeatureFlag()` method where we also specify `EvaluationContext` and then 
+we would have result. 
+For instance:
+```java
+// assuming 
+//  cluster name = kafka-cluster-a
+//  namespace    = namespace-a
+this.evaluationContent.add("clusterName", kafkaCr.getMetadata().getName());
+this.evaluationContent.add("namespace", kafkaCr.getMetadata().getNamespace());
+
+this.featureGates.fetchFeatureFlag("feature-gate-x", false, Boolean.class, evaluationContent)
+// this will return `true`, because our defined targeting above.
 ```
 
 ### Benefits
