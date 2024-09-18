@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 |  #  | Title                                                                 |
 | :-: |:----------------------------------------------------------------------|
+| 84  | [Templating `host` and `advertisedHost` fields in the `Kafka` custom resource](./084-templating-host-and-advertisedHost-fields.md) |
 | 83  | [MirrorMaker Connector Offsets Support](./083-mm2-connector-offsets-support.md) |
 | 82  | [Moving data between two JBOD disks using Cruise Control](./082-moving-data-between-two-jbod-disks-using-cruise-control.md) |
 | 81  | [Unregistration of KRaft nodes](./081-unregistration-of-KRaft-nodes.md) |
