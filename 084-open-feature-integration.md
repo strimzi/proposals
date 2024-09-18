@@ -29,12 +29,13 @@ By removing this constraint, we could dramatically enhance testing efficiency, a
 Additionally, it would reduce the overall deployment time for any new feature or change, providing users with a infrastructure that responds faster to updates and modifications. 
 This would lead to smoother operations, potentially fewer disruptions, improving both developer and user experiences.
 
-On the other side for the more complex users with need of flagging system, we would support of [FlagD](https://github.com/open-feature/flagd),
+On the other side for the more complex users with need of flagging system, e.g, [FlagD](https://github.com/open-feature/flagd),
 which is pretty known because [OpenFeature is CNCF Incubating project](https://www.cncf.io/projects/openfeature/).
 Common characteristics of this provider are:
 1. New method proposed for more complex users, which needs better management over multiple features (of Strimzi)
-2. Integrates with FlagD for dynamic feature flagging
+2. Integrates with feature flagging system for dynamic feature flagging
 3. Allows changes without the need for rolling updates.
+4. Allows us to handle feature gates per-cluster, namespace (or both).
 
 ### Implementation Steps
 
@@ -77,6 +78,9 @@ This is the basic flow of how it currently works, and my proposal is to modify t
 For this, we would need to add a few dependencies (e.g., `dev.openfeature.sdk` and `dev.openfeature.contrib.providers.env-var`).
 Additionally, we can easily extend support by adding other providers like `FlagDProvider` for users who want to use a feature flagging system (i.e., FlagD with its `OpenFeature` Operator). 
 
+Moreover, the config classes will be removed and every logic (i.e., parsing part) will be moved to `FeatureGates` class as it might be the best choice. 
+By encapsulating the logic within the `FeatureGates` class and removing dependencies on configuration classes, we simplify the feature gate management and make it more maintainable.
+
 The overall setup would look like this:
 
 ```java
@@ -90,7 +94,8 @@ The overall setup would look like this:
 public class FeatureGates {
     private static final String CONTINUE_ON_MANUAL_RU_FAILURE = "ContinueReconciliationOnManualRollingUpdateFailure";
     private static final String OPEN_FEATURE_PROVIDER_NAME_ENV = "OPEN_FEATURE_PROVIDER_NAME"; // Environment variable to choose OpenFeature provider
-
+    private static final String STRIMZI_FEATURE_GATES_ENV = "STRIMZI_FEATURE_GATES";
+    
     private final Client featureClient;
     private final FeatureProvider provider;
 
@@ -100,96 +105,31 @@ public class FeatureGates {
     /**
      * Constructs the feature gates configuration.
      *
-     * @param featureGateConfig String with a comma-separated list of enabled or disabled feature gates
+     * @param featureGatesConfig String with a comma-separated list of enabled or disabled feature gates (mainly for testing purposes)
+     * @param evaluationContext EvaluationContext
      */
-    public FeatureGates(String featureGateConfig) {
-        // Set the appropriate provider based on the environment variable
-        this.provider = getProviderFromEnv();
+    public FeatureGates(String featureGatesConfig, final EvaluationContext evaluationContext) {
+        this.provider = this.getProviderFromEnv();
         OpenFeatureAPI.getInstance().setProvider(this.provider);
         this.featureClient = OpenFeatureAPI.getInstance().getClient();
-        
-        // ...
-    }
 
-    /**
-     * Maps the value of OPEN_FEATURE_PROVIDER_NAME to the corresponding provider.
-     *
-     * @return The corresponding FeatureProvider instance based on the environment variable.
-     */
-    private FeatureProvider getProviderFromEnv() throws InvalidOptions {
-        String providerName = System.getenv(OPEN_FEATURE_PROVIDER_NAME_ENV);
-
-        // Default to EnvVarProvider if the environment variable is not set
-        if (providerName == null || providerName.trim().isEmpty()) {
-            return new EnvVarProvider();
-        }
-
-        // Create a mapping between the environment variable and providers
-        Map<String, FeatureProvider> providerMap = new HashMap<>();
-        providerMap.put("flagd", new FlagdProvider());
-        providerMap.put("env-var", new EnvVarProvider());
-        providerMap.put("flagsmith", new FlagsmithProvider());
-        providerMap.put("configcat", new ConfigCatProvider());
-        providerMap.put("statsig", new StatsigProvider());
-        providerMap.put("unleash", new UnleashProvider());
-        providerMap.put("jsonlogic", new JsonlogicProvider());
-        providerMap.put("flipt", new FliptProvider());
-        providerMap.put("go-feature-flag", new GoFeatureFlagProvider());
-
-        // Return the corresponding provider or default to EnvVarProvider
-        return providerMap.getOrDefault(providerName.trim().toLowerCase(), new EnvVarProvider());
-    }
-
-    /**
-     * Fetches the feature flag using OpenFeature and applies a default value if not present.
-     *
-     * @param flagName          The name of the feature flag
-     * @param defaultValue      The default value if the flag isn't set
-     * @param returnType        The class of the return type for determining which get method to call
-     * @param evaluationContext The evaluation context containing additional information
-     * @param <T>               The type of the feature flag (Boolean, String, Integer, etc.)
-     * @return The value of the feature flag
-     */
-    public <T> T fetchFeatureFlag(String flagName, T defaultValue, Class<T> returnType, EvaluationContext evaluationContext) {
-        try {
-            if (returnType == Boolean.class) {
-                return returnType.cast(featureClient.getBooleanValue(flagName, (Boolean) defaultValue, evaluationContext));
-            } else if (returnType == String.class) {
-                return returnType.cast(featureClient.getStringValue(flagName, (String) defaultValue, evaluationContext));
-            } else if (returnType == Integer.class) {
-                return returnType.cast(featureClient.getIntegerValue(flagName, (Integer) defaultValue, evaluationContext));
-            } else if (returnType == Double.class) {
-                return returnType.cast(featureClient.getDoubleValue(flagName, (Double) defaultValue, evaluationContext));
-            } else {
-                throw new IllegalArgumentException("Unsupported feature flag type: " + returnType.getSimpleName());
+        if (this.isEnvVarProvider()) {
+            if (featureGatesConfig == null || featureGatesConfig.isEmpty()) {
+                // feature gates config is null or empty so we are gonna retrieve it from ENV VAR
+                featureGatesConfig = this.featureClient.getStringValue(STRIMZI_FEATURE_GATES_ENV, "");
             }
-        } catch (Exception e) {
-            // Fallback in case of any issues fetching the flag
-            System.out.println("Fallback returning default value: " + defaultValue);
-            return defaultValue;
-        }
-    }
-    
-    // other methods not mentioned for brevity
 
-    /**
-     * Feature gate class represents individual feature fate
-     */
-    static class FeatureGate {
-        // ...
-        
-        /**
-         * Feature fate constructor
-         *
-         * @param name          Name of the feature gate
-         * @param defaultValue  Default value of the feature gate
-         */
-        FeatureGate(String name, boolean defaultValue) {
-            this.name = name;
-            this.defaultValue = defaultValue;
+            // parse the featureGateConfig if it's provided
+            this.validateFeatureGateConfig(featureGatesConfig);
+        } else {
+            // other providers (e.g., flagd)
+            this.continueOnManualRUFailure = evaluationContext != null ?
+                new FeatureGate(CONTINUE_ON_MANUAL_RU_FAILURE, fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, false, Boolean.class, evaluationContext)) :
+                new FeatureGate(CONTINUE_ON_MANUAL_RU_FAILURE, fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, false, Boolean.class));
         }
 
-        // other methods not mentioned for brevity
+        // Validate interdependencies (if any)
+        this.validateInterDependencies();
     }
 }
 ```
