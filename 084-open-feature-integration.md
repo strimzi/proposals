@@ -4,8 +4,10 @@ Proposal to integrate OpenFeature into Strimzi to enhance feature management cap
 The integration of OpenFeature across all operators will be streamlined, thanks to the enhancements proposed in [#74](https://github.com/strimzi/proposals/pull/118).
 
 ## Current Situation
-Strimzi, currently leverages environment variables for feature management. While this approach is effective, it requires rolling updates for any changes, which can lead to service downtime. 
+Strimzi, currently leverages environment variables for feature management. 
+While this approach is effective, it requires rolling updates for any changes, which can lead to service downtime. 
 Moreover, it lacks the flexibility offered by modern feature flag systems, which can provide dynamic control with zero downtime when toggling features.
+Furthermore, it does not allow for per-cluster or per-namespace feature gate management.
 
 ## Motivation
 
@@ -15,8 +17,9 @@ To provide Strimzi users with dynamic control over features without needing serv
 
 This proposal suggests the integration of OpenFeature, providing two primary methods for feature management:
 
-For the current users (i.e., having classic ENV variable STRIMZI_FEATURE_GATES), we will use [Enviroment Variable Provider](https://github.com/open-feature/java-sdk-contrib/tree/main/providers/env-var)
-already implemented by OpenFeature folks. Some of the common characteristics of such provider are:
+For the current users (i.e., having classic ENV variable STRIMZI_FEATURE_GATES), we will use [Environment Variable Provider](https://github.com/open-feature/java-sdk-contrib/tree/main/providers/env-var)
+already implemented by OpenFeature folks. 
+Some of the common characteristics of such provider are:
 1. Default method currently used. 
 2. Feature gates are set via environment variables.
 3. Requires rolling updates for changes.
@@ -40,7 +43,10 @@ Common characteristics of this provider are:
 ### Implementation Steps
 
 Currently, there are a few classes where we use `FeatureGates` related stuff (i.e., FeatureGates abstraction).
-Those classes are:
+Important thing is that we have only one feature gates across all operators so we can't configure `feature-gate-a` for 
+UserOperator or `feature-gate-b` for TopicOperator. 
+Both has to be configured and shared for all operators. 
+There are a few classes, where we use `FeatureGates` instance:
 1. ClusterOperatorConfig 
 2. EntityTopicOperator 
 3. EntityUserOperator 
@@ -80,6 +86,7 @@ Additionally, we can easily extend support by adding other providers like `FlagD
 
 Moreover, the config classes will be removed and every logic (i.e., parsing part) will be moved to `FeatureGates` class as it might be the best choice. 
 By encapsulating the logic within the `FeatureGates` class and removing dependencies on configuration classes, we simplify the feature gate management and make it more maintainable.
+Making `FeatureGates` a singleton is beneficial because it is called from multiple parts of the code and just need one instance at the time.
 
 The overall setup would look like this:
 
@@ -160,10 +167,8 @@ Conceptually, the communication between Strimzi and a feature flagging system ca
                    |                                        |
                    |   <----------- API Calls ----------->  |
 
-Where in each component (i.e., ClusterOperator, UserOperator and TopicOperator), we will
-fetch feature flags dynamically from the OpenFeature API, which is managed by feature flagging server.
-Each operator’s logic that is controlled and **centralized** by FeatureGates class (e.g., enabling new behaviors, managing rolling updates) 
-will dynamically receive flag updates from feature flagging server.
+Where in each component (i.e., ClusterOperator, UserOperator and TopicOperator), we will fetch feature flags dynamically from the OpenFeature API, which is managed by feature flagging server.
+Each operator’s logic that is controlled and **centralized** by FeatureGates class (e.g., enabling new behaviors, managing rolling updates) will dynamically receive flag updates from feature flagging server.
 
 Example of the feature flags with using `FlagD` within OpenFeature Operator.
 ```yaml
@@ -190,54 +195,12 @@ spec:
 #        ... and more
 ```
 
-Moreover, if we want to have different `FEATURE_GATES` in components (such as `UserOperator`) one would need to configure it 
-```yaml
-# Flags for TopicOperator
-apiVersion: openfeature.dev/v1alpha1
-kind: FeatureFlag
-metadata:
-  name: topic-operator-feature-flags
-  labels:
-    app: topic-operator
-spec:
-  flagsSpec:
-      flags:
-        feature-gate-c:
-          variants:
-            'on': true
-            'off': false
-          defaultVariant: 'off'
-          state: ENABLED 
- #        ... other flags for TopicOperator
-```
-and for `UserOperator`
-```yaml
-# Flags for UserOperator
-apiVersion: openfeature.dev/v1alpha1
-kind: FeatureFlag
-metadata:
-  name: user-operator-feature-flags
-  labels:
-    app: user-operator
-spec:
-  flagsSpec:
-      flags:
-        feature-gate-d:
-          variants:
-            'on': true
-            'off': false
-          defaultVariant: 'on'
-          state: ENABLED
- #        ... other flags for UserOperator
-```
 and then we would need to implement in reconcile loop of each component call for OpenFeature API using its client.
 For `UserOperator` that's `UserControllerLoop` class.
 ```java
 // UserControllerLoop.java content 
 class UserControllerLoop {
-    private final FeatureGates featureGates;  // Add this to handle feature gates
-    // ... other attributes not mentioned for brevity
-
+    // ...
     /**
      * The main reconciliation logic which handles the reconciliations.
      *
@@ -248,12 +211,14 @@ class UserControllerLoop {
         LOGGER.infoCr(reconciliation, "{} will be reconciled", reconciliation.kind());
 
         //  update the state of feature gates dynamically from feature flagging system
-        featureGates.updateFeatureGateStates();
+        FeatureGates.getInstance().updateFeatureGateStates();
         LOGGER.infoCr(reconciliation, "Fetching from feature flagging system: continueOnManualRUFailureEnabled is enabled: {}", featureGates.continueOnManualRUFailureEnabled());
 
         KafkaUser user = userLister.namespace(reconciliation.namespace()).get(reconciliation.name());
 
-// ...
+    // ...
+    }
+}
 ```
 And `maybeUpdateFeatureGateA()` would change the state of inner FeatureGate instance for each component.
 Meaning that for TopicOperator we will have different `FEATURE_GATES` as for `UserOperator` if necessary.
@@ -264,34 +229,21 @@ Meaning that for TopicOperator we will have different `FEATURE_GATES` as for `Us
 public void maybeUpdateFeatureGateA() {
     if (!this.isEnvVarProvider()) {
         // Fetch dynamically from flagging system and update internal states
-        this.continueOnManualRUFailure.setValue(fetchFeatureFlag(CONTINUE_ON_MANUAL_RU_FAILURE, true, Boolean.class));
+        this.continueOnManualRUFailure.setValue(fetchFeatureFlag(FEATURE_GATE_A, true, Boolean.class));
     }
     // if using EnvVar provider there is no need to set such value twice 
 }
 ```
 After such update we can easily access those updated values by simply calling:
 ```java
-if (featureGates.continueOnManualRUFailureEnabled()) {
+if (FeatureGates.getInstance().continueOnManualRUFailureEnabled()) {
     // ... and do some logic...
 }
 ```
 and it would be accessible from `UserControllerLoop` class with form of getter. 
-For now we do not have any `FEATURE_GATES` for `UserOperator` so there will be no such logic needed
-but maybe in the future we can simply add methods for each `FEATURE_GATE`; meaning for `UserOperator` we will have
-`featureGateA`, `featureGateB`, TopicOperator will have `featureGateB`, `featureGateC` and `ClusterOperator` has `featureGateD`
-and in each of their reconciles loop we would simply call `maybeUpdateFeatureGate<A-D>`.
-
-Table showing feature gates support for each component for clarity.
-
-| Operator            | Feature Gates  |
-|---------------------|----------------|
-| **UserOperator**    | `featureGateA` |
-|                     | `featureGateB` |
-| **TopicOperator**   | `featureGateB` |
-|                     | `featureGateC` |
-| **ClusterOperator** | `featureGateD` |
-
-And that way we can follow the pattern for other components such as `Topic Operator` and `ClusterOperator`.
+For now, we do not have any `FEATURE_GATES` for `UserOperator` so there will be no such logic needed
+but maybe in the future we can simply add methods for each `FEATURE_GATE`; meaning for `UserOperator, TopicOperator or ClusterOperator` we will have
+`featureGateA`, `featureGateB`, and in each of their reconciles loop we would simply call `maybeUpdateFeatureGate<A-B>`.
 
 ### Potential configuration of Feature Gates per Kafka cluster
 
