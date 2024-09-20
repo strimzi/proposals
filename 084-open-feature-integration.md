@@ -303,8 +303,7 @@ spec:
         defaultVariant: 'off'
         state: ENABLED
         targeting:
-          targeting:
-          if:
+          - if:
             - or:
                 - and:
                     - "==":
@@ -314,8 +313,9 @@ spec:
                     - "==":
                       - var: clusterName
                       - "kafka-cluster-b"
-            - "on"
-            - "off"
+                - "on"
+                - "off"
+          
 #  ...
 ```
 In this case, we have defined `feature-gate-x`, which is by default disabled (i.e., defaultVariant is set to `off`).
@@ -384,7 +384,7 @@ this.featureGates.fetchFeatureFlag("feature-gate-x", false, Boolean.class, evalu
 - **Faster Iterations/Testing:** Features can be tested and rolled out quickly, speeding up development cycles.
 - **Centralized Management:** feature flagging system integration allows centralized control of feature flags, simplifying management across multiple components.
 - **Scalability:** The approach scales efficiently for larger deployments without adding operational complexity.
-- **Backwards Compatibility:** The proposal maintains support for the existing `STRIMZI_FEATURE_GATES` method, ensuring a smooth transition.
+- **Backwards Compatibility:** The proposal maintains support for the existing `STRIMZI_FEATURE_GATES` method (i.e., env-var provider), ensuring a smooth transition.
 
 ### Potential Challenges
 
@@ -394,6 +394,7 @@ this.featureGates.fetchFeatureFlag("feature-gate-x", false, Boolean.class, evalu
 ## Affected/Not Affected Projects
 
 `Cluster Operator`, `Topic Operator` and `User Operator`; meaning the modification will be done in scope of `strimzi-cluster-operator` project.
+Moreover, `operator-common` is also affected, because we modify FeatureGates class.
 
 ## Questions
 
