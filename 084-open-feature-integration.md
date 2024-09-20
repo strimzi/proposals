@@ -103,19 +103,24 @@ public class FeatureGates {
     private static final String OPEN_FEATURE_PROVIDER_NAME_ENV = "OPEN_FEATURE_PROVIDER_NAME"; // Environment variable to choose OpenFeature provider
     private static final String STRIMZI_FEATURE_GATES_ENV = "STRIMZI_FEATURE_GATES";
     
+    // instance holder
+    private static FeatureGates instance;
+    
     private final Client featureClient;
     private final FeatureProvider provider;
 
     // When adding new feature gates, do not forget to add them to allFeatureGates(), toString(), equals(), and `hashCode() methods
     private FeatureGate continueOnManualRUFailure;
 
+    // getInstance() method impl.
+    
     /**
      * Constructs the feature gates configuration.
      *
      * @param featureGatesConfig String with a comma-separated list of enabled or disabled feature gates (mainly for testing purposes)
      * @param evaluationContext EvaluationContext
      */
-    public FeatureGates(String featureGatesConfig, final EvaluationContext evaluationContext) {
+    private FeatureGates(String featureGatesConfig, final EvaluationContext evaluationContext) {
         this.provider = this.getProviderFromEnv();
         OpenFeatureAPI.getInstance().setProvider(this.provider);
         this.featureClient = OpenFeatureAPI.getInstance().getClient();
