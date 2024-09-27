@@ -303,19 +303,16 @@ spec:
         defaultVariant: 'off'
         state: ENABLED
         targeting:
-          - if:
+          if:
             - or:
-                - and:
-                    - "==":
-                        - var: clusterName
-                        - "kafka-cluster-a"
-                - and:
-                    - "==":
-                      - var: clusterName
-                      - "kafka-cluster-b"
-                - "on"
-                - "off"
-          
+                - "==":
+                   - var: clusterName
+                   - "kafka-cluster-a"
+                - "==":
+                   - var: clusterName
+                   - "kafka-cluster-b"
+            - "on"
+            - "off"
 #  ...
 ```
 In this case, we have defined `feature-gate-x`, which is by default disabled (i.e., defaultVariant is set to `off`).
