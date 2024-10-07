@@ -45,7 +45,9 @@ capacity and resources to maintain it, we can open a new proposal for writing th
 
 After this proposal is approved, we should:
 - archive the Canary project
-- remove the Canary install files from Strimzi operators repository - from both `/install` and `/packaging/install` folders
+- remove the Canary install files from Strimzi operators repository 
+  - now from the `/packaging/install` folder
+  - as part of the next Strimzi release, the installation files will be removed from the `/install` folder
 - delete the mentions about the Canary project from the documentation and automation files (Makefiles)
 - inform users about archiving the project
 
