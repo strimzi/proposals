@@ -1,6 +1,6 @@
-# Archive Canary project written in Go
+# Archive Canary project
 
-This proposal is about archiving the [Canary project written in Go](https://github.com/strimzi/strimzi-canary).
+This proposal is about archiving the [Canary project](https://github.com/strimzi/strimzi-canary).
 
 ## Current situation
 
@@ -17,7 +17,7 @@ Based on the previous proposal from PR [#58](https://github.com/strimzi/proposal
 Java Kafka client library - and the Sarama library is not the official Kafka library in comparison to the Java one.
 Additionally, there are multiple [issues created in the Canary project](https://github.com/strimzi/strimzi-canary/issues) that have remained with comment or unresolved for a significant amount of time.
 The project's dependencies haven't been updated for two years now, meaning that there can be a lot of CVEs, unresolved issues with newer Kafka versions, and so on.
-The inactivity on the project indicates that there are not enough resources to maintain it on the level of fixing issues and CVEs, besides adding more features to the tool.
+The inactivity of the project shows that we do not have the time to continue developing Canary, which is also the main reason for creating this proposal.
 
 Because of these issues, I'm proposing to archive the Canary project.
 
