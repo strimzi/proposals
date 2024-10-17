@@ -15,7 +15,6 @@ TODO need input for the status of other CRs and their metrics, e.g. `Kafka`, `St
 ## Motivation
 
 Strimzi already provides example configurations being compatible with the prometheus-operator via e.g. `PodMonitor` for scraping the metrics and e.g. `PrometheusRules` for alerting.
-This is implemented by metrics-exporter via JMX or kafka-exporter.
 
 But in general, if a deployed Kubernetes resource is having a problem or a deprecated configuration is used, you want to get notified about that and can fix the problem, afterwards.
 Other tools like Flux handles the monitoring of CRs via KSM like documented in their [documentation](https://fluxcd.io/flux/monitoring/custom-metrics/).
@@ -49,8 +48,6 @@ In addition, example `PrometheusRules` should be defined for all CRs for having 
 
 The only affected projects are:
 - CO
-- TO
-- UO
 
 ## Compatibility
 
@@ -58,8 +55,8 @@ TODO need input about already implemented metrics, e.g. for `Kafka` resources
 
 The previously elaborated metrics should be deprecated and replaced in favour of KSM based metrics.
 This also applies for PrometheusRules which should be replaced.
-The proposed way would be implementing the KSM and deprecating the current metrics in Strimzi CO/TO/UO in version XX and removing them in version XZ to give users enough time (2 releases) adjusting their monitoring if needed.
+The proposed way would be implementing the KSM and deprecating the current metrics in Strimzi CO in version 0.45 and removing them in version 0.49 to give users enough time adjusting their monitoring if needed.
 
 ## Rejected alternatives
 
-Implementing them inside of each operator (CO, TO, UO) which leads to enourmous metrics exported by each component as discussed in this [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9802).
+Implementing them inside each operator (CO, TO, UO) which leads to enormous metrics exported by each component as discussed in this [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/9802).
