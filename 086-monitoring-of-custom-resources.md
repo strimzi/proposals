@@ -18,14 +18,15 @@ Strimzi already provides example configurations being compatible with the promet
 
 But in general, if a deployed Kubernetes resource is having a problem or a deprecated configuration is used, you want to get notified about that and can fix the problem, afterwards.
 Other tools like Flux handles the monitoring of CRs via KSM like documented in their [documentation](https://fluxcd.io/flux/monitoring/custom-metrics/).
-In addition Flux provides an [example repository](https://github.com/fluxcd/flux2-monitoring-example) for configuring KSM as part of [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart.
+In addition, Flux provides an [example repository](https://github.com/fluxcd/flux2-monitoring-example) for configuring KSM as part of [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart.
 But the required configuration is just being part of the ConfigMap used by KSM as shown by @im-konge in this [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/10276#issuecomment-2276088493).
 
 ## Proposal
 
 So in order to have a monitoring in place for all CRs and implementing them in a scalable and Kubernetes native way KSM can be used.
 KSM is (mostly) deployed via a simple Kubernetes `Deployment` and querries the Kubernetes api for e.g. the status object of a Kubernetes resource indicating that the CR having a problem or contains a deprecated configuration.
-This can also be done for CRs exclusivly by using the `--custom-resource-state-config` flag which is helpful for e.g. `KafkaTopic`, `KafkaUser`, ... CRs.
+This can also be done for CRs exclusively by using the `--custom-resource-state-config` flag which is helpful for e.g. `KafkaTopic`, `KafkaUser`, ... CRs.
+During the initial phase when implementing this proposal, the support in the examples will be implemented at least for the existing resources for which Strimzi publishes already existing metric(s), additionally for `KafkaUser` and `KafkaTopic` custom resources.
 
 ### Deployment
 
@@ -36,7 +37,7 @@ In general, an example ConfigMap should be provided in the examples directory of
 
 For YAML users the ConfigMap works fine when creating a dedicated deployment.
 
-This works also fine when implement the configuration inside of [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart.
+This works also fine when implement the configuration inside [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart.
 
 For (all other) Helm users, this should be left to the user implementing the KSM based monitoring, as there are many different Helm charts but all of them will handle the same ConfigMap in the end.
 This could be explained in a Blog Post with a static version of the [prometheus-community kube-state-metrics Helm chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics/) at least once.
