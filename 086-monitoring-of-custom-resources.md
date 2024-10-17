@@ -51,11 +51,12 @@ The only affected projects are:
 
 ## Compatibility
 
-TODO need input about already implemented metrics, e.g. for `Kafka` resources
+Strimzi provides the `strimzi_resource_state` metric(s) implemented in CO.
 
-The previously elaborated metrics should be deprecated and replaced in favour of KSM based metrics.
+The previously elaborated metrics(s) should be deprecated and replaced in favour of KSM based metrics.
 This also applies for PrometheusRules which should be replaced.
 The proposed way would be implementing the KSM and deprecating the current metrics in Strimzi CO in version 0.45 and removing them in version 0.49 to give users enough time adjusting their monitoring if needed.
+So there is no immediate impact for users and enough time for migration.
 
 ## Rejected alternatives
 
