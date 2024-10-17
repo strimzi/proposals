@@ -7,10 +7,18 @@ For a simple and Kubernetes native monitoring, [kube-state-metrics](https://gith
 
 All Strimzi operators (Cluster, User and Topic operators) provide metrics in Prometheus format.
 However, currently, only the Cluster Operator provides a metric (`strimzi_resource_state`) describing the state of the custom resources (whether they are ready or not).
-It provides this metric for the `Kafka`, `KafkaConnect`, `KafkaBridge`, KafkaMirrorMaker`, `KafkaMirrorMaker2`, and `KafkaRebalance` resources.
-It does not currently provide this metric for `KafkaNodePool`, `KafkaConnector`, and `StrimziPodSet` custom resources.
-The User and Topic Operators currently do not provide this metric for the `KafkaUser` and `KafkaTopic` resources.
-TODO need input for the status of other CRs and their metrics, e.g. `Kafka`, `StrimziPodSet`, `KafkaRebalance`...
+It provides this metric for the `Kafka`, `KafkaConnect`, `KafkaBridge`, `KafkaMirrorMaker`, `KafkaMirrorMaker2`, and `KafkaRebalance` custom resources.
+Currently, it does not provide this metric for `KafkaNodePool`, `KafkaConnector`, and `StrimziPodSet` custom resources.
+The User and Topic Operators currently do not provide this metric for the `KafkaUser` and `KafkaTopic` custom resources.
+Examples:
+
+```
+$ curl -s localhost:8080/metrics | grep strimzi_resource_state
+# HELP strimzi_resource_state Current state of the resource: 1 ready, 0 fail
+# TYPE strimzi_resource_state gauge
+strimzi_resource_state{kind="Kafka",name="my-cluster",reason="none",resource_namespace="myproject",} 1.0
+strimzi_resource_state{kind="KafkaConnect",name="my-connect",reason="none",resource_namespace="myproject",} 1.0
+```
 
 ## Motivation
 
@@ -67,6 +75,7 @@ data:
               generation: [ status, observedGeneration ]
               topicId: [ status, topicId ]
               topicName: [ status, topicName ]
+      - ...
 ```
 
 For YAML users the ConfigMap works fine when creating a dedicated deployment.
