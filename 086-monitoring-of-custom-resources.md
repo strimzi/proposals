@@ -85,7 +85,7 @@ This works also fine when implement the configuration inside [kube-prometheus-st
 For (all other) Helm users, this should be left to the user implementing the KSM based monitoring, as there are many different Helm charts but all of them will handle the same ConfigMap in the end.
 This could be explained in a Blog Post with a static version of the [prometheus-community kube-state-metrics Helm chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics/) at least once.
 
-In addition, example `PrometheusRules` should be defined for all CRs for having a problem or uses a deprecated configuration in a simple way, so that a cluster operator can have a look for an error message in the status object of the CR.
+In addition, Strimzi will define example `PrometheusRules` for all CRs for having a problem or uses a deprecated configuration in a simple way, so that a cluster operator can have a look for an error message in the status object of the CR.
 [This PR](https://github.com/strimzi/strimzi-kafka-operator/pull/10277) could be used as an implementation idea.
 
 ## Affected/not affected projects
