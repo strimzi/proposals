@@ -100,10 +100,14 @@ Strimzi provides the `strimzi_resource_state` metric(s) implemented in CO.
 The previously elaborated metrics(s) should be deprecated and replaced in favor of KSM based metrics which means that KSM will be responsible for providing these metrics instead of CO.
 Due to this change, the metric names, labels and format will change.
 Example for a `KafkaUser` metric:
-`strimzi_kafka_user_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="KafkaUser",customresource_version="v1beta2",exported_namespace="kafka",generation="6",name="my-kafka-user",ready="True",secret="my-kafka-user",username="CN=my-kafka-user"} 1`
+```
+strimzi_kafka_user_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="KafkaUser",customresource_version="v1beta2",exported_namespace="kafka",generation="6",name="my-kafka-user",ready="True",secret="my-kafka-user",username="CN=my-kafka-user"} 1
+```
 
 Example for a `KafkaTopic` metric:
-`strimzi_kafka_topic_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="KafkaTopic",customresource_version="v1beta2",exported_namespace="kafka",generation="1",name="my-kafka-topic",partitions="12",ready="True",replicas="3",topicId="asdfasdfasdfasdf",topicName="my-kafka-topic"} 1`
+```
+strimzi_kafka_topic_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="KafkaTopic",customresource_version="v1beta2",exported_namespace="kafka",generation="1",name="my-kafka-topic",partitions="12",ready="True",replicas="3",topicId="asdfasdfasdfasdf",topicName="my-kafka-topic"} 1
+```
 This also applies for PrometheusRules which should be replaced.
 The proposed way would be implementing the KSM and deprecating the current metrics in Strimzi CO in version 0.45 and removing them in version 0.49 to give users enough time adjusting their monitoring if needed.
 So there is no immediate impact for users and enough time for migration.
