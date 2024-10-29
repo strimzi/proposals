@@ -78,7 +78,7 @@ data:
       - ...
 ```
 
-For YAML users the ConfigMap works fine when creating a dedicated deployment.
+For users deploying Kubernetes manifests as plain YAML, the ConfigMap works fine when creating a dedicated deployment of KSM.
 
 This works also fine when implement the configuration inside [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart.
 
