@@ -97,7 +97,8 @@ The only affected projects are:
 
 Strimzi provides the `strimzi_resource_state` metric(s) implemented in CO.
 
-The previously elaborated metrics(s) should be deprecated and replaced in favour of KSM based metrics.
+The previously elaborated metrics(s) should be deprecated and replaced in favor of KSM based metrics which means that KSM will be responsible for providing these metrics instead of CO.
+Due to this change, the metric names, labels and format will change.
 This also applies for PrometheusRules which should be replaced.
 The proposed way would be implementing the KSM and deprecating the current metrics in Strimzi CO in version 0.45 and removing them in version 0.49 to give users enough time adjusting their monitoring if needed.
 So there is no immediate impact for users and enough time for migration.
