@@ -102,6 +102,11 @@ Due to this change, the metric names, labels and format will change.
 
 The pattern for new metrics will look like `strimzi_` + `<custom_resource>` + `_resource_info{<all_exposed_fields>}`
 
+Example for a `Kafka` metric:
+```
+strimzi_kafka_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="Kafka",customresource_version="v1beta2",exported_namespace="kafka",generation="1",kafka_metadata_state="KRaft",kafka_metadata_version="3.8-IV0",kafka_version="3.8.0",name="my-kafka-cluster",cluster_id="asdfasdfasdfasdf",operator_last_successful_version="0.43.0",ready="True"}
+```
+
 Example for a `KafkaUser` metric:
 ```
 strimzi_kafka_user_resource_info{customresource_group="kafka.strimzi.io",customresource_kind="KafkaUser",customresource_version="v1beta2",exported_namespace="kafka",generation="6",name="my-kafka-user",ready="True",secret="my-kafka-user",username="CN=my-kafka-user"} 1
