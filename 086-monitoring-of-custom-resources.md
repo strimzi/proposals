@@ -100,7 +100,7 @@ Strimzi provides the `strimzi_resource_state` metric(s) implemented in CO.
 The previously elaborated metrics(s) should be deprecated and replaced in favor of KSM based metrics which means that KSM will be responsible for providing these metrics instead of CO.
 Due to this change, the metric names, labels and format will change.
 
-The pattern for new metrics will look like `strimzi_` + `custom_resource` + `_resource_info{all_exposed_fields}`
+The pattern for new metrics will look like `strimzi_` + `<custom_resource>` + `_resource_info{<all_exposed_fields>}`
 
 Example for a `KafkaUser` metric:
 ```
