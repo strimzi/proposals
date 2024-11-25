@@ -73,6 +73,7 @@ The only affected project is the Cluster Operator, in particular Kafka Connect a
 ## Compatibility
 
 This change is fully backwards compatible as no further restrictions are created by the `/health` endpoint.
+The `/` endpoint will still be available, just not used for liveness and readiness probes.
 
 ## Rejected alternatives
 
