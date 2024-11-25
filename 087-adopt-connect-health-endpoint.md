@@ -1,8 +1,7 @@
 # Adopt the Kafka Connect health check endpoint
 
 In a Kubernetes node, the kubelet component uses the configured liveness probe to know when to restart a container (i.e. deadlock).
-Instead, it uses the configured readiness probe to know when a container is ready to start accepting traffic (i.e. startup phase completed).
-A common pattern for liveness probes is to use the same HTTP endpoint as for readiness probes.
+Additionally, it uses the configured readiness probe to know when a container is ready to start accepting traffic.
 
 A Kafka Connect health check HTTP endpoint is available since Kafka 3.9.0 release ([KIP-1017](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1017%3A+Health+check+endpoint+for+Kafka+Connect)).
 This proposal describes a possible approach for adopting the health check endpoint for Kafka Connect and Mirror Maker 2 components.
@@ -14,7 +13,7 @@ Strimzi users can deploy Kafka Connect in distributed mode by simply creating a 
 A `MirrorMaker2` resource can be used to mirror data between Kafka clusters, and it is reconciled reusing the Kafka Connect logic.
 Both of these components use the `/` HTTP (root) endpoint for liveness and readiness probes on port 8083 (rest-api).
 
-This is the default HTTP probe configuration shared by all components:
+This is the default HTTP probe configuration shared by both components:
 
 | Property name       | Default value | Description                                                                                      |
 |---------------------|---------------|--------------------------------------------------------------------------------------------------|
@@ -26,7 +25,7 @@ This is the default HTTP probe configuration shared by all components:
 
 Strimzi does not support the HTTPs protocol for Kafka Connect REST API ([KIP-208](https://cwiki.apache.org/confluence/display/KAFKA/KIP-208%3A+Add+SSL+support+to+Kafka+Connect+REST+interface)).
 
-Example output with `/` endpoint:
+Example output with `/` endpoint (probes only care about the HTTP response status code):
 
 ```sh
 $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-api:8083 | jq
@@ -46,7 +45,7 @@ If the worker has not yet completed the startup phase, or it is unable to respon
 All Kafka Connect endpoints have a timeout of 90 seconds, with the exception of the `/health` endpoint where it is hardcoded to 10 seconds for faster unhealty worker detection.
 Unlike the `/` endpoint, the `/health` endpoint response message includes error details that can help with troubleshooting.
 
-Example output with `/health` endpoint:
+Example output with `/health` endpoint (probes only care about the HTTP response status code):
 
 ```sh
 $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-api:8083/health | jq
@@ -58,14 +57,11 @@ $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-a
 
 ## Proposal
 
-Strimzi will support the Kafka 3.8 branch for an extended period of time ([SIP-77](https://github.com/strimzi/proposals/blob/main/077-support-for-kafka-4.0.md#extended-support-for-kafka-39)) due to the upcoming major Kafka release.
+Strimzi supports both Kafka 3.8 and 3.9 branches.
 
-The `/health` endpoint will be used for Kafka Connect and Mirror Maker 2 components only when the following conditions will be true at the same time:
+The `/health` endpoint will be used for both readiness and liveness probes of Kafka Connect and Mirror Maker 2 components only when `.spec.version` is either null or doesn't start with "3.8".
 
-1. `.spec.image` is null
-2. `.spec.version` is either null or doesn't start with "3.8"
-
-When Kafka 3.8 branch will be out of support, we will be able to get rid of this logic, and always use the `/health` endpoint.
+When Kafka 3.8 branch will be out of support, we will be able to get rid of the 3.8 fallback logic, and always use the `/health` endpoint.
 Unit tests related to this feature will fail when Kafka 3.8 support will be removed from the code base.
 
 Default liveness and readiness probes configuration won't change.
@@ -81,4 +77,4 @@ This change is fully backwards compatible as no further restrictions are created
 ## Rejected alternatives
 
 Wait until Kafka 3.8 is out of support in Strimzi and then switch from `/` to `/health`.
-It is important to adopt new Kafka features as early as possible, and this approach would add a big delay considering Kafka 3.8 extended support.
+It is important to adopt new Kafka features as early as possible.
