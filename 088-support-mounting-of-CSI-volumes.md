@@ -51,6 +51,7 @@ For example, to mount a Cert Manager certificate in Kafka Connect, users can use
 
 This configuration uses the cert-manager CSI driver to generate a new certificate with the `my-ca` Issuer, and mount it in the `/mnt/certificate/` path. 
 The `dns-names` attribute specifies the DNS names the certificate will be requested for.
+The `readOnly: true` flag specifies that this volume is read-only.
 
 ## Affected projects
 
