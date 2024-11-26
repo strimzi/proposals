@@ -85,4 +85,4 @@ Note: pod ready time does not include the image pull time, and response time is 
 ## Rejected alternatives
 
 Wait until Kafka 3.8 branch is out of support in Strimzi and then switch to `/health`.
-This approach is also fine, but we want to make new Kafka features available in Strimzi as early as possible.
+This approach is fine, but we want to make new Kafka features available in Strimzi as early as possible.
