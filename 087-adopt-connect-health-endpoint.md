@@ -15,13 +15,13 @@ Both of these components use the `/` HTTP (root) endpoint for liveness and readi
 
 This is the default HTTP probe configuration shared by both components:
 
-| Property name       | Default value | Description                                                                                      |
-|---------------------|---------------|--------------------------------------------------------------------------------------------------|
-| initialDelaySeconds | 60            | The initial delay before first the health is first checked.                                      |
-| timeoutSeconds      | 5             | The timeout for each attempted health check.                                                     |
-| periodSeconds       | 5             | The timeout for each attempted health check.                                                     |
-| successThreshold    | 1             | Minimum consecutive successes for the probe to be considered successful after having failed.     |
-| failureThreshold    | 3             | Minimum consecutive failures for the probe to be considered failed after having succeeded.       |
+| Property name       | Default value | Description                                                                                  |
+|---------------------|---------------|----------------------------------------------------------------------------------------------|
+| initialDelaySeconds | 60            | The initial delay before first the health is first checked.                                  |
+| timeoutSeconds      | 5             | The timeout for each attempted health check.                                                 |
+| periodSeconds       | 10            | How often to perform the probe.                                                              |
+| successThreshold    | 1             | Minimum consecutive successes for the probe to be considered successful after having failed. |
+| failureThreshold    | 3             | Minimum consecutive failures for the probe to be considered failed after having succeeded.   |
 
 Strimzi does not support the HTTPs protocol for Kafka Connect REST API ([KIP-208](https://cwiki.apache.org/confluence/display/KAFKA/KIP-208%3A+Add+SSL+support+to+Kafka+Connect+REST+interface)).
 
@@ -72,10 +72,17 @@ The only affected project is the Cluster Operator, in particular Kafka Connect a
 
 ## Compatibility
 
-This change is fully backwards compatible as no further restrictions are created by the `/health` endpoint.
-The `/` endpoint will still be available, just not used for liveness and readiness probes.
+This change is backwards compatible, and there should be no need to update Kafka Connect and Mirror Maker 2 probe configurations.
+
+The following test results show that there isn't a significant difference in performance between the `/health` and `/` endpoints.
+Note: pod ready time does not include the image pull time, and response time is computed as 95p over 200 requests with 10 seconds period.
+
+| Endpoint | Pod ready time in seconds | Response time in ms |
+|----------|---------------------------|---------------------|
+| /        | 65                        | 3.0286              |
+| /health  | 62                        | 3.7525              |
 
 ## Rejected alternatives
 
-Wait until Kafka 3.8 is out of support in Strimzi and then switch from `/` to `/health`.
-It is important to adopt new Kafka features as early as possible.
+Wait until Kafka 3.8 branch is out of support in Strimzi and then switch to `/health`.
+This approach is also fine, but we want to make new Kafka features available in Strimzi as early as possible.
