@@ -10,7 +10,7 @@ This proposal describes a possible approach for adopting the health check endpoi
 
 Kafka Connect provides a REST API for managing connectors.
 Strimzi users can deploy Kafka Connect in distributed mode by simply creating a `KafkaConnect` resource.
-A `MirrorMaker2` resource can be used to mirror data between Kafka clusters, and it is reconciled reusing the Kafka Connect logic.
+A `KafkaMirrorMaker2` resource can be used to mirror data between Kafka clusters, and it is reconciled reusing the Kafka Connect logic.
 Both of these components use the `/` HTTP (root) endpoint for liveness and readiness probes on port 8083 (rest-api).
 
 This is the default HTTP probe configuration shared by both components:
