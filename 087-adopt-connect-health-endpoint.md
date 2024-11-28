@@ -4,7 +4,7 @@ In a Kubernetes node, the kubelet component uses the configured liveness probe t
 Additionally, it uses the configured readiness probe to know when a container is ready to start accepting traffic.
 
 A Kafka Connect health check HTTP endpoint is available since Kafka 3.9.0 release ([KIP-1017](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1017%3A+Health+check+endpoint+for+Kafka+Connect)).
-This proposal describes a possible approach for adopting the health check endpoint for Kafka Connect and Mirror Maker 2 components.
+This proposal describes a possible approach for adopting the health check endpoint for Kafka Connect and MirrorMaker 2 components.
 
 ## Current situation
 
@@ -38,7 +38,7 @@ $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-a
 
 ## Motivation
 
-Using the `/` endpoint for Kafka Connect and Mirror Maker 2 health checks is a common approach, but it does not actually test for readiness, because these requests can be completed before the worker is started.
+Using the `/` endpoint for Kafka Connect and MirrorMaker 2 health checks is a common approach, but it does not actually test for readiness, because these requests can be completed before the worker is started.
 Instead, the `/health` endpoint waits for the worker startup phase to complete, which is made of internal topics creation if they do not exists, internal topics full read, and cluster join.
 
 If the worker has not yet completed the startup phase, or it is unable to respond in time, the response will have a 5xx status code.
@@ -57,22 +57,20 @@ $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-a
 
 ## Proposal
 
-Strimzi supports both Kafka 3.8 and 3.9 branches.
+Strimzi currently supports both Kafka 3.8 and 3.9 releases.
 
-The `/health` endpoint will be used for both readiness and liveness probes of Kafka Connect and Mirror Maker 2 components only when `.spec.version` is either null or doesn't start with "3.8".
+As the `/health` endpoint was introduced in Kafka 3.9, we will wait for Kafka 3.8 to go out of support in Strimzi before doing the switch.
+A notable change will be added to the changelog to inform the users.
 
-When Kafka 3.8 branch will be out of support, we will be able to get rid of the 3.8 fallback logic, and always use the `/health` endpoint.
-Unit tests related to this feature will fail when Kafka 3.8 support will be removed from the code base.
-
-Default liveness and readiness probes configuration won't change.
+The configuration options for liveness and readiness probes won't change.
 
 ## Affected/not affected projects
 
-The only affected project is the Cluster Operator, in particular Kafka Connect and Mirror Maker 2 components.
+The only affected project is the Cluster Operator, in particular Kafka Connect and MirrorMaker 2 components.
 
 ## Compatibility
 
-This change is backwards compatible, and there should be no need to update Kafka Connect and Mirror Maker 2 probe configurations.
+This change is backwards compatible, and there should be no need to update Kafka Connect and MirrorMaker 2 probe configurations.
 
 The following test results show that there isn't a significant difference in performance between the `/health` and `/` endpoints.
 Note: pod ready time does not include the image pull time, and response time is computed as 95p over 200 requests with 10 seconds period.
@@ -84,5 +82,5 @@ Note: pod ready time does not include the image pull time, and response time is 
 
 ## Rejected alternatives
 
-Wait until Kafka 3.8 branch is out of support in Strimzi and then switch to `/health`.
-This approach is fine, but we want to make new Kafka features available in Strimzi as early as possible.
+Switch to the `/health` endpoint while still supporting Kafka 3.8.
+This would allow to get the new feature early, but at the cost of additional complexity.
