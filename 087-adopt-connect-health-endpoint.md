@@ -60,6 +60,7 @@ $ kubectl exec my-cluster-kafka-0 -- curl -s http://my-connect-cluster-connect-a
 Strimzi currently supports both Kafka 3.8 and 3.9 releases.
 
 As the `/health` endpoint was introduced in Kafka 3.9, we will wait for Kafka 3.8 to go out of support in Strimzi before doing the switch.
+This will happen in Strimzi 0.46 release where we will also have ZooKeeper removal and Kafka 4.0 support.
 A notable change will be added to the changelog to inform the users.
 
 The configuration options for liveness and readiness probes won't change.
@@ -83,4 +84,4 @@ Note: pod ready time does not include the image pull time, and response time is 
 ## Rejected alternatives
 
 Switch to the `/health` endpoint while still supporting Kafka 3.8.
-This would allow to get the new feature early, but at the cost of additional complexity.
+This would allow the new feature to be adopted earlier, but with the cost of additional complexity.
