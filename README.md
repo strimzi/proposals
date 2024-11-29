@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 88 | [Support for mounting CSI volumes](./088-support-mounting-of-CSI-volumes.md) |
 | 87 | [Monitoring of custom resources](./087-monitoring-of-custom-resources.md) |
 | 86 | [Archive Canary project](./086-archive-canary.md) |
 | 85 | [Configure environment variables in all containers from Secrets or Config Maps](./085-configure-env-vars-based-on-secrets-or-configmaps.md) |
