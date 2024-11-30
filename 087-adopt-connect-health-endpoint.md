@@ -1,6 +1,7 @@
 # Adopt the Kafka Connect health check endpoint
 
-In a Kubernetes node, the kubelet component uses the configured liveness probe to know when to restart a container (i.e. deadlock).
+In a Kubernetes node, the kubelet component uses the configured liveness probe to know when to restart a container.
+With a suitably written application this can be used to restart a container if the applications process enters an illegal state (e.g. deadlock).
 Additionally, it uses the configured readiness probe to know when a container is ready to start accepting traffic.
 
 A Kafka Connect health check HTTP endpoint is available since Kafka 3.9.0 release ([KIP-1017](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1017%3A+Health+check+endpoint+for+Kafka+Connect)).
