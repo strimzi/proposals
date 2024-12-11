@@ -21,7 +21,7 @@ Allowing customer-specific resources to be deployed in separate namespaces  simp
 
 ## Proposal
 
-The next proposal retake this first proposal [issue #1206](https://github.com/strimzi/strimzi-kafka-operator/issues/1206) but attempt to apply it on all resources (`kafkaUser, KafkaTopic and KafkaConnector`).
+This proposal addresses [issue #1206](https://github.com/strimzi/strimzi-kafka-operator/issues/1206), but attempts to apply it on `kafkaUser, KafkaTopic, and KafkaConnector` resources.
 
 
 ### KafkaTopic
