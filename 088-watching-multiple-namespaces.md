@@ -6,7 +6,7 @@ For me, the goal of a kubernetes operator it's the capacity to create and config
 
 ## Current situation
 
-For now, Strimzi has one capacity. In facts, for `KafkaUser` and `KafkaTopic` Strimzi deploy a `user-operator` and `topic-operator` in the namespace where the `Kafka` resource resides.
+Currently, Strimzi has limited support for managing resources across namespaces. For `KafkaUser` and `KafkaTopic` resources, Strimzi deploys the User Operator and Topic Operator in the same namespace as the `Kafka` resource.
 For `KafkaConnector` it's almost the same thing except that `cluster-operator` has the capacity to detect `kafkaConnector` resources in all namespaces, but after have found a `KafkaConnector` resource it search a `KafkaConnect` cluster in the namespace of this ressources and it doesn't exists because the `KafkaConnector` is deploy in the same namespace of `Kafka` resource.
 
 ## Motivation
