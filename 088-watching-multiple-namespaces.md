@@ -2,7 +2,8 @@
 
 Issues [#5895](https://github.com/strimzi/strimzi-kafka-operator/issues/5895) and [#879](https://github.com/strimzi/strimzi-kafka-operator/issues/879)  discuss the need to declare a `KafkaUser` or `kafkaTopic` in namespaces other than the one where the User Operator is deployed, which also applies to `KafkaConnector` resources.
 First proposal on `KafkaTopic` resource: [issue #1206](https://github.com/strimzi/strimzi-kafka-operator/issues/1206)
-For me, the goal of a kubernetes operator it's the capacity to create and configure multiples ressources accross kubernetes namespaces.
+The goal of a Kubernetes operator is to enable the creation and configuration of multiple resources across Kubernetes namespaces. 
+This proposal seeks to extend that capability to `KafkaUser`, `KafkaTopic`, and `KafkaConnector` resources so that they can be effectively managed in namespaces beyond where the operator is deployed.
 
 ## Current situation
 
