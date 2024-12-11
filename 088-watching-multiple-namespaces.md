@@ -12,7 +12,7 @@ For `KafkaConnector` it's almost the same thing except that `cluster-operator` h
 
 ## Motivation
 
-In a multi-tenant Kubernetes cluster, it'as a common practice to define authorization at namespace level or to deploy many application in different namespace. In the case where `Kafka` (Generaly it's case) it's mutualized for many applications and/or for many customers, it's more flexible and secure for deployed each applications in a dedicated namespace.
+In a multi-tenant Kubernetes cluster, it is common practice to define authorization at namespace level or to deploy many applications in different namespaces. In scenarios where a Kafka cluster is shared among multiple applications or customers, it is more flexible and secure to deploy each application in its own dedicated namespace.
 
 Strimzi allows us to create a Helm chart for our applications that automatically deploy and configure customer-specific `KafkaUser`, `kafkaTopic` and `KafkaConnector` resources. However, all customer resources must reside in the same namespace where the `Kafka` resource is deployed. This means all customer-specific resources must be managed in the same namespace, which becomes difficult to manage at scale with multiple customers—whether it’s a single team managing hundreds of namespaces with different applications, users, and topics, or multiple teams wanting to self-service their topics and users in a shared Kafka cluster across namespaces.
 
