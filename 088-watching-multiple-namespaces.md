@@ -24,7 +24,7 @@ The next proposal retake this first proposal [issue #1206](https://github.com/st
 
 ### KafkaTopic
 
-Create a new `CustomResourceDefinition` to handle topics that are created in namespaces, called `KafkaNamespaceTopic`. This CRD will allow the user to create a topic that will be automatically namespaced within Kafka by the Topic Operator. It will encode the actual topic name using the Kubernetes namespace the resource resides, and either the `metadata.name` or `spec.topicName` (if defined) of the instance of a `KafkaNamespaceTopic`.
+Create a new `CustomResourceDefinition` to handle topics that are created in namespaces, called `KafkaNamespaceTopic`. This CRD will allow the user to create a topic that will be automatically namespaced within Kafka by the Topic Operator. It will encode the actual topic name using the Kubernetes namespace in which the resource resides, and either the `metadata.name` or `spec.topicName` (if defined) of the instance of a `KafkaNamespaceTopic`.
 
 `{Kubernetes namespace name}.{metadata.name|spec.topicName}`
 
