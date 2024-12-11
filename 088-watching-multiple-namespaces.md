@@ -8,7 +8,7 @@ This proposal seeks to extend that capability to `KafkaUser`, `KafkaTopic`, and 
 ## Current situation
 
 Currently, Strimzi has limited support for managing resources across namespaces. For `KafkaUser` and `KafkaTopic` resources, Strimzi deploys the User Operator and Topic Operator in the same namespace as the `Kafka` resource.
-For `KafkaConnector` it's almost the same thing except that `cluster-operator` has the capacity to detect `kafkaConnector` resources in all namespaces, but after have found a `KafkaConnector` resource it search a `KafkaConnect` cluster in the namespace of this ressources and it doesn't exists because the `KafkaConnector` is deploy in the same namespace of `Kafka` resource.
+For `KafkaConnector` resources, the Cluster Operator can detect them across all namespaces. However, after identifying a `KafkaConnector` resource, it searches for the corresponding Kafka Connect cluster within the same namespace. This causes issues when the `KafkaConnector` is deployed in the same namespace as the Kafka resource and the required Kafka Connect cluster does not exist there.
 
 ## Motivation
 
