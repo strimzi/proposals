@@ -12,11 +12,7 @@ Being able to easily start Kafka Connect clusters would be useful for testing cl
 
 ## Proposal
 
-Create 2 new classes in the `io.strimzi.test.container` package of `test-container`:
-- `StrimziConnectCluster`: This represents a Kafka Connect cluster. This is the main API users will call to create and interact with Kafka Connect clusters.
-- `StrimziConnectContainer`: This represents a Kafka Connect worker.
-
-The 2 classes are analogous to the existing `StrimziKafkaCluster` and `StrimziKafkaContainer` classes that represent a Kafka cluster and broker respectively.
+Create one new public class in the `io.strimzi.test.container` package of `test-container` called `StrimziConnectCluster` to represent a Kafka Connect cluster. 
 
 ### StrimziConnectCluster API
 
@@ -28,10 +24,10 @@ The 2 classes are analogous to the existing `StrimziKafkaCluster` and `StrimziKa
 public class StrimziConnectCluster {
 
     /**
-     * Get collection of StrimziConnectContainer containers
-     * @return collection of StrimziConnectContainer containers
+     * Get the workers of this Kafka Connect cluster.
+     * @return collection of GenericContainer containers
      */
-    public Collection<StrimziConnectContainer> getWorkers() { }
+    public Collection<GenericContainer> getWorkers() { }
 
     /**
      * Start the Kafka Connect cluster. 
@@ -121,24 +117,19 @@ public class StrimziConnectCluster {
 }
 ```
 
-### StrimziConnectContainer
+### StrimziKafkaCluster
 
-This classes extends `GenericContainer`, so it will also expose all the usual methods such as `start()`/`stop()` to allow
-interacting with a specific worker.
+At the moment the bootstrap servers returned by `StrimziKafkaCluster.getBootstrapServers()` are meant to be used by applications running the host and they can't be used by other containers.
+To address this issue, this also proposes adding a new method to `StrimziKafkaCluster`: 
 
 ```java
 /**
- * A worker in a {@code StrimziConnectCluster} cluster.
+ * Get the bootstrap servers that containers on the same network should use to connect
+ * @return a comma separated list of Kafka bootstrap servers
  */
-public class StrimziConnectContainer extends GenericContainer<StrimziConnectContainer> {
-
-    /**
-     * Return the REST API endpoint of this worker
-     * @return the REST API endpoint
-     */
-    public String getRestEndpoint() { }
-}
+public String getNetworkBootstrapServers() { }
 ```
+
 
 ## Affected projects
 
