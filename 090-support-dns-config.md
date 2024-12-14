@@ -6,9 +6,9 @@ This proposal describes the motivation for adding optional nameserver configurat
 
 ## Current situation
 
-Nameserver configuration for Strimzi custom resources falls back on defaults that apply to the underlying Kubernetes/Openshift Pod resources. 
-Defaults for these underlying resources are defined at the level of a Pod. 
-The defaults are a dnsPolicy of ClusterFirst without any further specified dnsConfig.
+Strimzi relies on the default DNS settings provided by Kubernetes or OpenShift pods.
+By default, these pods use a DNS policy called `ClusterFirst`,  which prioritizes resolving names within the Kubernetes cluster. 
+No additional DNS configuration is specified at the pod level.
 These defaults assure that domain names first undergo cluster domain resolution before checking external sources.
 For domains that don't match the cluster suffix, queries are forwarded to the upstream DNS servers defined by the node or CoreDNS configuration.
 Strimzi resources thereby don't currently expose configuration that allows customization of name resolution on a resource level.
