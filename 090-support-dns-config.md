@@ -1,5 +1,3 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Support DNS configuration
 
 This proposal describes the motivation for adding optional nameserver configuration to Strimzi custom resources.
@@ -32,11 +30,38 @@ Strimzi's CRDs generated from from PodTemplate will thereby allow for user input
 By appending these dnsConfig and dnsPolicy properties to WorkloadUtils in the Strimzi cluster operator for PodBuilder and PodTemplateSpecBuilder so that these will propagate to Pods controlled by the operator, the propagation from Strimzi CRD to the Pod resource will be accounted for.
 Provisioned Pods will thereby utilize name resolution configuration based on the user input if specified and fall back to defaults, similar to the current situation, in case no dnsConfig or dnsPolicy is specified by the user. 
 
+An example configuration could look as follows:
+
+```yaml
+kind: KafkaMirrorMaker2
+spec:
+  template:
+    pod:
+      dnsPolicy: "None"
+      dnsConfig:
+        nameservers:
+          - 192.0.2.1 
+        searches:
+          - ns1.svc.cluster-domain.example
+          - my.dns.search.suffix
+        options:
+          - name: ndots
+            value: "2"
+          - name: edns0y:
+```
+When the Pod above is created, the container gets the following contents in its /etc/resolv.conf file:
+
+```
+nameserver 192.0.2.1
+search ns1.svc.cluster-domain.example my.dns.search.suffix
+options ndots:2 edns0
+```
 
 ## Affected/not affected projects
 
-io.strimzi.api for the PodTemplate.
-io.strimzi.cluster-operator for resources that utilize PodTemplate: kafka, kafkabridge, kafkaconnect, kafkamirromaker, kafkamirrormaker2, kafkanodepool.
+Affected:
+- io.strimzi.api for the PodTemplate.
+- io.strimzi.cluster-operator for resources that utilize PodTemplate: kafka, kafkabridge, kafkaconnect, kafkamirrormaker2, kafkanodepool.
 
 ## Compatibility
 
