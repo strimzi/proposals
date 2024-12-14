@@ -22,7 +22,12 @@ This supports scenarios where resources in different namespaces/projects—while
 
 ## Proposal
 
-By appending Strimzi's common PodTemplate in the Strimzi api with additional properties dnsPolicy (to convey ClusterFirst, ClusterfirstWithHostNet, Default and None as name resolution policies) and dnsConfig (to specify nameservers, conditional subdomains to search for and options to decide resolution behaviors), the system configuration file /etc/recolv.conf for Strimzi resources can be controlled, thereby deciding how domain name resolution should be performed on a resource level. 
+By adding `dnsPolicy` and `dnsConfig` properties to Strimzi's common `PodTemplate` in the Strimzi API, users can control domain name resolution for Strimzi resources.
+
+- `dnsPolicy` can specify resolution policies like `ClusterFirst`, `ClusterFirstWithHostNet`, `Default`, and `None`.
+- `dnsConfig` can allow users to define nameservers, search domains, and resolution options.
+
+This provides more control over the `/etc/resolv.conf` configuration for Strimzi resources, allowing domain name resolution to be customized at the resource level.
 Strimzi's CRDs generated from from PodTemplate will thereby allow for user input for name resolution customization.
 By appending these dnsConfig and dnsPolicy properties to WorkloadUtils in the Strimzi cluster operator for PodBuilder and PodTemplateSpecBuilder so that these will propagate to Pods controlled by the operator, the propagation from Strimzi CRD to the Pod resource will be accounted for.
 Provisioned Pods will thereby utilize name resolution configuration based on the user input if specified and fall back to defaults, similar to the current situation, in case no dnsConfig or dnsPolicy is specified by the user. 
