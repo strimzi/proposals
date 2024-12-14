@@ -9,7 +9,7 @@ This proposal describes the motivation for adding optional nameserver configurat
 Strimzi relies on the default DNS settings provided by Kubernetes or OpenShift pods.
 By default, these pods use a DNS policy called `ClusterFirst`,  which prioritizes resolving names within the Kubernetes cluster. 
 No additional DNS configuration is specified at the pod level.
-These defaults assure that domain names first undergo cluster domain resolution before checking external sources.
+These defaults resolve domain names within the cluster first, before checking external sources.
 For domains that don't match the cluster suffix, queries are forwarded to the upstream DNS servers defined by the node or CoreDNS configuration.
 Strimzi resources thereby don't currently expose configuration that allows customization of name resolution on a resource level.
 
