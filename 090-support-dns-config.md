@@ -17,7 +17,8 @@ Strimzi resources thereby don't currently expose configuration that allows custo
 
 Certain configuration of Kubernetes/Openshift clusters require Strimzi resources that are deployed within different namespaces/projects to forward DNS queries for external resources to different nameservers than the one that is configured centralized in CoreDNS or on the node hosting the resource.
 For example a dev and stage environment/namespace/project hosted in the same Kubernetes/Openshift cluster might need to target seperate target clusters for similar subdomains but are not able to override the nameserver used as this is controlled centrally for both namespaces/projects. 
-By supporting the customization of nameserver configuration for Strimzi resources on the level of the resource this will allow to target specific nameservers. Thereby, it allows scenarios where resources in different namespace/projects, allthough sharing the source cluster network, to target matching target environments which are on segregated networks.
+By supporting the customization of nameserver configuration for Strimzi resources on the level of the resource this will allow the targeting of specific nameservers. 
+This supports scenarios where resources in different namespaces/projects—while sharing the source cluster network—can still target matching target environments on separate, segregated networks.
 
 ## Proposal
 
