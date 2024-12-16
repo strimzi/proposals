@@ -47,7 +47,7 @@ spec:
         options:
           - name: ndots
             value: "2"
-          - name: edns0y:
+          - name: edns0
 ```
 When the Pod above is created, the container gets the following contents in its /etc/resolv.conf file:
 
