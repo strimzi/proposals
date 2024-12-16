@@ -66,7 +66,3 @@ Affected:
 ## Compatibility
 
 Non-specified dnsConfig and dnsPolicy will not propagate these properties to the Pod resources and thereby comply to the current situation. 
-
-## Rejected alternatives
-
--
