@@ -60,8 +60,8 @@ options ndots:2 edns0
 ## Affected/not affected projects
 
 Affected:
-- io.strimzi.api for the PodTemplate.
-- io.strimzi.cluster-operator for resources that utilize PodTemplate: kafka, kafkabridge, kafkaconnect, kafkamirrormaker2, kafkanodepool.
+- `api` module in the operator project
+- `cluster-operator` module in the operator project
 
 ## Compatibility
 
