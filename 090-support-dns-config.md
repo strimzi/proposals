@@ -52,9 +52,9 @@ spec:
 When the Pod above is created, the container gets the following contents in its /etc/resolv.conf file:
 
 ```
-nameserver 192.0.2.1
-search ns1.svc.cluster-domain.example my.dns.search.suffix
-options ndots:2 edns0
+search dev.svc.cluster.local svc.cluster.local cluster.local
+nameserver 172.30.127.142
+options ndots:5
 ```
 
 ## Affected/not affected projects
