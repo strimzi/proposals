@@ -25,6 +25,7 @@ public class StrimziConnectCluster {
 
     /**
      * Get the workers of this Kafka Connect cluster.
+     *
      * @return collection of GenericContainer containers
      */
     public Collection<GenericContainer> getWorkers() { }
@@ -41,7 +42,8 @@ public class StrimziConnectCluster {
     public void stop() { }
 
     /**
-     * Return the REST API endpoint of one of the available workers
+     * Return the REST API endpoint of one of the available workers.
+     *
      * @return the REST API endpoint
      */
     public String getRestEndpoint() { }
@@ -57,15 +59,16 @@ public class StrimziConnectCluster {
     public static class StrimziConnectClusterBuilder {
 
         /**
-         * Sets the Kafka cluster the Kafka Connect cluster will use to.
+         * Set the Kafka cluster the Kafka Connect cluster will use to.
+         *
          * @param kafkaCluster the {@link StrimziKafkaCluster} instance
          * @return the current instance of {@code StrimziConnectClusterBuilder} for method chaining
          */
         public StrimziConnectClusterBuilder withKafkaCluster(StrimziKafkaCluster kafkaCluster) { }
 
         /**
-         * Sets the number of Kafka Connect workers in the cluster.
-         * If not called, the cluster has a single broker
+         * Set the number of Kafka Connect workers in the cluster.
+         * If not called, the cluster has a single worker.
          *
          * @param workersNum the number of Kafka Connect workers
          * @return the current instance of {@code StrimziConnectClusterBuilder} for method chaining
@@ -73,7 +76,7 @@ public class StrimziConnectCluster {
         public StrimziConnectClusterBuilder withNumberOfWorkers(int workersNum) { }
 
         /**
-         * Adds additional Kafka Connect configuration parameters.
+         * Add additional Kafka Connect configuration parameters.
          * These configurations are applied to all workers in the cluster.
          *
          * @param additionalConnectConfiguration a map of additional Kafka Connect configuration options
@@ -82,7 +85,7 @@ public class StrimziConnectCluster {
         public StrimziConnectClusterBuilder withAdditionalConnectConfiguration(Map<String, String> additionalConnectConfiguration) { }
 
         /**
-         * Specifies the Kafka version to be used for the Connect workers in the cluster.
+         * Specify the Kafka version to be used for the Connect workers in the cluster.
          * If not called, the latest Kafka version available from {@link KafkaVersionService} will be used.
          *
          * @param kafkaVersion the desired Kafka version for the Connect cluster
@@ -91,16 +94,15 @@ public class StrimziConnectCluster {
         public StrimziConnectClusterBuilder withKafkaVersion(String kafkaVersion) { }
 
         /**
-         * Whether to include the FileStream connectors.
-         * If not called, the FileStream connectors are enabled.
+         * Disable the FileStreams connectors.
+         * If not called, the FileSteams connectors are added to plugin.path.
          *
-         * @param includeFileConnectors Use false to not include the FileStream connectors
          * @return the current instance of {@code StrimziConnectClusterBuilder} for method chaining
          */
-        public StrimziConnectClusterBuilder withIncludeFileConnectors(boolean includeFileConnectors) { }
+        public StrimziConnectClusterBuilder withoutFileConnectors() { }
 
         /**
-         * Specifies the group.id of the Connect cluster.
+         * Specify the group.id of the Connect cluster.
          *
          * @param groupId the group id
          * @return the current instance of {@code StrimziConnectClusterBuilder} for method chaining
@@ -108,7 +110,7 @@ public class StrimziConnectCluster {
         public StrimziConnectClusterBuilder withGroupId(String groupId) { }
 
         /**
-         * Builds and returns a {@code StrimziConnectCluster} instance based on the provided configurations.
+         * Build and return a {@code StrimziConnectCluster} instance based on the provided configurations.
          *
          * @return a new instance of {@code StrimziConnectCluster}
          */
@@ -124,7 +126,8 @@ To address this issue, this also proposes adding a new method to `StrimziKafkaCl
 
 ```java
 /**
- * Get the bootstrap servers that containers on the same network should use to connect
+ * Get the bootstrap servers that containers on the same network should use to connect.
+ *
  * @return a comma separated list of Kafka bootstrap servers
  */
 public String getNetworkBootstrapServers() { }
