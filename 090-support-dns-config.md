@@ -30,7 +30,7 @@ Strimzi's CRDs generated from from PodTemplate will thereby allow for user input
 By appending these dnsConfig and dnsPolicy properties to WorkloadUtils in the Strimzi cluster operator for PodBuilder and PodTemplateSpecBuilder so that these will propagate to Pods controlled by the operator, the propagation from Strimzi CRD to the Pod resource will be accounted for.
 Provisioned Pods will thereby utilize name resolution configuration based on the user input if specified and fall back to defaults, similar to the current situation, in case no dnsConfig or dnsPolicy is specified by the user. 
 
-An example configuration could look as follows:
+An example configuration, depending on the specific environment, could look as follows:
 
 ```yaml
 kind: KafkaMirrorMaker2
@@ -40,14 +40,14 @@ spec:
       dnsPolicy: "None"
       dnsConfig:
         nameservers:
-          - 192.0.2.1 
-        searches:
-          - ns1.svc.cluster-domain.example
-          - my.dns.search.suffix
+          - 172.30.127.142
         options:
           - name: ndots
-            value: "2"
-          - name: edns0
+            value: "5"
+        searches:
+          - dev.svc.cluster.local
+          - svc.cluster.local
+          - cluster.local
 ```
 When the Pod above is created, the container gets the following contents in its /etc/resolv.conf file:
 
