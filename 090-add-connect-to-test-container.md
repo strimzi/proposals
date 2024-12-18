@@ -122,7 +122,23 @@ public class StrimziConnectCluster {
 ### StrimziKafkaCluster
 
 At the moment the bootstrap servers returned by `StrimziKafkaCluster.getBootstrapServers()` are meant to be used by applications running the host and they can't be used by other containers.
-To address this issue, this also proposes adding a new method to `StrimziKafkaCluster`: 
+To address this issue, this also proposes adding a new method to `StrimziKafkaCluster`:
+
+```java
+/**
+ * Get the bootstrap servers that containers on the same network should use to connect.
+ *
+ * @return a comma separated list of Kafka bootstrap servers
+ */
+public String getNetworkBootstrapServers() { }
+```
+
+This method will call `getNetworkBootstrapServers()` on each broker (`StrimziKafkaContainer`) in the cluster and concatenate the results (comma separated).
+
+### StrimziKafkaContainer
+
+At the moment the bootstrap servers returned by `StrimziKafkaContainer.getBootstrapServers()` are meant to be used by applications running the host and they can't be used by other containers.
+To address this issue, this also proposes adding a new method to `StrimziKafkaContainer`:
 
 ```java
 /**
