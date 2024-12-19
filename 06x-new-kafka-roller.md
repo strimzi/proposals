@@ -22,8 +22,7 @@ The existing KafkaRoller suffers from the following shortcomings:
 - Although it is safe and straightforward to restart one broker at a time, this process is slow in large clusters ([related issue](https://github.com/strimzi/strimzi-kafka-operator/issues/8547)).
 - It does not account for partition preferred leadership. As a result, there may be more leadership changes than necessary during a rolling restart, consequently impacting clients because they would need to reconnect everytime.
 - Hard to reason about when things go wrong. The code is complex to understand and it's not easy to determine why a pod was restarted from logs that tend to be noisy.
-- Potential race condition between Cruise Control rebalance and KafkaRoller that could cause partitions under minimum in sync replica. This issue is described in more detail in the `Future Improvements` section.
-- The current code for KafkaRoller does not easily allow growth and adding new functionality due to its complexity.
+- Slowing down rolling update is not possible and this feature has been requested from users. Being able to configure how long to wait between restart of brokers is useful for clusters that are extra sensitive to rolling updates. 
 
 
 The following non-trivial fixes and changes are missing from the current KafkaRoller's KRaft implementation:
@@ -36,300 +35,159 @@ The following non-trivial fixes and changes are missing from the current KafkaRo
 
 Strimzi users have been reporting some of the issues mentioned above and would benefit from a new KafkaRoller that is designed to address the shortcomings of the current KafkaRoller.
 
-The current KafkaRoller has complex and nested conditions therefore makes it challenging for users to debug and understand actions taken on their brokers when things go wrong and configure it correctly for their use cases. It is also not particularly easy to unit test which results in insufficient test coverage for many edge cases, making it challenging to refactor safely. Therefore, refactoring becomes essential to enhance test coverage effectively. A new KafkaRoller that is redesigned to be simpler would help users to easily understand the code and configure it to their needs.
+The current code for KafkaRoller does not easily allow growth and adding new functionality such as batch rolling due to its complexity and nested conditions. It makes it challenging for users to debug and understand actions taken on their brokers when things go wrong and configure it correctly for their use cases. It is also not particularly easy to unit test which results in insufficient test coverage for many edge cases, making it challenging to refactor safely. 
 
-As you can see above, the current KafkaRoller still needs various changes and potentially more as we get more experience with KRaft and discover more issues. Adding these non trivial changes to a component that is very complex and hard to reason, is expensive and poses potential risks of introducing bugs because of tightly coupled logics and lack of testability.
+As mentioned in `Known Issues` section, the current KafkaRoller still needs various changes and potentially more as we get more experience with KRaft and discover more issues. Adding these non trivial changes to a component that is very complex and hard to reason, is expensive and poses potential risks of introducing bugs because of tightly coupled logics and lack of testability.
+
+Given the number of new features and changes related to KRaft, it is easiest to rewrite it from scratch rather than refactoring the existing component.  Rewriting with a more structured design, the process for evaluating nodes in various states would become more defined and easier to follow.
 
 ## Proposal
 
-The objective of this proposal is to introduce a new KafkaRoller with more structured design resembling a finite state machine. Given the number of new features and changes related to KRaft, it is easiest to rewrite it from scratch rather than refactoring the existing component. With a more structured design, the process for evaluating pods in various states such as not running, unready, or lacking a connection; and deciding whether to restart them would become more defined and easier to follow.
+The objective of this proposal is to introduce a new KafkaRoller with more structured design resembling a finite state machine. The finite station machine design will make it easier to introduce the following features:
+- Ability to roll brokers in parallel to speed up updates in large clusters.
+- After restarting a broker, allow it to lead the partitions it is the preferred leader for. This will help reducing the impact on clients. 
+- Ability to restart controller nodes in parallel when needed, to help recovering controller qourum.
+- Add configurable wait time between restarts to allow slowing down rolling update.
 
-KafkaRoller decisions would be informed by observations coming from different sources (e.g. Kubernetes API, KafkaAgent, Kafka Admin API). These sources will be abstracted so that KafkaRoller is not dependent on their specifics as long as it's getting the information it needs. The abstractions also enable much better unit testing.
+The new roller will have the same behaviour of the current roller but with the additional features above, however, the implementation will be different following the finite state machine design. 
 
-Nodes would be categorized based on the observed states, the roller will perform specific actions on nodes in each category. Those actions should cause a subsequent observation to cause a state transition. This iterative process continues until each node's state aligns with the desired state.
+## State Machine
 
-In addition, the new KafkaRoller will introduce an algorithm to restart brokers in parallel when safety conditions are met. These conditions ensure Kafka producer availability and minimize the impact on controllers and overall cluster stability. It will also wait for partitions to be reassigned to their preferred leaders to avoid triggering unnecessary partition leader elections.
+Nodes will be observed to transition into states and based on these states, actions will be taken on the nodes, which would result in another state transitions. The process will be repeated for each node until the desired state or the maximum number of attempts is reached. If all nodes reached the desired state, the reconciliation will succeed, otherwise it will fail. There are also some conditions that could result in early termination of the process and fail the reconciliation as well. This will be explained more later. 
+
+Observation of a node is based on different sources such as Kubernetes API, KafkaAgent and Kafka Admin API. These sources will be abstracted so that state machine is not dependent on their specifics as long as it's getting the information it needs. The abstractions also enable much better unit testing.
+
+### States
+- UNKNOWN (initial/default)
+- NOT_RUNNING 
+- NOT_READY
+- RECOVERING
+- READY (desired state)
+
+### Observation sources and information collected
+- Kubernetes API
+   - Pod is not Running but is one of CrashLoopBackOff, ImagePullBackOff, ContainerCreating and PendingAndUnschedulable
+   - Pod is Running but lacking Ready status
+   - Pod is Running and Ready
+
+- KafkaAgent: It collects and expose Kafka metric [Broker State](https://github.com/apache/kafka/blob/3.7/metadata/src/main/java/org/apache/kafka/metadata/BrokerState.java)
+   - Broker state is 2 (RECOVERY)
+   - Broker state is not 2 (RECOVERY)
+
+- Kafka Admin API
+   - Leading all preferred partitions
+   - Not leading all preferred partitions
+
+### Actions
+- `Observe` - This is a function to transition node's state.
+- `Wait and observe` - This is to repeat `Observe` function until desired state or timeout is reached.
+- `Restart` - Delete a pod via Kubernetes API and then `Wait and Observe`. This action is followed by preferred leader election trigger via Kafka Admin API for a broker node if it is not leading its preferred replicas yet.
+- `Reconfigure` - Apply configuration updates via Kafka Admin API and then `Wait and Observe`.
+- `No action` - This means we reached the desired state after taking one of the above actions or no action is needed.
 
 
-### Node State
-When a new reconciliation starts up, a context object is created for each node to store the state and other useful information used by the roller. It will have the following fields:
+### Observations -> States Map
+ | KubeAPI | KafkaAgent | States |
+ | :--------------- | :--------------- | :---------------
+ | - | - | UNKNOWN
+ | Pod is not Running | - | NOT_RUNNING 
+ | Pod is Running but lacking Ready status | Broker state != 2 | NOT_READY 
+ | Pod is Running but lacking Ready stats | Broker state == 2 | RECOVERING 
+ | Pod is Running and Ready | - | READY
 
- - <i>nodeRef</i>: NodeRef object that contains Node ID.
- - <i>currentNodeRole</i>: Currently assigned process roles for this node (e.g. controller, broker).
- - <i>lastKnownState</i>: It contains the last known state of the node based on information collected from the abstracted sources (Kubernetes API, KafkaAgent and Kafka Admin API). The table below describes the possible states.
- - <i>restartReason</i>: It is updated based on the current predicate logic passed from the `KafkaReconciler` class. For example, an update in the Kafka CR is detected.
- - <i>numRestartAttempts</i>: The value is incremented each time the node has been restarted or attempted to be restarted.
- - <i>numReconfigAttempts</i>: The value is incremented each time the node has been reconfigured or attempted to be reconfigured.
- - <i>numRetries</i>: The value is incremented each time the node is evaluated/processed but was not restarted/reconfigured due to not meeting safety conditions for example, availability check failed, log recovery or timed out waiting for pod to become ready.
- - <i>lastTransitionTime</i>: System.nanoTime of last observed state transition.
+### States -> Actions Map
+ | States | Actions 
+ | :--------------- | :--------------- 
+ | UNKNOWN | `Observe`
+ | NOT_RUNNING | `Restart` OR `Wait and observe`
+ | RECOVERING | `Wait and observe`
+ | NOT_READY | `Restart` OR `Wait and observe`
+ | READY | `Restart` OR `Reconfigure` OR `No action`
 
- The following table illustrates possible states for `lastKnownState` field and the next states it can transition into:
- | State            | Description      | Next possible transitions |
- | :--------------- | :--------------- | :----------- |
- | UNKNOWN               | The initial state when creating `Context` for a node or state just after the node gets restarted/reconfigured. We expect to transition from this state fairly quickly.  | `NOT_RUNNING` `NOT_READY` `RECOVERING` `READY` |
- | NOT_RUNNING           | Node is not running (Kafka process is not running). This is determined via Kubernetes API, more details for it below. | `READY` `UNKNOWN` `NOT_READY` `RECOVERING` | 
- | NOT_READY             | Node is running but not ready to serve requests which is determined by Kubernetes readiness probe (broker state is not `RUNNING` or controller is not listening on port). | `READY` `UNKNOWN` `NOT_RUNNING` `RECOVERING` |
- | RECOVERING            | Node has started but is in log recovery (broker state is `RECOVERY`). This is determined via the KafkaAgent. | `READY` `NOT_RUNNING` `NOT_READY` |
- | READY               | Node is in running state and ready to serve requests which is determined by Kubernetes readiness probe (broker state is `RUNNING` or controller is listening on port). | `LEADING_ALL_PREFERRED` `UNKNOWN` |
- | LEADING_ALL_PREFERRED | Node is leading all the partitions that it is the preferred leader for. This is determined via Admin API. Node's state can transition into this only from `READY` state.  | This is the final state we expect for broker nodes.
+Some states map to multiple possible actions, but only one of them is taken based on the other conditions.
 
-Context about broker states and restart reasons:
-- To determine if the node is ready or performing a log recovery, we use the [Broker States](https://github.com/apache/kafka/blob/3.7/metadata/src/main/java/org/apache/kafka/metadata/BrokerState.java) metric emitted by Kafka. KafkaAgent collects and exposes this metric via REST Endpoint. This is what the current KafkaRoller does already, and the new roller will use it the same way.
+`UNKNOWN` nodes will be observed. This is the initial/default state before observation. 
 
-- If Kafka pod is ready, the restart reasons is checked to determine whether it needs to be restarted. The definitions of the possible restart reasons can be found via the following link: [Restart Reasons](https://github.com/strimzi/strimzi-kafka-operator/blob/0.40.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/model/RestartReason.java). This is also what the current KafkaRoller roller does and the new roller will use it the same way.
+`NOT_RUNNING` nodes will restarted only if they have `POD_HAS_OLD_REVISION`. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date. For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
 
-#### NOT_RUNNING state
+`RECOVERING` nodes will be waited and observed only. A Kafka node can take a long time to become ready while performing log recovery and it's not easy to determine how long it might take. Therefore, it's important to avoid restarting the node during this process, as doing so would restart the entire log recovery, potentially causing the node to enter a loop of continuous restarts without becoming ready. Moreover, while a node is in recovery, no other node should be restarted, as this could impact cluster availability and affect the client.
 
-If one of the following is true, then node's state is `NOT_RUNNING`:
-- no pod exists for this node
-- unable to get the `Pod Status` for the pod 
-- the pod has `Pending` status with `Unschedulable` reason
-- the pod has container status `ContainerStateWaiting` with `CrashLoopBackOff` or `ImagePullBackOff` reason
+`NOT_READY` nodes will be restarted if they have a restart reason and have not been restarted yet. If it is not ready after being restarted already, we don't want to restart any other nodes to avoid taking down more nodes. 
 
-If none of the above is true but the node state is `NOT_READY`.
+`READY` nodes will be restarted if they have a restart reason. If they don't have a restart reason but need to be reconfigured, they will be reconfigured. If no reconfiguration is needed, then no action will be taken on these nodes. 
 
-#### High level flow diagram describing the flow of the states
+### High level flow diagram describing the flow of the states
 ![The new roller flow](./images/06x-new-roller-flow.png)
 
 
+### State machine cycles 
 
-### Configurability
-The following are the configuration options for the new KafkaRoller. If exposed to user, the user can configure it via `STRIMZI_` environment variables. Otherwise, the operator will set them to the default values (which are similar to what the current roller has):
+As previously mentioned, the process for nodes will be repeated unless the maximum attempt is reached, in which case the reconciliation fails. The maximum number of attempts is hard-coded to 10 in the current roller. It will be the same for the new roller, however this value will be further broken down. The new roller will add 2 other hard-coded maximum attempt values. One is for maximum number of restarts and one is for maximum number of reconfiguration that can be taken on each node. This is because, we want to limit how many times a node can be restarted in each reconciliation because restarting a node 10 times is not productive. Also, in the current roller, if we failed to reconfigure a node, we immediately restart it. Reconfiguration can fail sometimes due to transitive error so it would be useful to retry the reconfiguration a few times before we decide to restart a node. 
+
+In each reconciliation, number of attempts is tracked for each node. The number of attempts is how many times the overall process is repeated per node because of not reaching the desired state and the number of restarts is how many times a node is actually restarted. If any node has reached the maximum number of attempts or restarts, the reconciliation will fail. If the maximum number of reconfiguration is reached, then the node will marked to restart but will not fail the reconciliation. When a new reconcilation starts, these tracked number of actions taken on nodes will be reset.
+
+The current roller also fails the reconciliation in the following situations:
+- Cannot connect to KafkaAgent to check broker state metrics (KafkaAgent is crucial when determining safety before rolling nodes, so there is no point to try progress further, if we cannot connect to the KafkaAgent).
+- Pod is stuck and does not have old revision (this will prevent the roller from restarting more nodes, which could result in making them stuck as well and bring down the entire cluster)
+
+### Batch rolling
+
+Batch rolling is one of the major features that the new roller is introducing. The proposed algorithm is to group broker nodes without common partitions together for parallel restart while maintaining availability. The algorithm does not take rack information into an account and the reason for this is explained in the `Rejected Alternatives` section. One thing about batching brokers without rack awareness is that batch size would likely descrease as the roller progresses. It may eventually drop to one, in which case, remaining brokers would be restarted one by one. However, the majority of brokers would likely to get restarted in parallel and that would still speed the rolling in large clusters significantly. Of course, this is up for a discussion, not the final decision. 
+
+There is also an interesting future improvement that can make the batch rolling more effective optimizing with Cruise Control. This improvment will not be in the scope of this proposal but included in `Future Improvements` section.
+
+For this feature, a new configuration `maxBrokerBatchSize` will be added. This is the maximum number of brokers that can be restarted in parallel. This will be set to 1 by default therefore the default behaviour remains same as the current roller, restarting one broker at a time. Another configuration added for this feature is `dryRunForBatchRolling`. This will allow batching nodes without restarting them in parallel. The purpose to let the operator, to verify the effectiveness of this feature in their clusters before enabling it. 
+
+The batching algorithm only applies to broker nodes, however, the capability to roll nodes in parallel will be used for controller nodes as well. This is needed when a controller quorum is in a bad state. [#9426](https://github.com/strimzi/strimzi-kafka-operator/issues/9426) mentioned in the `Known Issues` section, is an example of why this feature is important for controller nodes. The new roller will check if there are multiple controller nodes not working affecting the quorum, and restart them in parallel to help recovering it.
+
+### Configurability 
+
+The following are the configuration options for the new roller. Some of them are existing configurations that are used in the same way as the current roller. The new configurations are marked in <b>bold</b>. If exposed to user, the user can configure it via `STRIMZI_` environment variables. Otherwise, the operator will set them to the default values:
 
 | Configuration          | Default value | Exposed to user | Description                                                                                                                                                                                                                                                   |
 |:-----------------------|:--------------|:----------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| maxRestartAttempts     | 3             | No              | The maximum number of restart attempts per node before failing the reconciliation. This is checked against node's `numRestartAttempts`.                                                                                                               |
-| maxReconfigAttempts    | 3             | No              | The maximum number of dynamic reconfiguration attempts per node before restarting the node. This is checked against node's `numReconfigAttempts`.                                                                                                                        |
-| maxRetries             | 10            | No              | The maximum number of times a node can be retried after not meeting the safety conditions e.g. availability check failed.  This is checked against the node's `numRetries`.                                                                                                                      |
-| operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an operation in each retry. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
-| maxRestartParallelism  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`. However, if there are multiple brokers in `NOT_RUNNING` state, they may get restarted in parallel despite this configuration for a faster recovery.    
-| postRestartDelay  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will also help  Just-In-Time (JIT) compiler to reach a steady state and to reduce impact on clients.   
-| restartAndPreferredLeaderElectionDelay  | 10 seconds             | No             | Delay between restart and triggering partition leader election so that just-rolled broker is leading all the partitions it is the preferred leader for. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
-
-### Algorithm
-
-1. **Initialize Context for Each Node:**
-   Create a context object with the following data:
-   ```
-   Context: {
-       nodeRef: <NodeRef from KafkaReconciler>,
-       nodeRoles: <Set using pod labels `strimzi.io/controller-role` and `strimzi.io/broker-role`>,
-       state: UNKNOWN,
-       lastTransition: <SYSTEM_TIME>,
-       restartReason: <Result of predicate function from KafkaReconciler>,
-       numRestartAttempts: 0,
-       numReconfigAttempts: 0,
-       numRetries: 0
-   }
-   ```
-   Contexts are recreated in each reconciliation with the above initial data.
-
-2. **Transition Node States:**
-   Update each node's state based on information from abstracted sources. If failed to retrieve information, the current reconciliation immediately fails. When the next reconciliation is triggered, it will restart from step 1.
-
-3. **Handle `NOT_READY` Nodes:**
-   Wait for `NOT_READY` nodes to become `READY` within `operationTimeoutMs`.
-
-   This is to give an opportunity for a node to become ready in case it had just been restarted. If the node is still not ready after the timeout, it will fall through to the next step to determine the action to take on it.
-
-4. **Categorize Nodes:**
-   Group nodes based on their state and connectivity:
-   - `RESTART_NOT_RUNNING`: Nodes in `NOT_READY` state.
-   - `WAIT_FOR_LOG_RECOVERY`: Nodes in `RECOVERING` state.
-   - `RESTART_UNRESPONSIVE`: Nodes unresponsive via Admin API.
-   - `MAYBE_RECONFIGURE_OR_RESTART`: Broker nodes with empty reason lists and no previous restarts/reconfigurations.
-   - `RESTART`: Nodes with reasons for restart, and either no previous restarts or not in `READY` or `LEADING_ALL_PREFERRED` state. 
-   - `NOP`: Nodes with no reasons for restart, or has been restarted and in `READY` or `LEADING_ALL_PREFERRED` state.
-
-   Grouping the nodes into these categories makes it clearer to take actions on the them in the specific order. Also the category and node state is not always 1:1, for example, nodes might be unresponsive despite having `READY` or `NOT_READY` state but need to be grouped together for sequential restarts. Grouping also makes it to easier to batch broker nodes for parallel restart.
-
-5. **Wait for Log Recovery:**
-   Wait for `WAIT_FOR_LOG_RECOVERY` nodes to become `READY` within `operationTimeoutMs`. If timeout is reached and `numRetries` exceeds `maxRetries`, throw `UnrestartableNodesException`. Otherwise, increment `numRetries` and repeat from step 2.
-
-   A Kafka broker node can take a long time to become ready while performing log recovery and it's not easy to determine how long it might take. Therefore, it's important to avoid restarting the node during this process, as doing so would restart the entire log recovery, potentially causing the node to enter a loop of continuous restarts without becoming ready. Moreover, while a broker node is in recovery, no other node should be restarted, as this could impact cluster availability and affect the client.
-
-   We do not wait for the broker to rejoin the ISR after it becomes ready because the roller's responsibility is to restart the nodes safely, not to manage inter-broker replication. Additionally, we cannot guarantee that the broker will always be able to catch up within a reasonable time frame.
-
-6. **Restart `RESTART_NOT_RUNNING` Nodes:**
-   Restart nodes in `NOT_RUNNING` state, considering special conditions:
-   - If all controller nodes are `NOT_RUNNING`, restart them in parallel to form a quorum.
-      > This is to address the issue described in https://github.com/strimzi/strimzi-kafka-operator/issues/9426.
-   - Restart `NOT_RUNNING` nodes with `POD_HAS_OLD_REVISION` in parallel. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date.
-      > For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
-   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
-
-7. **Restart `RESTART_UNRESPONSIVE` Nodes:**
-   Restart unresponsive nodes one by one in the order: pure controller, mixed, and broker nodes. Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
-
-8. **Refine `MAYBE_RECONFIGURE_OR_RESTART` Nodes:**
-   Describe Kafka configurations via Admin API:
-   - Nodes with dynamic config changes are added to `RECONFIGURE` group.
-   - Nodes with non dynamic config changes are added `RESTART` group.
-   - Nodes with no config changes are added to `NOP` group.
-
-9. **Reconfigure Nodes:**
-   Reconfigure nodes in the `RECONFIGURE` group:
-   - Check if `numReconfigAttempts` exceeds `maxReconfigAttempts`. If exceeded, add a restart reason and repeat from step 2. Otherwise, continue.
-   - Send `incrementalAlterConfig` request, transition state to `UNKNOWN`, and increment `numReconfigAttempts`.
-   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, repeat from step 2, otherwise continue.
-
-10. **Check for `NOT_READY` Nodes:**
-   If `RESTART` group is empty and no nodes are `NOT_READY`, reconciliation is successful. Otherwise, wait for `NOT_READY` nodes' state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2. Otherwise, continue.
-
-11. **Categorize and Batch Nodes:**
-   Categorize and batch nodes for restart:
-   - Ensure controllers are restarted sequentially in an order of pure controllers, mixed nodes and the active controller to maintain quorum.
-   - Group broker nodes without common partitions for parallel restart to maintain availability.
-   - If no safe nodes to restart, check `numRetries`. If exceeded, throw `UnrestartableNodesException`. Otherwise, increment `numRetries` and repeat from step 2.  More on safety conditions below.
-
-12. **Restart Nodes in Parallel:**
-   Restart broker nodes in the batch:
-   - If `numRestartAttempts` exceeds `maxRestartAttempts`, throw `MaxRestartsExceededException`.
-   - Restart nodes, transition state to `UNKNOWN`, and increment `numRestartAttempts`.
-   - Wait for each node's state to transition to `READY` within `operationTimeoutMs`. If timeout is reached, increment `numRetries` and repeat from step 2.
-   - After nodes are `READY`, apply `restartAndPreferredLeaderElectionDelay` and trigger preferred leader elections. Wait for nodes to transition to `LEADING_ALL_PREFERRED` state within `operationTimeoutMs`.
-
-13. **Handle Exceptions:**
-   If no exceptions are thrown, reconciliation is successful. If exceptions occur, reconciliation fails.
-
-14. **Repeat Reconciliation:**
-   Start the next reconciliation from step 1.
-
-#### Quorum health check
-
-The quorum health logic is similar to the current KafkaRoller except for a couple of differences. The current KafkaRoller uses the `controller.quorum.fetch.timeout.ms` config value from the desired configurations passed from the reconciler or uses the hard-coded default value if the reconciler pass null for desired configurations. The new roller will use the configuration value of the active controller. This will mean that the quorum health check is done from the active controller's point of view.
-
-Also the current KafkaRoller does not connect to the controller via Admin API to get the quorum health information. By the time, we implement this proposal, Strimzi should support Kafka 3.7 which includes [KIP 919](https://cwiki.apache.org/confluence/display/KAFKA/KIP-919%3A+Allow+AdminClient+to+Talk+Directly+with+the+KRaft+Controller+Quorum+and+add+Controller+Registration). Therefore new KafkaRoller will be able to connect to the controller directly for quorum information and active controller's configuration.
-
-### Safety conditions
-
-#### Availability check
-
-The availibility check logic similar to the current KafkaRoller. The ISRs that the broker is part of is checked against the configured under minimum ISR size. If `size(ISR containing the broker) - minISR > 0`, the broker can be considered safe to restart. If it equals to 0, restarting the broker could cause under minimum ISR partition. If it's less than 0, it means the partition is already under minimum ISR and restarting it would either not make a difference or make things worse. In both cases, the broker should not be restarted. 
-
-However, if `size(Replicas containing the broker) - minISR <= 0` but the topic partition is configured with replication size less than minISR, the check will pass to proceed with the broker restart.
-
-#### An example of rolling update
-
-Here is an example of the new roller performing rolling restarts on a cluster with 12 nodes: 3 controllers, 3 mixed nodes and 6 brokers. The nodes are:
-- controller-0
-- controller-1
-- controller-2
-- mixed-3
-- mixed-4
-- mixed-5
-- broker-6
-- broker-7
-- broker-8
-- broker-9
-- broker-10
-- broker-11
-
-1. The roller observes nodes and update their contexts based on the observation outcome:
-
-All the nodes except `mixed-3` have the following Context with `nodeRef` being their `podname/node-id`, and `nodeRoles` having either `controller`, `broker` or both.
-```
-         nodeRef: controller-0/0
-         nodeRoles: controller
-         state: READY
-         lastTransition: 0123456
-         restartReason: MANUAL_ROLLING_UPDATE
-         numRestartAttempts: 0
-         numReconfigAttempts: 0
-         numRetries: 0
-```
-The `mixed-3` node has the following context because the operator could not establish an admin connection to it even though it's ready from Kubernetes and KafkaAgent perspective:
-```
-         nodeRef: mixed-3/3
-         nodeRoles: controller,broker
-         state: NOT_READY
-         lastTransition: 0123456
-         restartReason: POD_UNRESPONSIVE
-         numRestartAttempts: 0
-         numReconfigAttempts: 0
-         numRetries: 0
-```
-2. The roller checks if all of the controller nodes are in `NOT_RUNNING` state. Since they are not and `mixed-3` node has `POD_UNRESPONSIVE` reason, it is restarted and waited to have `READY` state. The `mixed-3`'s context becomes:
-```
-         nodeRef: mixed-3/3
-         nodeRoles: controller,broker
-         state: UNKNOWN
-         lastTransition: 654987
-         restartReason: POD_UNRESPONSIVE
-         numRestartAttempts: 1
-         numReconfigAttempts: 0
-         numRetries: 0
-```
-3. `mixed-3` state becomes `READY` and since its `numRestartAttempts` is greater than 1, the roller checks the rest of the nodes. 
-4. The roller checks which node is the active controller and finds that `controller-0` is. It then sends a request to the active controller via AdminClient to describe its `controller.quorum.fetch.timeout` config value.
-5. It then considers restarting `controller-1` and checks if the quorum health would be impacted. The operator sends a request to the active controller to describe the quorum replication state. It finds that majority of the follower controllers have caught up with the quorum leader within the `controller.quorum.fetch.timeout.ms`. 
-6. The roller restarts `controller-1` as it has no impact on the quorum health. When it has `READY` state, the roller repeats the quorum check and restarts `controller-2` and then `controller-0`. 
-7. It then considers restarting `mixed-4`, so it performs quorum healthcheck and then availability check. Both check passes therefore `mixed-4` is restarted. The same is repeated for `mixed-5`.
-8. All the controller and mixed nodes have `READY` state and `numRestartAttempts` set to greater than 1. This means, they have been successfuly restarted, therefore the roller considers restarting the broker nodes.
-9. It sends requests to describe all the topic partitions and their `min.insync.replicas` configuration, and the following list of topics is returned:
-```
-topic("topic-A"), Replicas(9, 10, 11), ISR(9, 10), MinISR(2)
-topic("topic-B"), Replicas(6, 7, 8), ISR(6, 7, 8), MinISR(2)
-topic("topic-C"), Replicas(10, 8, 6), ISR(10, 8, 6), MinISR(2)
-topic("topic-D"), Replicas(7, 9, 11), ISR(7, 9, 11), MinISR(2)
-topic("topic-E"), Replicas(6, 10, 11), ISR(6, 10, 11), MinISR(2)
-```
-
-10. The roller batches the nodes that do not have any topic partition in common and the following batches are created: 
-- (11, 8) - `broker-11` and `broker-8` do not share any topic partitions.
-- (7) - `broker-7` and `broker-10` do not share any topic partitions, however topic-A is at min ISR, therefore 10 cannot be restarted and is removed from the batch.
-- (6) - `broker-6` and `broker-9` do not share any topic partitions, however topic-A is at min ISR, therefore 9 cannot be restarted and is removed from the batch.
-
-11. The roller picks the largest batch containing `broker-11` and `broker-8` and restarts them together. It waits for the nodes to have `READY` and then `LEADING_ALL_PREFERRED` state.
-12. It then restarts the batch containing only `broker-7`. It waits for it to have `READY` and then `LEADING_ALL_PREFERRED` state.
-13. It then restarts the batch containing only `broker-6`. It times out waiting for it to have `READY` state because it's still performing log recovery.
-14. The roller retries waiting for `broker-6` to have `READY` state for a number of times and results in the following context:
-```
-         nodeRef: broker-6/6
-         nodeRoles: broker
-         state: RECOVERING
-         lastTransition: 987456
-         restartReason:
-         numRestartAttempts: 1
-         numReconfigAttempts: 0
-         numRetries: 10
-```
-15. The `maxRetries` of 10 is reached for `broker-6`, therefore the roller throws `UnrestartableNodesException` and the reconciliation fails. The operator logs the number of remaining segments and logs to recover.
-16. When the next reconciliation starts, all the nodes are observed and their contexts are updated. `broker-6` node has finished performing log recovery therefore have `READY` state. All nodes have `READY` state and no reason to restart except `broker-9` and `broker-10`.
-17. Broker nodes that have no reason to restart are checked if their configurations have been updated. The `min.insync.replicas` has been updated to 1 therefore the roller sends a request containing the configuration update to the brokers and then transitions nodes' state to `UNKNOWN`. 
-18. Observe the broker nodes that have configuration updated, and ensure that they still have `READY` state.
-19. The roller considers restarting `broker-10` and `broker-9` as they still have `MANUAL_ROLLING_UPDATE` reason. 
-20. It sends requests to describe all the topic partitions and their `min.insync.replicas` configuration and finds that all topic partitions are fully replicated. 
-21. The roller create 2 batches with a single node in each because `broker-10` and `broker-9` share topic partition, "topic-A": 
-22. It then restarts the batch containing `broker-10`. It waits for it to have `READY` and then `LEADING_ALL_PREFERRED` state. The same is repeated for the batch containing `broker-9`.
-23. All nodes have `READY` or `LEADING_ALL_PREFERRED` and no exception was thrown therefore the reconciliation completes successfully.
-
-### Switching from the old KafkaRoller to the new KafkaRoller
-
-The new KafkaRoller will only work with KRaft clusters therefore when running in Zookeeper mode, the current KafkaRoller will be used. Kafka CR's `KafkaMetadataState` represents where the metadata is stored for the cluster. It is set to `KRaft` when a cluster is fully migrated to KRaft or was created in KRaft mode. `KafkaReconciler` class will be updated to switch to the new roller based on this state. This means the old KafkaRoller will be used during migration of existing clusters from Zookeeper to KRaft mode and the new roller is used only after the migration is completed and for new clusters created in KRaft mode.
+| <b>maxRestartAttempts</b>     | 3             | No              | The maximum number of restart attempts per node before failing the reconciliation. This is checked against node's `numRestartAttempts`.                                                                                                               |
+| <b>maxReconfigAttempts</b>    | 3             | No              | The maximum number of dynamic reconfiguration attempts per node before restarting the node. This is checked against node's `numReconfigAttempts`.                                                                                                                        |
+| maxAttempts             | 10            | No              | The maximum number of times a node can be attempted after not reaching the desired state.  This is checked against the node's `numAttempts`.                                                                                                                      |
+| operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an action. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
+| <b>maxBrokerBatchSize</b>  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`.
+| <b>dryRunForBatchRolling</b>  | false             | Yes             | If this is set to true as well as `maxBrokerBatchSize` is set to greater than 1, the batch rolling algorithm will be executed but will not restart the nodes in parallel. The batched nodes will only be logged. This conguration will be exposed to the user via the new environment variable `STRIMZI_DRY_RUN_BATCH_ROLLING`.
+| <b>postRestartDelay</b>  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will allow users to slow the rolling update.   
+| <b>preferredLeaderElectionDelay</b>   | 10 seconds             | No             | Delay right after a node restart and before triggering partition leader election so that just-rolled broker is leading all the preferred replicas. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
 
 ### Future improvement
 
-- We are not looking to solve the potential race condition between KafkaRoller and Cruise Control rebalance activity right away but this is something we can solve in the future. An example scenario that could cause this race:
-   Let's say we have a 5 brokers cluster, `min.insync.replicas` for topic partition foo-0 is set to 2. The possible sequence of events that could happen is:
-   - Broker 0 is down due to an issue and the ISR of foo-0 partition changes from [0, 1, 2] to [1 , 2]. In this case producers with acks-all still can produce to this partition.
-   - Cruise Control sends `addingReplicas` request to reassign partition foo-0 to broker 4 instead of broker 2 in order to achieve its configured goal.
-   - The reassignment request is processed and foo-0 partition now has ISR [1, 2, 4].
-   - Cruise Control sends `removingReplicas` request to un-assign the partition from broker 2.
-   - KafkaRoller is performing a rolling update to the cluster. It checks the availability impact for foo-0 partition before rolling broker 1. Since partition foo-0 has ISR [1, 2, 4], KafkaRoller decides that it is safe to restart broker 1. It is unaware of the `removingReplicas` request that is about to be processed.
-   - The reassignment request is processed and foo-0 partition now has ISR [1, 4].
-   - KafkaRoller restarts broker 1 and foo-0 partition now has ISR [4] which is below the configured minimum in sync replica of 2 resulting in producers with acks-all no longer being able to produce to this partition.
-This would likely need its own proposal. 
+In the future, we can optimize Cruise Control's `BrokerSetAwareGoal` to make the batch rolling more efficient when user enabled Cruise Control in their clusters. This goal operates at the level of broker sets, which may correspond to physical or logical boundaries like racks, data centres, availability zones or custom logical groupings defined by administrators. It ensures that replicas of a partition are not assigned to the same broker set by spreading them across sets as evenly as possible. The new roller could then restart brokers in the same set in parallel while maintaining availability of partitions. This goal can be used for both rack aware and non rack aware clusters, comparing to `RackAwareGoal` which relies on Kafka's built-in `broker.rack` property.
+
+This solution still has the limitation mentioned in the `Rejected Alternatives` section, that we can't be certain that other tooling hasn't reassigned some replicas since the last rebalance. In this case, the proposed algorithm can be used to check that brokers in the same set have no common partitions. This can be discussed further in the future.
+
+
+### Feature Gate
+
+The switch from the old roller to the new roller should be controlled by a new feature gate called `UseNewKafkaRoller`.
+With this feature gate disabled, the operator will continue using the old KafkaRoller.
+With it enabled, the new roller will be used.
+The following table shows the expected graduation of the feature gate:
+
+| Phase | Strimzi versions       | Default state                                          |
+|:------|:-----------------------|:-------------------------------------------------------|
+| Alpha | 0.46, ?                | Disabled by default                                    |
+| Beta  | ? , ?                  | Enabled by default                                     |
+| GA    | ?, ?                   | Enabled by default (without possibility to disable it) |
+
+Currently, I'm not sure what would be the feature gate timeline as it is subject to change based on the actual progress.
+However, each phase probably will take at least 2 releases. 
 
 ## Affected/not affected projects
 
 This proposal affects only
-the [`strimzi-kafka-operator` GitHub repository](https://github.com/strimzi/strimzi-kafka-operator).
+the [`strimzi-kafka-operator`](https://github.com/strimzi/strimzi-kafka-operator).
 
 ## Compatibility
 
-The new KafkaRoller introduced by this proposal will used only for KRaft based clusters.
-This proposal should have no impact on any existing Kafka clusters deployed with ZooKeeper.
+The new KafkaRoller introduced by this proposal will used only for KRaft based clusters. 
+This proposal should have no impact on any existing Kafka clusters deployed with ZooKeeper. 
+The purpose of this proposal is to maintain the same behaviour of the old roller with a finite state machine design while adding the new features.
 
 ## Rejected
 
