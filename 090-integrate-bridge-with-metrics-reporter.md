@@ -34,7 +34,9 @@ metricsConfig:
 ```
 
 At runtime, the above configuration enables a Java agent that exposes Kafka JMX metrics in Prometheus format through an HTTP endpoint on port 9404.
+
 Note that the *Exporter* requires `org.apache.kafka.common.metrics.JmxReporter`.
+This is enabled by default, but should be explicitly added to the `metric.reporters` Kafka configuration when passing a custom list of metrics reporter implementations. 
 
 ## Motivation
 
@@ -48,28 +50,36 @@ It will also provide new configurations to integrate with the Cluster Operator.
 
 ### Metrics configuration types
 
-The Kafka Bridge project will be updated to support two metrics configurations types.
+The Kafka Bridge project will be updated to support two metrics configuration types.
 A new `bridge.metrics` property will be available within the `application.properties` configuration file, and will only accept `jmxPrometheusExporter` and `strimziMetricsReporter`.
 Any other value will raise an error and the application will fail to start with an appropriate error message.
 
 When running in standalone mode with `strimziMetricsReporter`, the user will be able to configure any reporter property using the "kafka." prefix.
-The following example will be documented and included, with comments, in the default `application.properties` file:
+The following example will be documented and included, with comments, in the default `application.properties` file.
+The `kafka.` prefix is used by the Bridge to pass the following configuration to the internal Kafka clients.
 
 ```sh
-bridge.metrics=strimziMetricsReporter
-kafka.metric.reporters=io.strimzi.kafka.metrics.KafkaPrometheusMetricsReporter
-kafka.prometheus.metrics.reporter.listener.enable=false
-kafka.prometheus.metrics.reporter.allowlist=.*
+# uncomment the following lines to enable Strimzi Reporter metrics, check the documentation for more details
+bridge.metrics=strimziMetricsReporter #1
+kafka.metric.reporters=io.strimzi.kafka.metrics.KafkaPrometheusMetricsReporter #2
+kafka.prometheus.metrics.reporter.listener.enable=false #3
+kafka.prometheus.metrics.reporter.allowlist=.* #4
 ```
 
-The MetricsReporter class will be updated to also include a new StrimziCollectorRegistry that will work similarly to the JmxCollectorRegistry.
+1. Kafka Bridge configuration used to set the metrics type.
+2. Kafka configuration used to set the Kafka metrics reporter implementation.
+3. *Reporter* configuration used to disable the HTTP listener (metrics are exposed through the Kafka Bridge listener).
+4. *Reporter* configuration used to configure a comma separated list of regex patterns to filter metrics to collect.
+
+The MetricsReporter class will be updated to also include a new `StrimziCollectorRegistry` that will work similarly to the `JmxCollectorRegistry`.
+Creating a collector registry for each metrics type ensure better isolation, and makes it easier to add or remove metrics types.
 The `StrimziCollectorRegistry` will include a reference to `PrometheusRegistry.defaultRegistry`, which is the same instance used by the *Reporter* to collect metrics.
 
 The `kafka_bridge_config_generator.sh` script is used to generate the Kafka Bridge image configuration based on environment variables.
 This script will be also updated to include `bridge.metrics` and related configurations, as described in the following integration section.
 
-The Kafka Bridge will try to load the Exporter's configuration file from the path specified by the `bridge.metrics.jmx.exporter.config.path` property.
-If the property is not specified or the file is not found, the Kafka Bridge will fall back to the hard-coded configuration.
+The Kafka Bridge will try to load a custom Exporter's configuration file from the path specified by the `bridge.metrics.jmx.exporter.config.path` property.
+If the property is not specified or the file is not found, the Kafka Bridge will fall back to the hard-coded configuration file.
 This feature is not strictly required to support the *Reporter*, but will be used by the Cluster Operator.
 
 ### Cluster Operator integration
@@ -93,8 +103,8 @@ Three new environment variables will be introduced to pass the metrics configura
 - `KAFKA_BRIDGE_METRICS_JMX_CONFIG`: Used with *Exporter* to pass the configuration file path.
 - `KAFKA_BRIDGE_METRICS_SMR_CONFIG`: Used with *Reporter* to pass the plugin configuration.
 
-The *Exporter* configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
-The full configuration file passed to the Bridge's container will be `/opt/strimzi/custom-config/metrics-config.yml`.
+The *Exporter* user provided configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
+The file path passed to the Bridge's container using the `bridge.metrics.jmx.exporter.config.path` property will be `/opt/strimzi/custom-config/metrics-config.yml`.
 
 Metrics will be exposed through the Kafka Bridge's HTTP server, so the listener of the *Reporter* will be disabled.
 Other configurations will be locked down with the exception of the `prometheus.metrics.reporter.allowlist` property.
@@ -119,5 +129,5 @@ In case they are both set, `metricsConfig` will take precedence over `enableMetr
 
 ## Rejected alternatives
 
-Lock down and automate the *Reporter* configurations for the standalone Bridge.
-This was rejected because the Kafka Bridge allows users to customize Kafka clients and plugins using the application.properties file, which includes commented examples.
+Lock down and automate the *Reporter* configurations for the standalone Kafka Bridge.
+This was rejected because the Kafka Bridge allows users to customize Kafka clients and plugins using the `application.properties` file, which includes commented examples.
