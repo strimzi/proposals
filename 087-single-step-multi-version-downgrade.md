@@ -6,12 +6,12 @@ The proposal only relates to KRaft based clusters.
 ## Current situation
 
 - Downgrading of Strimzi is currently supported where the Kafka version in use is supported by the 'to' Strimzi version. 
-- Downgrading of Strimzi where the Kafka version in use is unsupported by the 'to' Strimzi version is not supported. An attempt to do so will result in an error during reconcoliation of the Kafka CR. Downgrading the Kafka version to a version supported by the 'to' Strimi version will not resolve the reconciliation failure as the 'from' Kafka version is unknown to the 'to' Strimzi version (in contrast to the upgrade scenario where upgrading the Kafka version will enable reconcilation to subsequently succeed). The only way to successfully execute such a downgrade path is to iteratively downgrade Kafka and Strimzi ensuring the current Kafka vesion is at all stages supported by the Strimzi version.  
+- Downgrading of Strimzi is not supported if the Kafka version in use is unsupported by the 'to' Strimzi version. Attempting this will result in an error during reconciliation of the Kafka CR. Downgrading the Kafka version to a version supported by the 'to' Strimi version will not resolve the reconciliation failure as the 'from' Kafka version is unknown to the 'to' Strimzi version (in contrast to the upgrade scenario where upgrading the Kafka version will enable reconciliation to subsequently succeed). The only way to successfully execute such a downgrade path is to iteratively downgrade Kafka and Strimzi ensuring at each step that the current Kafka version supported by the Strimzi version.  
 - Downgrading of Kafka where the metadata version in use is greater than the maximum supported by the 'to' Kafka version is not supported
 
 ## Motivation
 
-This proposal would make downgrade of Strimzi more user friendly, in specific, in the scenario where a single-step multi version upgrade has been performed and a need arises to rollback before the metadata version has been stepped. The proposal will allow the user perform the roll back in a single step rather than the multiple steps currently required.
+This proposal would make downgrade of Strimzi more user friendly, specifically, in the scenario where a single-step multi version upgrade has been performed and a need arises to rollback before the metadata version has been advanced. The proposal will allow the user perform the roll back in a single step rather than the multiple steps currently required.
 
 ## Proposal
 
@@ -26,7 +26,7 @@ The proposed impact therefore is:
 
 See https://github.com/strimzi/strimzi-kafka-operator/pull/10929
 
-## Affected/not affected projects
+## Affected projects
 
 strimzi-kafka-operator 
 
