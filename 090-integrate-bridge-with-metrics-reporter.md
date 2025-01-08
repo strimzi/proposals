@@ -60,10 +60,6 @@ kafka.prometheus.metrics.reporter.listener.enable=false
 kafka.prometheus.metrics.reporter.allowlist=.*
 ```
 
-The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in 0.32.0 and removed in 0.34.0.
-When set, the user will get a warning suggesting to use the `bridge.metrics` property.
-In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRIDGE_METRICS_ENABLED`.
-
 The MetricsReporter class will be updated to also include a new StrimziCollectorRegistry that will work similarly to the JmxCollectorRegistry.
 The StrimziCollectorRegistry will include a reference to PrometheusRegistry.defaultRegistry, which is the same instance used by the *Reporter* to collect metrics.
 
@@ -95,10 +91,6 @@ Three new environment variables will be introduced to pass the metrics configura
 - `KAFKA_BRIDGE_METRICS_JMX_CONFIG`: Used with *Exporter* to pass the configuration file path.
 - `KAFKA_BRIDGE_METRICS_SMR_CONFIG`: Used with *Reporter* to pass the plugin configuration.
 
-The `enableMetrics` property will be deprecated in 0.46.0 and removed in 0.48.0.
-When set, the user will get a warning suggesting to use the `metricsConfig` configuration.
-In case they are both set, `metricsConfig` will take precedence over `enableMetrics`.
-
 The *Exporter* configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
 The full configuration file passed to the Bridge's container will be `/opt/strimzi/custom-config/metrics-config.yml`.
 
@@ -111,7 +103,17 @@ The affected projects are Cluster Operator and Kafka Bridge.
 
 ## Compatibility
 
-All changes will be backwards compatible, but there will be some deprecations as detailed above.
+### Bridge
+
+The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in 0.32.0 and removed in 0.34.0.
+When set, the user will get a warning suggesting to use the `bridge.metrics` property.
+In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRIDGE_METRICS_ENABLED`.
+
+### Cluster Operator
+
+The `enableMetrics` property in KafkaBridge CRD will be deprecated in 0.46.0 and removed in 0.48.0.
+When set, the user will get a warning suggesting to use the `metricsConfig` configuration.
+In case they are both set, `metricsConfig` will take precedence over `enableMetrics`.
 
 ## Rejected alternatives
 
