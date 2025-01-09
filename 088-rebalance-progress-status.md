@@ -147,27 +147,27 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 This estimate will be a theoretical minimum derived from Cruise Control capacity and throttle configurations.
 This means that the cluster rebalance would take at least the estimated amount of time to complete.
 
-$$\text{maxPartitionMovements}_{[1]} = \min(\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}),\text{max.num.cluster.partition.movements})$$
+$$\text{maxConcurrentPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}), \text{max.num.cluster.partition.movements})$$
 
-$$\text{bandwidth}_{[2]} = \min(\text{networkCapacity}, \text{replication.throttle})$$
+$$\text{bandwidth}_{[2]} = \min(\frac{\text{networkCapacity}}{\text{maxConcurrentPartitionMovements}}, \text{replication.throttle})$$
 
-$$\text{throughput}_{[3]} = \text{maxPartitionMovements} \times \text{bandwidth}$$
+$$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{bandwidth}$$
 
 $$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
 
 Notes:
-- [1] The maximum number of partition movements given Cruise Control partition movement capacity.
+- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
 
 - [2] The network bandwidth given Cruise Control bandwidth throttle.
 
-- [3] The throughput given the max allowed number of partition movements and network bandwidth.
+- [3] The throughput given the max allowed number of concurrent partition movements and network bandwidth.
 
 **Estimation for intra-broker rebalance:**
 
 It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write throughput and getting disk throughput is non-trivial for Strimzi.
 Since we cannot accurately estimate `estimatedTimeToCompletionInMinutes` without knowing the disk throughput, we set `estimatedTimeToCompletionInMinutes` to `N/A`.
 
-$$\text{maxPartitionMovements}_{[1]} = \min\left(\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements}\right)$$
+$$\text{maxPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements})$$
 
 $$\text{estimatedDiskThroughput} = \text{???}_{[2]}$$
 
@@ -181,9 +181,9 @@ Since `estimatedDiskThroughput` is unavailable, the formula for `throughput` can
 $$\text{estimatedTimeToCompletionInMinutes} = \text{N/A}$$
 
 Notes
-- [1] The maximum number of partition movements given Cruise Control partition movement capacity.
+- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
 - [2] We don't have a method of determining disk throughput.
-- [3] The throughput given the max allowed number of partition movements and disk throughput.
+- [3] The throughput given the max allowed number of concurrent partition movements and disk throughput.
  
 #### State: `Rebalancing`
 
