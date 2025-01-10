@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 92 | [Support for dynamically creating and mounting Persistent Volume Claims](./092-support-dynamic-additional-pvcs.md) |
 | 91 | [Support running Kafka Connect in test-container](./091-add-connect-to-test-container.md) |
 | 90 | [Support DNS configuration](./090-support-dns-config.md) |
 | 89 | [Adopt the Kafka Connect health check endpoint](./089-adopt-connect-health-endpoint.md) |
