@@ -78,7 +78,7 @@ The `StrimziCollectorRegistry` will include a reference to `PrometheusRegistry.d
 The `kafka_bridge_config_generator.sh` script is used to generate the Kafka Bridge image configuration based on environment variables.
 This script will be also updated to include `bridge.metrics` and related configurations, as described in the following integration section.
 
-The Kafka Bridge will try to load a custom Exporter's configuration file from the path specified by the `bridge.metrics.jmx.exporter.config.path` property.
+The Kafka Bridge will try to load a custom Exporter's configuration file from the path specified by the `bridge.metrics.exporter.config.path` property.
 If the property is not specified or the file is not found, the Kafka Bridge will fall back to the hard-coded configuration file.
 This feature is not strictly required to support the *Reporter*, but will be used by the Cluster Operator.
 
@@ -103,7 +103,7 @@ Three new environment variables will be introduced to pass the metrics configura
 - `KAFKA_BRIDGE_METRICS_SMR_CONFIG`: Used with *Reporter* to pass the plugin configuration.
 
 The *Exporter* user provided configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
-The file path passed to the Bridge's container using the `bridge.metrics.jmx.exporter.config.path` property will be `/opt/strimzi/custom-config/metrics-config.yml`.
+The file path passed to the Bridge's container using the `bridge.metrics.exporter.config.path` property will be `/opt/strimzi/custom-config/metrics-config.yml`.
 
 Metrics will be exposed through the Kafka Bridge's HTTP server, so the listener of the *Reporter* will be disabled.
 Other configurations will be locked down with the exception of the `prometheus.metrics.reporter.allowlist` property.
