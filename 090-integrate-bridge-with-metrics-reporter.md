@@ -1,6 +1,6 @@
 # Integrate Kafka Bridge with Metrics Reporter
 
-In [SIP-064](https://github.com/strimzi/proposals/blob/main/064-prometheus-metrics-reporter.md), we introduced the [Strimzi Metrics Reporter](https://github.com/strimzi/metrics-reporter).
+In [Strimzi Proposal 064](https://github.com/strimzi/proposals/blob/main/064-prometheus-metrics-reporter.md), we introduced the [Strimzi Metrics Reporter](https://github.com/strimzi/metrics-reporter).
 This is a Kafka plugin that directly exposes metrics in Prometheus format via an HTTP endpoint, and can be used as an alternative to the [Prometheus JMX Exporter](https://github.com/prometheus/jmx_exporter). 
 
 In this proposal, we outline how to integrate the Metrics Reporter with the Kafka Bridge.
@@ -93,8 +93,7 @@ spec:
     type: strimziMetricsReporter
     values:
       allowList:
-        - "kafka_log.*"
-        - "kafka_network.*"
+        - ".*"
 ```
 
 Three new environment variables will be introduced to pass the metrics configuration to the Bridge's container:
@@ -117,13 +116,13 @@ The affected projects are Cluster Operator and Kafka Bridge.
 
 ### Bridge
 
-The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in 0.32.0 and removed in 0.34.0.
+The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in the next release and removed in January 2026.
 When set, the user will get a warning suggesting to use the `bridge.metrics` property.
 In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRIDGE_METRICS_ENABLED`.
 
 ### Cluster Operator
 
-The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in 0.46.0 and removed in 0.48.0.
+The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in 0.46.0 and removed with Strimzi v1 API release.
 When set, the user will get a warning suggesting to use the `metricsConfig` configuration.
 In case they are both set, `metricsConfig` will take precedence over `enableMetrics`.
 
