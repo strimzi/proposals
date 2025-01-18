@@ -75,9 +75,6 @@ The MetricsReporter class will be updated to also include a new `StrimziCollecto
 Creating a collector registry for each metrics type ensure better isolation, and makes it easier to add or remove metrics types.
 The `StrimziCollectorRegistry` will include a reference to `PrometheusRegistry.defaultRegistry`, which is the same instance used by the *Reporter* to collect metrics.
 
-The `kafka_bridge_config_generator.sh` script is used to generate the Kafka Bridge image configuration based on environment variables.
-This script will be also updated to include `bridge.metrics` and related configurations, as described in the following integration section.
-
 The Kafka Bridge will try to load a custom Exporter's configuration file from the path specified by the `bridge.metrics.exporter.config.path` property.
 If the property is not specified or the file is not found, the Kafka Bridge will fall back to the hard-coded configuration file.
 This feature is not strictly required to support the *Reporter*, but will be used by the Cluster Operator.
@@ -96,11 +93,7 @@ spec:
         - ".*"
 ```
 
-Three new environment variables will be introduced to pass the metrics configuration to the Bridge's container:
-
-- `STRIMZI_METRICS`: This will contain the `metricsConfig` types to enable (one of `jmxPrometheusExporter` and `strimziMetricsReporter`).
-- `KAFKA_BRIDGE_METRICS_JMX_CONFIG`: Used with *Exporter* to pass the configuration file path.
-- `KAFKA_BRIDGE_METRICS_SMR_CONFIG`: Used with *Reporter* to pass the plugin configuration.
+The `KafkaBridgeConfigurationBuilder` will be updated to add metrics configuration when enabled through the `KafkaBridge` resource.
 
 The *Exporter* user provided configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
 The file path passed to the Bridge's container using the `bridge.metrics.exporter.config.path` property will be `/opt/strimzi/custom-config/metrics-config.yml`.
@@ -116,17 +109,17 @@ The affected projects are Cluster Operator and Kafka Bridge.
 
 ### Bridge
 
-The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in the next release and removed in January 2026.
+The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in the next release and removed on January 2026.
 When set, the user will get a warning suggesting to use the `bridge.metrics` property.
 In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRIDGE_METRICS_ENABLED`.
 
 ### Cluster Operator
 
-The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in 0.46.0 and removed with Strimzi v1 API release.
+The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in the next release and removed with Strimzi v1 API release.
 When set, the user will get a warning suggesting to use the `metricsConfig` configuration.
 In case they are both set, `metricsConfig` will take precedence over `enableMetrics`.
 
 ## Rejected alternatives
 
-Lock down and automate the *Reporter* configurations for the standalone Kafka Bridge.
-This was rejected because the Kafka Bridge allows users to customize Kafka clients and plugins using the `application.properties` file, which includes commented examples.
+Lock down and automate the *Reporter* configuration in the standalone Kafka Bridge.
+This would be convenient, but different from the current approach of using the `application.properties` file with examples.
