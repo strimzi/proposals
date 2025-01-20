@@ -84,7 +84,7 @@ This feature is not strictly required to support the *Reporter*, but will be use
 The `KafkaBridge` CRD will also support `metricsConfig` with the addition of `strimziMetricsReporter` type.
 This is how the *Reporter* configuration will look like:
 
-```sh
+```yaml
 spec:
   metricsConfig:
     type: strimziMetricsReporter
@@ -109,15 +109,35 @@ The affected projects are Cluster Operator and Kafka Bridge.
 
 ### Bridge
 
-The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in the next release and removed on January 2026.
+The `KAFKA_BRIDGE_METRICS_ENABLED` environment variable will be deprecated in the next release, and removed in the first major or minor release of 2026.
 When set, the user will get a warning suggesting to use the `bridge.metrics` property.
 In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRIDGE_METRICS_ENABLED`.
 
+#### Migration
+
+Once the `KAFKA_BRIDGE_METRICS_ENABLED` property will be removed, users will have to set `bridge.metrics=jmxPrometheusExporter` in the `application.properties`.
+
 ### Cluster Operator
 
-The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in the next release and removed with Strimzi v1 API release.
+The `enableMetrics` property in `KafkaBridge` CRD will be deprecated in the next release and removed with the release of Strimzi v1 API.
 When set, the user will get a warning suggesting to use the `metricsConfig` configuration.
 In case they are both set, `metricsConfig` will take precedence over `enableMetrics`.
+
+#### Migration
+
+Once the `enableMetrics` property will be removed, users that want to keep using the *Exporter* will have to create a secret with its configuration and reference from the resource spec:
+
+```yaml
+spec:
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: my-metrics
+        key: my-metrics-config.yml
+```
+
+As usual, Strimzi will provide an example YAML file.
 
 ## Rejected alternatives
 
