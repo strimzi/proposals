@@ -59,7 +59,7 @@ When running in standalone mode, the user will be able to configure *Reporter* p
 ```properties
 # enable Strimzi Metrics Reporter
 bridge.metrics=strimziMetricsReporter
-# filter the exposed metrics using a list of regexes
+# optionally, filter the exposed metrics using a list of regexes
 kafka.prometheus.metrics.reporter.allowlist=.*
 ```
 
@@ -91,9 +91,12 @@ spec:
     type: strimziMetricsReporter
     values:
       allowList:
-        - ".*"
+        - "kafka_consumer_consumer_metrics.*"
+        - "kafka_producer_kafka_metrics_count_count"
+        - "kafka_producer_producer_metrics.*"
 ```
 
+If the user does not specify the allow list, the default values shown in the previous example will be applied.
 The `KafkaBridgeConfigurationBuilder` will be updated to add metrics configuration when enabled through the `KafkaBridge` resource.
 
 The *Exporter* user provided configuration file will be stored in a ConfigMap and mounted in the Bridge's container.
@@ -116,7 +119,7 @@ In case they are both set, `bridge.metrics` will take precedence over `KAFKA_BRI
 
 #### Migration
 
-Once the `KAFKA_BRIDGE_METRICS_ENABLED` property will be removed, users will have to set `bridge.metrics=jmxPrometheusExporter` in the `application.properties`.
+When `KAFKA_BRIDGE_METRICS_ENABLED` will be removed, *Exporter* users will have to set `bridge.metrics=jmxPrometheusExporter` in their `application.properties`.
 
 ### Cluster Operator
 
@@ -126,7 +129,7 @@ In case they are both set, `metricsConfig` will take precedence over `enableMetr
 
 #### Migration
 
-Once the `enableMetrics` property will be removed, users that want to keep using the *Exporter* will have to create a secret with its configuration and reference from the resource spec:
+When `enableMetrics` will be removed, *Exporter* users will have to create a secret with its configuration, and reference the secret as shown in the following example:
 
 ```yaml
 spec:
@@ -138,7 +141,7 @@ spec:
         key: my-metrics-config.yml
 ```
 
-As usual, Strimzi will provide an example YAML file.
+A full example that include the *Exporter* configuration secret will be provided.
 
 ## Rejected alternatives
 
