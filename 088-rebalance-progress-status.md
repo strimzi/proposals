@@ -17,7 +17,7 @@ Information surrounding the progress of an executing partition rebalance is usef
 Knowing things like how much time an ongoing partition rebalance has left to take and how much data an ongoing partition rebalance has left to transfer helps users understand the cost of an ongoing partition rebalance.
 This information helps users decide whether they should continue or cancel an ongoing rebalance, and know when future operations will be able to be safely executed.
 
-Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or [StreamsHub Console](https://github.com/streamshub/console) to easily track the progression of a partition rebalance.
+Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or 3rd party tools to easily track the progression of a partition rebalance.
 
 ## Proposal
 Currently, the `KafkaRebalance` custom resource references a `ConfigMap` in the `status.optimizationResult.afterBeforeLoadConfigMap` field which stores the estimated load on the brokers before and after the optimization proposal is executed.
@@ -62,7 +62,7 @@ status:
 
 In the `ConfigMap`, we will add the following fields:
 - **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until partition rebalance is complete.
-- **completedDataMovementPercentage**: The percentage of the data movement of the partition rebalance that is completed e.g. values in the range [0-100].
+- **completedDataMovementPercentage**: The percentage of the data movement of the partition rebalance that is completed e.g. rounded down integer values in the range [0-100].
 - **executorState**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
 Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkadRebalance` resource.
@@ -118,17 +118,20 @@ We will provide the progress information for the `KafkaRebalance` states where i
   - `completedDataMovementPercentage`: The percentage of data movement of the ongoing partition rebalance that is complete.
   - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
 - `Stopped`
-  - `estimatedTimeToCompletion`: N/A
+  - `estimatedTimeToCompletion`: "N/A" [1]
   - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `NotReady`
-  - `estimatedTimeToCompletion`: N/A
+  - `estimatedTimeToCompletion`: "N/A" [1]
   - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `Ready`:
   - `estimatedTimeToCompletion`: 0
   - `completedDataMovementPercentage`: 100
   - `executorState`: Empty JSON object.
+
+Notes:
+- [1] The abbreviation "N/A" stands for ""Not Available" or "Not Applicable".
 
 All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedDataMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
@@ -144,7 +147,10 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 
 **Estimation for inter-broker rebalance:**
 
-This estimate will be a theoretical minimum derived from Cruise Control capacity and throttle configurations.
+We can only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
+Therefore, when users do not explicitly set the network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.inboundNetwork` of the `Kafka` resource, `estimatedTimeToCompletionInMinutes` will be "not available" and set `N/A`:
+
+When network capacity values are provided by the user the value of `estimatedTimeToCompletionInMinutes` will be a theoretical minimum derived from these capacity and throttle configurations.
 This means that the cluster rebalance would take at least the estimated amount of time to complete.
 
 $$\text{maxConcurrentPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}), \text{max.num.cluster.partition.movements})$$
@@ -154,6 +160,10 @@ $$\text{bandwidth}_{[2]} = \min(\frac{\text{networkCapacity}}{\text{maxConcurren
 $$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{bandwidth}$$
 
 $$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
+
+When network capacity configurations are not explicitly by the user, we cannot ensure an accurate value for `estimatedTimeToCompletionInMinutes`, so it will be set to `N/A`, an abbreviation meaning "Not Available" or "Not Applicable".
+
+$$\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}$$
 
 Notes:
 - [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
@@ -165,7 +175,7 @@ Notes:
 **Estimation for intra-broker rebalance:**
 
 It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write throughput and getting disk throughput is non-trivial for Strimzi.
-Since we cannot accurately estimate `estimatedTimeToCompletionInMinutes` without knowing the disk throughput, we set `estimatedTimeToCompletionInMinutes` to `N/A`.
+Since we cannot accurately estimate `estimatedTimeToCompletionInMinutes` without knowing the disk throughput, we set `estimatedTimeToCompletionInMinutes` to `N/A`, an abbreviation meaning "Not Available" or "Not Applicable".
 
 $$\text{maxPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements})$$
 
@@ -178,7 +188,7 @@ $$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{intraBrokerDataToMoveM
 
 Since `estimatedDiskThroughput` is unavailable, the formula for `throughput` cannot be resolved, making `estimatedTimeToCompletionInMinutes` undefined or not applicable, `N/A`:
 
-$$\text{estimatedTimeToCompletionInMinutes} = \text{N/A}$$
+$$\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}$$
 
 Notes
 - [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
@@ -205,7 +215,7 @@ Notes
 #### State: `Stopped`
 
 $$
-\text{estimatedTimeToCompletionInMinutes} = \text{N/A}
+\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}
 $$
 
 Once a rebalance has been stopped, it cannot be resumed. 
@@ -215,7 +225,7 @@ To move from the `Stopped` state, a user must refresh the `KafkaRebalance` resou
 #### State: `NotReady`
 
 $$
-\text{estimatedTimeToCompletionInMinutes} = \text{N/A}
+\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}
 $$
 
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
@@ -360,6 +370,9 @@ status:
   conditions:
   - lastTransitionTime: "2024-11-05T15:28:23.995129903Z"
     status: "True"
+    type: Rebalancing
+  - lastTransitionTime: "2024-11-05T15:28:23.995129903Z"
+    status: "True"
     type: Warning
     reason: CruiseControlRestException
     message: <error_message> [1]  
@@ -407,7 +420,7 @@ kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["ex
 
 ### Affected/not affected projects
 
-This change will affect the Strimzi Cluster Operator module and mostly the `KafkaRebalanceAssemblyOperator` class.
+This change will affect the Strimzi Cluster Operators project and mostly the `KafkaRebalanceAssemblyOperator` class in the `cluster-operator` module.
 
 ### Rejected Alternatives
 
