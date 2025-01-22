@@ -129,7 +129,7 @@ In case they are both set, `metricsConfig` will take precedence over `enableMetr
 
 #### Migration
 
-When `enableMetrics` will be removed, *Exporter* users will have to create a secret with its configuration, and reference the secret as shown in the following example:
+When `enableMetrics` will be removed, *Exporter* users will have to create a config map with its configuration, and reference it as shown in the following example:
 
 ```yaml
 spec:
@@ -141,7 +141,7 @@ spec:
         key: my-metrics-config.yml
 ```
 
-A full example that include the *Exporter* configuration secret will be provided.
+A full example that include the *Exporter* configuration config map will be provided.
 
 ## Rejected alternatives
 
