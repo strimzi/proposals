@@ -6,7 +6,7 @@ This proposal introduces a new feature to monitor the progression of an ongoing 
 
 At this time, Strimzi users are able to execute partition rebalances via `KafkaRebalance` custom resources but can only monitor the progression of those partition rebalances in two ways:
 
-- Manually querying the Cruise Control REST API endpoint directly. 
+- Manually querying the Cruise Control REST API endpoint directly (which requires creating a custom Cruise Control REST API user or disabling HTTP Basic authentication).
 - Inspecting the logs of the Cruise Control instance. 
 
 Unfortunately, neither of these methods are particularly user-friendly.
@@ -15,7 +15,7 @@ Unfortunately, neither of these methods are particularly user-friendly.
 
 Information surrounding the progress of an executing partition rebalance is useful for planning future cluster operations. 
 Knowing things like how much time an ongoing partition rebalance has left to take and how much data an ongoing partition rebalance has left to transfer helps users understand the cost of an ongoing partition rebalance.
-This information helps users decide whether they should continue or cancel an ongoing rebalance, and know when future operations will be able to be safely executed.
+This information helps users decide whether they should continue or cancel an ongoing rebalance, and keep client teams informed on the expected duration of the rebalance.
 
 Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or 3rd party tools to easily track the progression of a partition rebalance.
 
@@ -110,23 +110,23 @@ data:
 We will provide the progress information for the `KafkaRebalance` states where it is relevant:
 
 - `ProposalReady`:
-  - `estimatedTimeToCompletion`: The theoretical minimum estimated time it would take the rebalance to complete if executed.
+  - `estimatedTimeToCompletionInMinutes`: The theoretical minimum estimated time it would take the rebalance to complete if executed.
   - `completedDataMovementPercentage`: 0
   - `executorState`: Empty JSON object.
-- `Rebalancing`
-  - `estimatedTimeToCompletion`: The estimated time it will take for the ongoing rebalance to complete.
+- `Rebalancing`:
+  - `estimatedTimeToCompletionInMinutes`: The estimated time it will take for the ongoing rebalance to complete.
   - `completedDataMovementPercentage`: The percentage of data movement of the ongoing partition rebalance that is complete.
   - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
-- `Stopped`
-  - `estimatedTimeToCompletion`: "N/A" [1]
+- `Stopped`:
+  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
-- `NotReady`
-  - `estimatedTimeToCompletion`: "N/A" [1]
+- `NotReady`:
+  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `Ready`:
-  - `estimatedTimeToCompletion`: 0
+  - `estimatedTimeToCompletionInMinutes`: 0
   - `completedDataMovementPercentage`: 100
   - `executorState`: Empty JSON object.
 
@@ -148,7 +148,7 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 **Estimation for inter-broker rebalance:**
 
 We can only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
-Therefore, when users do not explicitly set the network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.inboundNetwork` of the `Kafka` resource, `estimatedTimeToCompletionInMinutes` will be "not available" and set `N/A`:
+Therefore, when users do not explicitly set the network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` of the `Kafka` resource, `estimatedTimeToCompletionInMinutes` will be "not available" and set `N/A`:
 
 When network capacity values are provided by the user the value of `estimatedTimeToCompletionInMinutes` will be a theoretical minimum derived from these capacity and throttle configurations.
 This means that the cluster rebalance would take at least the estimated amount of time to complete.
@@ -162,8 +162,6 @@ $$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{
 $$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
 
 When network capacity configurations are not explicitly by the user, we cannot ensure an accurate value for `estimatedTimeToCompletionInMinutes`, so it will be set to `N/A`, an abbreviation meaning "Not Available" or "Not Applicable".
-
-$$\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}$$
 
 Notes:
 - [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
@@ -186,9 +184,7 @@ $$
 
 $$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{intraBrokerDataToMoveMB}}{\text{throughput}}$$
 
-Since `estimatedDiskThroughput` is unavailable, the formula for `throughput` cannot be resolved, making `estimatedTimeToCompletionInMinutes` undefined or not applicable, `N/A`:
-
-$$\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}$$
+Since `estimatedDiskThroughput` is unavailable, the formula for `throughput` cannot be resolved, making `estimatedTimeToCompletionInMinutes` undefined or not applicable, `N/A`.
 
 Notes
 - [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
@@ -200,7 +196,7 @@ Notes
 The estimated time it will take for the ongoing rebalance to complete based on the average rate of data transfer.
 
 $$
-\text{rate} = \frac{\text{finishedDataMovement}\_{[1]}}{\text{taskTriggerTime}\_{[2]} - \text{currentTime}}
+\text{rate} = \frac{\text{finishedDataMovement}\_{[1]}}{\text{currentTime} - \text{taskTriggerTime}\_{[2]}}
 $$
 
 $$
@@ -214,29 +210,17 @@ Notes
 
 #### State: `Stopped`
 
-$$
-\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}
-$$
-
 Once a rebalance has been stopped, it cannot be resumed. 
 Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance. We set the field to `N/A` to emphasize this. 
 To move from the `Stopped` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `NotReady`
 
-$$
-\text{estimatedTimeToCompletionInMinutes} = \text{"N/A"}
-$$
-
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
 Therefore, we set `estimatedTimeToCompletionInMinutes` to `N/A` to emphasize this.
 To move from the `NotReady` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `Ready`
-
-$$
-\text{estimatedTimeToCompletionInMinutes} = 0
-$$
 
 The rebalance is complete so we hardcode the value to `0`
 This emphasizes that the rebalance is complete and helps clear up ambiguity surrounding what the `Ready` state means in the `KafkaRebalance` resource.
@@ -248,10 +232,6 @@ The percentage of the data movement of the partition rebalance that is completed
 The formulas used to calculate field value per  `KafkaRebalance` state:
 
 #### State: `ProposalReady`
-
-$$
-\text{completedDataMovementPercentage} = 0\%
-$$
 
 The rebalance has not started yet so no data has been moved, so we hardcode the value to `0`.
 This emphasizes that the rebalance has not started and helps clear up ambiguity surrounding what the `optimizationResult` field means in the `KafkaRebalance` resource.
@@ -270,29 +250,17 @@ Notes
 
 #### State: `Stopped`
 
-$$
-\text{completedDataMovementPercentage} = \langle \text{previous completedDataMovementPercentage} \rangle
-$$
-
 Once a rebalance has been stopped, it cannot be resumed. 
 However, the `completedDataMovementPercentage` information from when before the rebalance was stopped may still be of value to users. 
 Therefore, we reuse the same value of `completedDataMovementPercentage` from the previous update.
 
 #### State: `NotReady`
 
-$$
-\text{completedDataMovementPercentage} = \langle \text{previous completedDataMovementPercentage} \rangle
-$$
-
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
 However, the `completedDataMovementPercentage` information from when before the rebalance was interrupted or completed may still be of value to users.
 Therefore, we reuse the same value of `completedDataMovementPercentage` from the previous update.
 
 #### State: `Ready`
-
-$$
-\text{completedDataMovementPercentage} = 100
-$$
 
 The rebalance is complete so we hardcode the value to `100`.
 This emphasizes that the rebalance is complete and helps clear up ambiguity surrounding what the `Ready` state means in the `KafkaRebalance` resource.
