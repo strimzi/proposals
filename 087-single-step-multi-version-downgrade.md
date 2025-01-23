@@ -11,7 +11,7 @@ The proposal only relates to KRaft based clusters.
 
 ## Motivation
 
-This proposal would make downgrade of Strimzi more user friendly, specifically, in the scenario where a single-step multi version upgrade has been performed and a need arises to rollback before the metadata version has been advanced. The proposal will allow the user perform the roll back in a single step rather than the multiple steps currently required.
+This proposal would make downgrade of Strimzi more user friendly, specifically, in the scenario where a single-step multi version upgrade has been performed and a need arises to downgrade before the metadata version has been advanced. The proposal will allow the user perform the roll back in a single step rather than the multiple steps currently required.
 
 ## Proposal
 
@@ -25,33 +25,17 @@ Kafka does not support downgrade where the metadata version in use is higher tha
 
 #### Handle unknown versions
 
-Proposal A
 KraftVerionChangeCreator.detectToAndFromVersions() invokes the version() method in KafkaVersion.Lookup which throws an exception if the requested version is not known.
-This exception can be caught in detectToAndFromVersions() in the rollback scenario and an instance of KafkaVersion created that has null values for the unknown data (such as metadata version).
+This exception can be caught in detectToAndFromVersions() in the downgrade scenario and an instance of KafkaVersion created that has null values for the unknown data (such as metadata version).
 As this data is not currently read anywhere in the code the null values will not have any negative effect.
-However future code changes could result in NPE as it will not necessarily be obvious the values may be null.
-
-Proposal B
-Change the KafkaVersion class to an interface with two different implementations. 
-One implementation for the case where the Kafka version is known (which would be functionally equivalent to the current KafkaVersion class), and another implementation for unknown Kafka versions.
-The version() method in the Lookup class will return an instance of the appropriate class with tha calling method able to distinguish, when necessary, if the version is known or not based on the class of the returned instance.
-The methods in the implementation for the unknown versions will throw an exception for all methods for which the information is not available (i.e. all except the version method) to ensure an error is generated if any code mistakenly tries to use information that is not available for an unknown version. 
 
 #### Handling for specific versions
-It is possible that future Kafka versions might need extra steps to be executed for a particular upgrade/rollback path.
+It is possible that future Kafka versions might need extra steps to be executed for a particular upgrade/downgrade path.
 Similarly future versions of the operator might be capable of making configuration changes that previous operator versions would not be capable of undoing. 
 
-Proposal A
-Documentation of the rollback procedure for any upgrade/rollback paths where such issues arise should document the specific risks for those paths and how or if it is possible to rollback back in those scenarios.
-It should also be documented that it is the responsibility of the user to ensure they validate the rollback path they are taking to ensure no such issues exist. 
+Documentation of the downgrade procedure for any upgrade/downgrade paths where such issues arise should document the specific risks for those paths and how or if it is possible to downgrade back in those scenarios.
+It should also be documented that it is the responsibility of the user to ensure they validate the downgrade path they are taking to ensure no such issues exist. 
 
-Proposal B
-Add a new field to KafkaStatus, named minOperatorVersionForRollback, which is set by the operator during Kafka upgrade when it is known that specific extra steps are needed for a rollback to succeed.
-When a downgrade is identified (in KraftVerionChangeCreator.detectToAndFromVersions()) the version of the operator is compared with the value of minOperatorVersionForRollback, if set.
-An exception will be thrown if the requirement is not satisfied. 
-
-For example, if specific steps need to be implemented in the operator to upgrade/rollback from Kafka version 'x' to Kafka version 'y' and such steps are implemented in operator version 'n' then as part of the implementation in operator version 'n' to support the 'x' -> 'y' upgrade, the minOperatorVersionForRollback will bet set to 'n'.
-Any attempt to rollback a Kafka cluster from 'y' -> 'x' with operator version earlier than 'n' shall be rejected by the operator.
 
 ### System Tests
 
@@ -72,3 +56,17 @@ N/A
 ## Rejected alternatives
 
 Introducing similar functionality for Zookeeper based clusters rejected as the next version of Strimzi shall be the last to support Zookeeper and therefore there will never be a downgrade of a Zookeeper based cluster to that Strimzi version.
+
+#### Handle unknown versions
+Change the KafkaVersion class to an interface with two different implementations. 
+One implementation for the case where the Kafka version is known (which would be functionally equivalent to the current KafkaVersion class), and another implementation for unknown Kafka versions.
+The version() method in the Lookup class will return an instance of the appropriate class with tha calling method able to distinguish, when necessary, if the version is known or not based on the class of the returned instance.
+The methods in the implementation for the unknown versions will throw an exception for all methods for which the information is not available (i.e. all except the version method) to ensure an error is generated if any code mistakenly tries to use information that is not available for an unknown version. 
+
+#### Handling for specific versions
+Add a new field to KafkaStatus, named minOperatorVersionForRollback, which is set by the operator during Kafka upgrade when it is known that specific extra steps are needed for a downgrade to succeed.
+When a downgrade is identified (in KraftVerionChangeCreator.detectToAndFromVersions()) the version of the operator is compared with the value of minOperatorVersionForRollback, if set.
+An exception will be thrown if the requirement is not satisfied. 
+
+For example, if specific steps need to be implemented in the operator to upgrade/downgrade from Kafka version 'x' to Kafka version 'y' and such steps are implemented in operator version 'n' then as part of the implementation in operator version 'n' to support the 'x' -> 'y' upgrade, the minOperatorVersionForRollback will bet set to 'n'.
+Any attempt to downgrade a Kafka cluster from 'y' -> 'x' with operator version earlier than 'n' shall be rejected by the operator.
