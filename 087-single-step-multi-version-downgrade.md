@@ -57,8 +57,8 @@ Any attempt to rollback a Kafka cluster from 'y' -> 'x' with operator version ea
 
 A new system test will be added with the following steps:
 - Deploy the latest operator
-- Deploy a kafka cluster with the highest supported kafka version but metadata version set to the appropriate version for the Kafka version the cluster will be downgrade to in the following steps
-- Downgrade the operator to the most recent version which does not support the kafka version used in the cluster.
+- Deploy a Kafka cluster with the highest supported Kafka version but metadata version set to the appropriate version for the Kafka version the cluster will be downgrade to in the following steps
+- Downgrade the operator to the most recent version which does not support the Kafka version used in the cluster.
 - Downgrade the Kafka version used in the cluster to a version supported by the downgraded operator
 
 ## Affected projects
