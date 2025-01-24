@@ -62,7 +62,7 @@ status:
 
 In the `ConfigMap`, we will add the following fields:
 - **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until partition rebalance is complete.
-- **completedDataMovementPercentage**: The percentage of the data movement of the partition rebalance that is completed e.g. rounded down integer values in the range [0-100].
+- **completedDataMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed e.g. rounded down integer values in the range [0-100].
 - **executorState**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
 Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkadRebalance` resource.
@@ -99,7 +99,7 @@ data:
 ```
 [1] The estimated time it will take in minutes for the rebalance to complete based on the average rate of data transfer.
 
-[2] The percentage complete of the ongoing rebalance in the range [0-100].
+[2] The percentage of byte movement of the partition balance that is complete as a rounded down integer in the range [0-100].
 
 [3] The “non-verbose” JSON payload from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint.
 
@@ -110,12 +110,12 @@ data:
 We will provide the progress information for the `KafkaRebalance` states where it is relevant:
 
 - `ProposalReady`:
-  - `estimatedTimeToCompletionInMinutes`: The theoretical minimum estimated time it would take the rebalance to complete if executed.
+  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedDataMovementPercentage`: 0
   - `executorState`: Empty JSON object.
 - `Rebalancing`:
   - `estimatedTimeToCompletionInMinutes`: The estimated time it will take for the ongoing rebalance to complete.
-  - `completedDataMovementPercentage`: The percentage of data movement of the ongoing partition rebalance that is complete.
+  - `completedDataMovementPercentage`: The percentage of byte movement of the ongoing partition rebalance that is complete.
   - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
 - `Stopped`:
   - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
@@ -131,7 +131,7 @@ We will provide the progress information for the `KafkaRebalance` states where i
   - `executorState`: Empty JSON object.
 
 Notes:
-- [1] The abbreviation "N/A" stands for ""Not Available" or "Not Applicable".
+- [1] The abbreviation "N/A" stands for "Not Available" or "Not Applicable".
 
 All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedDataMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
@@ -145,52 +145,12 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 
 #### State: `ProposalReady`
 
-**Estimation for inter-broker rebalance:**
+Since the rebalance has not started at this point, we do not have the data needed to easily provide an accurate value for this field.
+Therefore, we set the field to `N/A` representing "Not Available" or "Not Applicable" to emphasize this.
 
-We can only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
-Therefore, when users do not explicitly set the network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` of the `Kafka` resource, `estimatedTimeToCompletionInMinutes` will be "not available" and set `N/A`:
+As useful as it would be to provide a theoretical minimum estimate of the time it would take a rebalance a complete _before_ it was executed, it is non-trivial to do and therefore outside the scope of this proposal.
+For more details on the challenges of the estimate checkout the [Future Improvements](#future-improvements) section of this proposal.
 
-When network capacity values are provided by the user the value of `estimatedTimeToCompletionInMinutes` will be a theoretical minimum derived from these capacity and throttle configurations.
-This means that the cluster rebalance would take at least the estimated amount of time to complete.
-
-$$\text{maxConcurrentPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}), \text{max.num.cluster.partition.movements})$$
-
-$$\text{bandwidth}_{[2]} = \min(\frac{\text{networkCapacity}}{\text{maxConcurrentPartitionMovements}}, \text{replication.throttle})$$
-
-$$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{bandwidth}$$
-
-$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
-
-When network capacity configurations are not explicitly by the user, we cannot ensure an accurate value for `estimatedTimeToCompletionInMinutes`, so it will be set to `N/A`, an abbreviation meaning "Not Available" or "Not Applicable".
-
-Notes:
-- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
-
-- [2] The network bandwidth given Cruise Control bandwidth throttle.
-
-- [3] The throughput given the max allowed number of concurrent partition movements and network bandwidth.
-
-**Estimation for intra-broker rebalance:**
-
-It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write throughput and getting disk throughput is non-trivial for Strimzi.
-Since we cannot accurately estimate `estimatedTimeToCompletionInMinutes` without knowing the disk throughput, we set `estimatedTimeToCompletionInMinutes` to `N/A`, an abbreviation meaning "Not Available" or "Not Applicable".
-
-$$\text{maxPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements})$$
-
-$$\text{estimatedDiskThroughput} = \text{???}_{[2]}$$
-
-$$\text{throughput}_{[3]} = \text{maxPartitionMovements} \times  \text{estimatedDiskThroughput}
-$$
-
-$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{intraBrokerDataToMoveMB}}{\text{throughput}}$$
-
-Since `estimatedDiskThroughput` is unavailable, the formula for `throughput` cannot be resolved, making `estimatedTimeToCompletionInMinutes` undefined or not applicable, `N/A`.
-
-Notes
-- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
-- [2] We don't have a method of determining disk throughput.
-- [3] The throughput given the max allowed number of concurrent partition movements and disk throughput.
- 
 #### State: `Rebalancing`
 
 The estimated time it will take for the ongoing rebalance to complete based on the average rate of data transfer.
@@ -211,7 +171,8 @@ Notes
 #### State: `Stopped`
 
 Once a rebalance has been stopped, it cannot be resumed. 
-Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance. We set the field to `N/A` to emphasize this. 
+Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance. 
+We set the field to `N/A` to emphasize this. 
 To move from the `Stopped` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `NotReady`
@@ -227,7 +188,7 @@ This emphasizes that the rebalance is complete and helps clear up ambiguity surr
 
 ### Field: `completedDataMovementPercentage`
 
-The percentage of the data movement of the partition rebalance that is completed.
+The percentage of the byte movement of the partition rebalance that is completed.
 
 The formulas used to calculate field value per  `KafkaRebalance` state:
 
@@ -238,7 +199,7 @@ This emphasizes that the rebalance has not started and helps clear up ambiguity 
 
 #### State: `Rebalancing`
 
-The percentage of the data movement of the partition rebalance that is completed.
+The percentage of the byte movement of the partition rebalance that is completed.
 
 $$
 \text{completedDataMovementPercentage} = (\frac{\text{finishedDataMovement}\_{[1]}}{\text{totalDataToMove}\_{[2]}} \times 100)
@@ -389,6 +350,57 @@ kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["ex
 ### Affected/not affected projects
 
 This change will affect the Strimzi Cluster Operators project and mostly the `KafkaRebalanceAssemblyOperator` class in the `cluster-operator` module.
+
+### Future Improvements
+
+#### Providing theoretical minimum estimate for `estimatedTimeToCompletionInMinutes` field for `ProposalReady` state
+
+In addition to having an estimate of how long a rebalance will take _during_ a rebalance, it would also be useful to have a theoretical minimum estimate of how long a rebalance would take _before_ a rebalance has started.
+However, providing such estimation is non-trivial.
+It would be better addressed in its own proposal where we can have deeper discussion and analysis.
+
+Leveraging the Cruise Control configurations and user-provided network capacity settings, we could provide a rough estimate for the “estimatedTimeToCompletion” field but there are a couple of challenges.
+For inter-broker rebalances, the accuracy of the estimation is dependent on the accuracy of the user-defined network capacity settings.
+For intra-broker rebalances, the accuracy of the estimation is dependent on broker disk read/write throughput.
+These are only a couple of the challenges and complications of providing such an estimate, in a future proposal we can discuss in more detail.
+
+** Rough estimation for inter-broker rebalances:**
+
+We could only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
+Therefore, the calculation would be dependent on how well users configure their network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` of their `Kafka` resource.
+
+$$\text{maxConcurrentPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}), \text{max.num.cluster.partition.movements})$$
+
+$$\text{bandwidth}_{[2]} = \min(\frac{\text{networkCapacity}}{\text{maxConcurrentPartitionMovements}}, \text{replication.throttle})$$
+
+$$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{bandwidth}$$
+
+$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
+
+Notes:
+- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
+
+- [2] The network bandwidth given Cruise Control bandwidth throttle.
+
+- [3] The throughput given the max allowed number of concurrent partition movements and network bandwidth.
+
+** Rough estimation for intra-broker rebalances:**
+
+It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write throughput and getting disk throughput is non-trivial for Strimzi.
+
+$$\text{maxPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements})$$
+
+$$\text{estimatedDiskThroughput} = \text{???}_{[2]}$$
+
+$$\text{throughput}_{[3]} = \text{maxPartitionMovements} \times  \text{estimatedDiskThroughput}
+$$
+
+$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{intraBrokerDataToMoveMB}}{\text{throughput}}$$
+
+Notes
+- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
+- [2] We don't have a method of determining disk throughput.
+- [3] The throughput given the max allowed number of concurrent partition movements and disk throughput.
 
 ### Rejected Alternatives
 
