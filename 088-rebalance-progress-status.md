@@ -156,17 +156,20 @@ For more details on the challenges of the estimate checkout the [Future Improvem
 The estimated time it will take for the ongoing rebalance to complete based on the average rate of data transfer.
 
 $$
-\text{rate} = \frac{\text{finishedDataMovement}\_{[1]}}{\text{currentTime} - \text{taskTriggerTime}\_{[2]}}
+r = \frac{D_{moved}}{T_{\text{current}} - T_{\text{start}}}
 $$
 
 $$
-\text{estimatedTimeToCompletionInMinutes} = \frac{\text{totalDataToMove}\_{[3]} - \text{finishedDataMovement}\_{[1]}}{\text{rate}}
+ETC = \frac{D_{total} - D_{moved}}{r \cdot 60}
 $$
 
-Notes
-- [1] The number of megabytes already moved by rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
-- [2] The time when the rebalance task was started, extracted from the `triggeredTaskReason` field for that task from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
-- [3] The total number of megabytes planned to be moved for rebalance, provided by the `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+**Notes:**
+- $r$: The average rate of data transfer in megabytes per second, calculated as the ratio of finished data movement to the elapsed time.
+- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $T_{\text{current}}$: The current time when the estimate is being calculated.
+- $T_{\text{start}}$: The time when the rebalance task was triggered, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $ETC$: The estimated time to completion in minutes based on the average rate of data transfer, the value of the `estimatedTimeToCompletionInMinutes` field.
 
 #### State: `Stopped`
 
@@ -202,12 +205,13 @@ This emphasizes that the rebalance has not started and helps clear up ambiguity 
 The percentage of the byte movement of the partition rebalance that is completed.
 
 $$
-\text{completedDataMovementPercentage} = (\frac{\text{finishedDataMovement}\_{[1]}}{\text{totalDataToMove}\_{[2]}} \times 100)
+\text{DMP} = \left(\frac{D_{moved}}{D_{total}} \times 100\right)
 $$
 
-Notes
- - [1] The number of megabytes already moved by rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
- - [2] The total number of megabytes planned to be moved for rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+**Notes:**
+- $DMP$: The percentage of byte data that has been moved, the value of the `completedDataMovementPercentage` field.
+- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 
 #### State: `Stopped`
 
@@ -359,48 +363,36 @@ In addition to having an estimate of how long a rebalance will take _during_ a r
 However, providing such estimation is non-trivial.
 It would be better addressed in its own proposal where we can have deeper discussion and analysis.
 
-Leveraging the Cruise Control configurations and user-provided network capacity settings, we could provide a rough estimate for the “estimatedTimeToCompletion” field but there are a couple of challenges.
+Leveraging the Cruise Control configurations and user-provided network capacity settings, we could provide a rough estimate for the `estimatedTimeToCompletion` field but there are a couple of challenges.
 For inter-broker rebalances, the accuracy of the estimation is dependent on the accuracy of the user-defined network capacity settings.
-For intra-broker rebalances, the accuracy of the estimation is dependent on broker disk read/write throughput.
+For intra-broker rebalances, the accuracy of the estimation is dependent on broker disk read/write bandwidth.
 These are only a couple of the challenges and complications of providing such an estimate, in a future proposal we can discuss in more detail.
 
 ** Rough estimation for inter-broker rebalances:**
 
 We could only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
-Therefore, the calculation would be dependent on how well users configure their network capacity settings, `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` of their `Kafka` resource.
+Therefore, the calculation would be dependent on how well users configure their network capacity settings.
 
-$$\text{maxConcurrentPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.partition.movements.per.broker}), \text{max.num.cluster.partition.movements})$$
-
-$$\text{bandwidth}_{[2]} = \min(\frac{\text{networkCapacity}}{\text{maxConcurrentPartitionMovements}}, \text{replication.throttle})$$
-
-$$\text{throughput}_{[3]} = \text{maxConcurrentPartitionMovements} \times \text{bandwidth}$$
-
-$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{dataToMoveMB}}{\text{throughput}}$$
+$$
+ETC = \frac{D_{total} \cdot 1024 \cdot 1024}{\min\left(NB, R_t\right) \cdot 60}
+$$
 
 Notes:
-- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
-
-- [2] The network bandwidth given Cruise Control bandwidth throttle.
-
-- [3] The throughput given the max allowed number of concurrent partition movements and network bandwidth.
+- $ETC$: Estimated time to completion in minutes, the value of the `estimatedTimeToCompletionInMinutes` field.
+- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `dataToMoveMB` field in `status.optimizationResult` section of `KafkaRebalance` resource.
+- $NB$: The average network bandwidth per broker in the cluster in bytes per second, derived from the `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` fields in the `Kafka` custom resource.
+- $R_t$: The replication throttle applied to replicas being moved in and out per broker in bytes per second, provided by Cruise Control  [`default.replication.throttle`](https://github.com/linkedin/cruise-control/wiki/Configurations) configuration.
 
 ** Rough estimation for intra-broker rebalances:**
 
-It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write throughput and getting disk throughput is non-trivial for Strimzi.
+It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write bandwidth and getting disk bandwidth is non-trivial for Strimzi.
 
-$$\text{maxPartitionMovements}_{[1]} = \min((\text{numberOfBrokers} \times \text{num.concurrent.intra.broker.partition.movements.per.broker}),\text{max.num.cluster.movements})$$
-
-$$\text{estimatedDiskThroughput} = \text{???}_{[2]}$$
-
-$$\text{throughput}_{[3]} = \text{maxPartitionMovements} \times  \text{estimatedDiskThroughput}
-$$
-
-$$\text{estimatedTimeToCompletionInMinutes} = \frac{\text{intraBrokerDataToMoveMB}}{\text{throughput}}$$
+$$ETC = \frac{D_{total} \cdot 1024 \cdot 1024}{\text{DB} \cdot 60}$$
 
 Notes
-- [1] The maximum number of concurrent partition movements given Cruise Control partition movement capacity.
-- [2] We don't have a method of determining disk throughput.
-- [3] The throughput given the max allowed number of concurrent partition movements and disk throughput.
+- $ETC$: The estimated time to completion in minutes, the value of the `estimatedTimeToCompletionInMinutes` field.
+- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `dataToMoveMB` field in `status.optimizationResult` section of `KafkaRebalance` resource.
+- $DB$: The estimate disk read/write bandwidth in bytes per second, however, we don't have a method of providing this value.
 
 ### Rejected Alternatives
 
