@@ -13,9 +13,9 @@ Unfortunately, neither of these methods are particularly user-friendly.
 
 ## Motivation
 
-Information surrounding the progress of an executing partition rebalance is useful for planning future cluster operations. 
-Knowing things like how much time an ongoing partition rebalance has left to take and how much data an ongoing partition rebalance has left to transfer helps users understand the cost of an ongoing partition rebalance.
-This information helps users decide whether they should continue or cancel an ongoing rebalance, and keep client teams informed on the expected duration of the rebalance.
+Information surrounding the progress of an executing partition rebalance is useful for planning future cluster operations, such as worker node maintenance, scaling, or upgrading brokers.
+Knowing details like the duration and data left to transfer for an ongoing partition rebalance can help users schedule maintenance windows effectively and access the impact of continuing versus canceling a rebalance.
+While it is ideal to complete a rebalance before performing certain operations, such as draining nodes, having this information allows users to schedule these operations more optimally.
 
 Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or 3rd party tools to easily track the progression of a partition rebalance.
 
@@ -61,8 +61,8 @@ status:
 [2] The `ConfigMap` containing information related to the ongoing partition rebalance.
 
 In the `ConfigMap`, we will add the following fields:
-- **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until partition rebalance is complete.
-- **completedDataMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed e.g. rounded down integer values in the range [0-100].
+- **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until the partition rebalance is complete.
+- **completedByteMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer value in the range [0-100].
 - **executorState**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
 Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkadRebalance` resource.
@@ -77,7 +77,7 @@ metadata:
   …
 data:
   estimatedTimeToCompletionInMinutes: 5 [1]
-  completedDataMovementPercentage: 80 [2]
+  completedByteMovementPercentage: 80 [2]
   executorState: [3]
   {
    "abortingPartitions":0,
@@ -111,29 +111,29 @@ We will provide the progress information for the `KafkaRebalance` states where i
 
 - `ProposalReady`:
   - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
-  - `completedDataMovementPercentage`: 0
+  - `completedByteMovementPercentage`: 0
   - `executorState`: Empty JSON object.
 - `Rebalancing`:
   - `estimatedTimeToCompletionInMinutes`: The estimated time it will take for the ongoing rebalance to complete.
-  - `completedDataMovementPercentage`: The percentage of byte movement of the ongoing partition rebalance that is complete.
+  - `completedByteMovementPercentage`: The percentage of byte movement of the ongoing partition rebalance that is complete as a rounded down integer in the range [0-100].
   - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
 - `Stopped`:
   - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
-  - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
+  - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `NotReady`:
   - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
-  - `completedDataMovementPercentage`: The value of `completedDataMovementPercentage` from previous update.
+  - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `Ready`:
   - `estimatedTimeToCompletionInMinutes`: 0
-  - `completedDataMovementPercentage`: 100
+  - `completedByteMovementPercentage`: 100
   - `executorState`: Empty JSON object.
 
 Notes:
 - [1] The abbreviation "N/A" stands for "Not Available" or "Not Applicable".
 
-All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedDataMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
+All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedByteMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
 Checkout the example in the [Field: executorState](#field-executorstate) section to see where the fields used in the formulas below come from.
 
@@ -189,9 +189,9 @@ To move from the `NotReady` state, a user must refresh the `KafkaRebalance` reso
 The rebalance is complete so we hardcode the value to `0`
 This emphasizes that the rebalance is complete and helps clear up ambiguity surrounding what the `Ready` state means in the `KafkaRebalance` resource.
 
-### Field: `completedDataMovementPercentage`
+### Field: `completedByteMovementPercentage`
 
-The percentage of the byte movement of the partition rebalance that is completed.
+The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer in the range [0-100].
 
 The formulas used to calculate field value per  `KafkaRebalance` state:
 
@@ -202,28 +202,28 @@ This emphasizes that the rebalance has not started and helps clear up ambiguity 
 
 #### State: `Rebalancing`
 
-The percentage of the byte movement of the partition rebalance that is completed.
+The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer in the range [0-100].
 
 $$
-\text{DMP} = \left(\frac{D_{moved}}{D_{total}} \times 100\right)
+\text{DMP} = \left\lfloor \frac{D_{moved}}{D_{total}} \times 100 \right\rfloor
 $$
 
 **Notes:**
-- $DMP$: The percentage of byte data that has been moved, the value of the `completedDataMovementPercentage` field.
+- $DMP$: The percentage of byte data that has been moved as a rounded down integer in the range [0-100], the value of the `completedByteMovementPercentage` field.
 - $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 - $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 
 #### State: `Stopped`
 
 Once a rebalance has been stopped, it cannot be resumed. 
-However, the `completedDataMovementPercentage` information from when before the rebalance was stopped may still be of value to users. 
-Therefore, we reuse the same value of `completedDataMovementPercentage` from the previous update.
+However, the `completedByteMovementPercentage` information from when before the rebalance was stopped may still be of value to users. 
+Therefore, we reuse the same value of `completedByteMovementPercentage` from the previous update.
 
 #### State: `NotReady`
 
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
-However, the `completedDataMovementPercentage` information from when before the rebalance was interrupted or completed may still be of value to users.
-Therefore, we reuse the same value of `completedDataMovementPercentage` from the previous update.
+However, the `completedByteMovementPercentage` information from when before the rebalance was interrupted or completed may still be of value to users.
+Therefore, we reuse the same value of `completedByteMovementPercentage` from the previous update.
 
 #### State: `Ready`
 
@@ -341,9 +341,9 @@ Example accessing `estimatedTimeToCompletionInMinutes` field.
 kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["estimatedTimeToCompletionInMinutes"]'
 ```
 
-Example accessing `completedDataMovementPercentage` field.
+Example accessing `completedByteMovementPercentage` field.
 ```shell
-kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["completedDataMovementPercentage"]'
+kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["completedByteMovementPercentage"]'
 ```
 
 Example accessing `executorState` field.
