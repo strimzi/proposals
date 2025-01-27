@@ -31,8 +31,6 @@ I propose splitting the project into 2 Java modules:
 The project will publish 2 artifacts, one per module. The build will also produce archives including all the dependencies:
 - The client-metrics-reporter archive will contain the client-metrics-reporter JAR and all its dependencies
 - The server-metrics-reporter archive will contain the server-metrics-reporter JAR and all its dependencies (including the client-metrics-reporter JAR)
-  
-
 ## Affected/not affected projects
 
 In addition of `metrics-reporter`, this will also impact:
