@@ -11,12 +11,12 @@ It just mounts them into the container.
 
 Recently, we introduced support for mounting custom volumes to any Strimzi container.
 This feature was introduced by [SP075 - Support for additional volumes](https://github.com/strimzi/proposals/blob/main/075-additional-volumes-support.md) in Strimzi 0.43.
-It allows to mount Secrets, but also Config Maps, PVCs or CSI volumes.
+It allows the mounting of Secrets, but also Config Maps, PVCs or CSI volumes.
 Similarly to the Secrets from the `type: custom` authentication, Strimzi does not do any validation or sanitization of their content and does not have any special handling for these Secrets.
 They are just mounted into the `/mnt` path where they can be used by the user.
 
 The additional volumes feature can be used to replace the `secrets` field in the `type: custom` authentication.
-Having two different features to cover the same thing seems to be unnecessary
+Having two different features to cover the same thing is unnecessary
 * It creates more complex API and bigger CRD(s)
 * It causes more complex / duplicate code for adding the volumes to Pods
 * It causes more complex / duplicate code for adding the volume mounts to containers
