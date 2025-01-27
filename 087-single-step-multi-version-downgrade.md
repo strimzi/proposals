@@ -23,10 +23,12 @@ Kafka does not support downgrade where the metadata version in use is higher tha
 
 ### Impacts:
 
+There are two impacts as detailed in the below sub-sections.
+
 #### Handle unknown versions
 
 KraftVersionChangeCreator.detectToAndFromVersions() invokes the version() method in KafkaVersion.Lookup which throws an exception if the requested version is not known.
-This exception can be caught in detectToAndFromVersions() in the downgrade scenario and an instance of KafkaVersion created that has null values for the unknown data (such as metadata version).
+This exception can be caught in detectToAndFromVersions() in the downgrade scenario and an instance of KafkaVersion created that has null values for the unknown data (such as metadata version). The version(s) from the strimzi.io/kafka-version annotations on the existing pods will be compared with the version from the custom resource to identify if a downgrade is taking place.
 As this data is not currently read anywhere in the code the null values will not have any negative effect.
 
 #### Handling for specific versions
@@ -40,11 +42,15 @@ It should also be documented that it is the responsibility of the user to ensure
 
 ### System Tests
 
-A new system test will be added with the following steps:
+The following procedure would test the new functionality:
 - Deploy the latest operator
 - Deploy a Kafka cluster with the highest supported Kafka version but metadata version set to the appropriate version for the Kafka version the cluster will be downgrade to in the following steps
 - Downgrade the operator to the most recent version which does not support the Kafka version used in the cluster.
 - Downgrade the Kafka version used in the cluster to a version supported by the downgraded operator
+
+HOWEVER, this verifies the functionality in the previous version of the operator rather than the latest version. The system tests are intended to test the latest version so there is no point creating a system test following this procedure. 
+
+I therefore propose we do not introduce a new system test for this and instead cover it in unit test.
 
 ## Affected projects
 
