@@ -110,28 +110,20 @@ data:
 We will provide the progress information for the `KafkaRebalance` states where it is relevant:
 
 - `ProposalReady`:
-  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedByteMovementPercentage`: 0
-  - `executorState`: Empty JSON object.
 - `Rebalancing`:
   - `estimatedTimeToCompletionInMinutes`: The estimated time it will take for the ongoing rebalance to complete.
   - `completedByteMovementPercentage`: The percentage of byte movement of the ongoing partition rebalance that is complete as a rounded down integer in the range [0-100].
   - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
 - `Stopped`:
-  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `NotReady`:
-  - `estimatedTimeToCompletionInMinutes`: "N/A" [1]
   - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
   - `executorState`: JSON object from previous update.
 - `Ready`:
   - `estimatedTimeToCompletionInMinutes`: 0
   - `completedByteMovementPercentage`: 100
-  - `executorState`: Empty JSON object.
-
-Notes:
-- [1] The abbreviation "N/A" stands for "Not Available" or "Not Applicable".
 
 All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedByteMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
@@ -146,7 +138,7 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 #### State: `ProposalReady`
 
 Since the rebalance has not started at this point, we do not have the data needed to easily provide an accurate value for this field.
-Therefore, we set the field to `N/A` representing "Not Available" or "Not Applicable" to emphasize this.
+Therefore, we omit this field in the `progress` section for this state.
 
 As useful as it would be to provide a theoretical minimum estimate of the time it would take a rebalance a complete _before_ it was executed, it is non-trivial to do and therefore outside the scope of this proposal.
 For more details on the challenges of the estimate checkout the [Future Improvements](#future-improvements) section of this proposal.
@@ -174,14 +166,13 @@ $$
 #### State: `Stopped`
 
 Once a rebalance has been stopped, it cannot be resumed. 
-Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance. 
-We set the field to `N/A` to emphasize this. 
+Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance so we omit this field in the `progress` section for this state.
 To move from the `Stopped` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `NotReady`
 
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
-Therefore, we set `estimatedTimeToCompletionInMinutes` to `N/A` to emphasize this.
+Therefore, there is no `estimatedTimeToCompletionInMinutes` for the rebalance so we omit this field in the `progress` section for this state.
 To move from the `NotReady` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `Ready`
@@ -259,9 +250,9 @@ Example of the Executor State JSON payload during an inter-broker balance:
 
 The formulas used to calculate the field value differ for each applicable `KafkaRebalance` state:
 
-#### State: `Ready`
+#### State: `ProposalReady`
 
-The rebalance has not started yet so no data surrounding partition movement is available yet, so we set the field to an empty JSON object.
+The rebalance has not started yet so no data surrounding partition movement is available yet, so we omit this field in the `progress` section for this state.
 
 #### State: `Rebalancing`
 
@@ -281,7 +272,7 @@ Therefore, we reuse the same value of `executorState` from the previous update.
 
 #### State: `Ready`
 
-The rebalance is complete in this state so we hardcode the value to an empty JSON object.
+The rebalance is complete in this state so there is no data surrounding ongoing partition movement available, so we omit this field in the `progress` section for this state.
 
 ### Progress Update Cadence
 
