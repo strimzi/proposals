@@ -11,7 +11,7 @@ The proposal only relates to KRaft based clusters.
 
 ## Motivation
 
-This proposal would make downgrade of Strimzi more user friendly, specifically, in the scenario where a single-step multi version upgrade has been performed and a need arises to downgrade before the metadata version has been advanced. The proposal will allow the user perform the roll back in a single step rather than the multiple steps currently required.
+This proposal would make downgrade of Strimzi more user friendly, specifically, in the scenario where a single-step multi version upgrade has been performed and a need arises to downgrade before the metadata version has been advanced. The proposal will allow the user perform the downgrade in a single step rather than the multiple steps currently required.
 
 ## Proposal
 
@@ -38,8 +38,6 @@ Similarly future versions of the operator might be capable of making configurati
 
 Documentation of the downgrade procedure for any upgrade/downgrade paths where such issues arise should document the specific risks for those paths and how or if it is possible to downgrade back in those scenarios.
 It should also be documented that it is the responsibility of the user to ensure they validate the downgrade path they are taking to ensure no such issues exist. 
-
-
 ### System Tests
 
 The following procedure would test the new functionality:
