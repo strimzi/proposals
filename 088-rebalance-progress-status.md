@@ -35,7 +35,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-11-05T15:28:23.995129903Z"
     status: "True"
-    type: ProposalReady | Rebalancing | Stopped | Ready [1]
+    type: ProposalReady | Rebalancing | Stopped | Ready
   observedGeneration: 1
   optimizationResult:
     afterBeforeLoadConfigMap: my-rebalance
@@ -65,7 +65,7 @@ In the `ConfigMap`, we will add the following fields:
 - **completedByteMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer value in the range [0-100].
 - **executorState**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
-Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkadRebalance` resource.
+Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkaRebalance` resource.
 This keeps `KafkaRebalance` information organized in one place, simplifies the proposal implementation, and has insignificant impact on the storage of the `ConfigMap`.
 
 The enhanced `ConfigMap` of an inter-broker partition rebalance will look like the following:
@@ -109,21 +109,17 @@ data:
 
 We will provide the progress information for the `KafkaRebalance` states where it is relevant:
 
-- `ProposalReady`:
-  - `completedByteMovementPercentage`: 0
-- `Rebalancing`:
-  - `estimatedTimeToCompletionInMinutes`: The estimated time it will take for the ongoing rebalance to complete.
-  - `completedByteMovementPercentage`: The percentage of byte movement of the ongoing partition rebalance that is complete as a rounded down integer in the range [0-100].
-  - `executorState`: JSON object from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API.
-- `Stopped`:
-  - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
-  - `executorState`: JSON object from previous update.
-- `NotReady`:
-  - `completedByteMovementPercentage`: The value of `completedByteMovementPercentage` from previous update.
-  - `executorState`: JSON object from previous update.
-- `Ready`:
-  - `estimatedTimeToCompletionInMinutes`: 0
-  - `completedByteMovementPercentage`: 100
+
+| State           | `estimatedTimeToCompletionInMinutes`                                   | `completedByteMovementPercentage`                                                                                                    | `executorState`                                                                                                                                                                                      |
+|-----------------|------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ProposalReady` | -                                                                      | 0                                                                                                                                    | -                                                                                                                                                                                                    |
+| `Rebalancing`   | The estimated time it will take for the ongoing rebalance to complete. | The percentage of byte movement of the ongoing partition rebalance that is complete as a rounded down integer in the range  [0-100]. | JSON object from  [/kafkacruisecontrol/state?substates=executor] ( https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API. |
+| `Stopped`       | -                                                                      | The value of `completedByteMovementPercentage` from previous update.                                                                 | JSON object from previous update.                                                                                                                                                                    |
+| `NotReady`      | -                                                                      | The value of `completedByteMovementPercentage` from previous update.                                                                 | JSON object from previous update.                                                                                                                                                                    |
+| `Ready`         | 0                                                                      | 100                                                                                                                                  | -                                                                                                                                                                                                    |                                                                                                                                            |   |
+
+**Notes:**
+- The "`-`" symbol indicates the states where the field will not be displayed.
 
 All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedByteMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
@@ -139,9 +135,6 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 
 Since the rebalance has not started at this point, we do not have the data needed to easily provide an accurate value for this field.
 Therefore, we omit this field in the `progress` section for this state.
-
-As useful as it would be to provide a theoretical minimum estimate of the time it would take a rebalance a complete _before_ it was executed, it is non-trivial to do and therefore outside the scope of this proposal.
-For more details on the challenges of the estimate checkout the [Future Improvements](#future-improvements) section of this proposal.
 
 #### State: `Rebalancing`
 
@@ -318,7 +311,7 @@ status:
     provisionStatus: RIGHT_SIZED
     recentWindows: 1
   progress:
-    rebalanceProgressConfigMap: my-rebalance-progress
+    rebalanceProgressConfigMap: my-rebalance
 ```
 [1] Error message from failed Cruise Control REST API call.
 
