@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 93 | [Support Single step multi version downgrade for KRaft based clusters](./093-single-step-multi-version-downgrade.md) |
 | 92 | [Integrate Kafka Bridge with Metrics Reporter](./092-integrate-bridge-with-metrics-reporter.md) |
 | 91 | [Support running Kafka Connect in test-container](./091-add-connect-to-test-container.md) |
 | 90 | [Support DNS configuration](./090-support-dns-config.md) |
