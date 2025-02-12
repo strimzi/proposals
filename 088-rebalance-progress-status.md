@@ -147,14 +147,14 @@ r = \frac{D_{moved}}{T_{\text{current}} - T_{\text{start}}}
 $$
 
 $$
-ETC = \frac{D_{total} - D_{moved}}{r \cdot 60}
+ETC = \frac{D_{total} - D_{moved}}{r \cdot 60000}
 $$
 
 **Notes:**
 - $r$: The average rate of data transfer in megabytes per second, calculated as the ratio of finished data movement to the elapsed time.
 - $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
-- $T_{\text{current}}$: The current time when the estimate is being calculated.
-- $T_{\text{start}}$: The time when the rebalance task was triggered, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $T_{\text{current}}$: The current time when the estimate is being calculated, expressed as the number of milliseconds since the Unix epoch.
+- $T_{\text{start}}$: The time when the rebalance task was triggered, expressed as the number of milliseconds since the Unix epoch, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 - $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 - $ETC$: The estimated time to completion in minutes based on the average rate of data transfer, the value of the `estimatedTimeToCompletionInMinutes` field.
 
