@@ -20,7 +20,9 @@ While it is ideal to complete a rebalance before performing certain operations, 
 Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or 3rd party tools to easily track the progression of a partition rebalance.
 
 ## Proposal
+
 Currently, the `KafkaRebalance` custom resource references a `ConfigMap` in the `status.optimizationResult.afterBeforeLoadConfigMap` field which stores the estimated load on the brokers before and after the optimization proposal is executed.
+
 This proposal extends the status section of the `KafkaRebalance` custom resource to include a `progress` section with a nested `rebalanceProgressConfigMap` field to reference that same `ConfigMap`.
 This `ConfigMap` will also be enhanced to contain information related to an ongoing partition rebalance.
 
@@ -134,7 +136,7 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 #### State: `ProposalReady`
 
 Since the rebalance has not started at this point, we do not have the data needed to easily provide an accurate value for this field.
-Therefore, we omit this field in the `progress` section for this state.
+Therefore, we omit this field in the `ConfigMap` of the `KafkaRebalance` resource for this state.
 
 #### State: `Rebalancing`
 
@@ -159,13 +161,13 @@ $$
 #### State: `Stopped`
 
 Once a rebalance has been stopped, it cannot be resumed. 
-Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance so we omit this field in the `progress` section for this state.
+Therefore, there is no `estimatedTimeToCompletionInMinutes` for a stopped rebalance so we omit this field in the `ConfigMap` of the `KafkaRebalance` resource for this state.
 To move from the `Stopped` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `NotReady`
 
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
-Therefore, there is no `estimatedTimeToCompletionInMinutes` for the rebalance so we omit this field in the `progress` section for this state.
+Therefore, there is no `estimatedTimeToCompletionInMinutes` for the rebalance so we omit this field in the `ConfigMap` of the `KafkaRebalance` resource for this state.
 To move from the `NotReady` state, a user must refresh the `KafkaRebalance` resource, the `rebalanceProgressConfigMap` will then be updated by the operator upon the next state change.
 
 #### State: `Ready`
@@ -245,7 +247,7 @@ The formulas used to calculate the field value differ for each applicable `Kafka
 
 #### State: `ProposalReady`
 
-The rebalance has not started yet so no data surrounding partition movement is available yet, so we omit this field in the `progress` section for this state.
+The rebalance has not started yet so no data surrounding partition movement is available yet, so we omit this field in the `ConfigMap` of the `KafkaRebalance` resource for this state.
 
 #### State: `Rebalancing`
 
@@ -265,7 +267,7 @@ Therefore, we reuse the same value of `executorState` from the previous update.
 
 #### State: `Ready`
 
-The rebalance is complete in this state so there is no data surrounding ongoing partition movement available, so we omit this field in the `progress` section for this state.
+The rebalance is complete in this state so there is no data surrounding ongoing partition movement available, so we omit this field in the `ConfigMap` of the `KafkaRebalance` resource for this state.
 
 ### Progress Update Cadence
 
