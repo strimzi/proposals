@@ -18,13 +18,13 @@ I'm also considering adding support for [KIP-714](https://cwiki.apache.org/confl
 
 I propose splitting the project into 2 Java modules:
 
-1. `client-metrics-reporter`: This module will only depend on kafka-clients and the Prometheus libraries. It will be used by Apache Kafka clients (Producer, Admin, Consumer, Connect and Streams) by setting the `metric.reporters` configuration to `io.strimzi.kafka.metrics.ClientMetricsReporter`. All the existing metrics-reporter configurations will stay the same. The differences are:
+1. `client-metrics-reporter`: This module will only depend on kafka-clients and the Prometheus libraries. It will be used by Apache Kafka clients (Producer, Admin, Consumer, Connect and Streams) by setting the `metric.reporters` configuration to `io.strimzi.kafka.metrics.prometheus.ClientMetricsReporter`. All the existing metrics-reporter configurations will stay the same. The differences are:
    - the reporter class name (it used to be `io.strimzi.kafka.metrics.KafkaPrometheusMetricsReporter`)
    - the dependency to add to the classpath
    
    This reporter will use its metric context to validate it runs in a client and will fail at startup if it's not the case.
 
-2. `server-metrics-reporter`: This module will depend on the client-metrics-reporter module and also on Apache Kafka server JARs required to capture Yammer metrics (as described in [Proposal #64](https://github.com/strimzi/proposals/blob/main/064-prometheus-metrics-reporter.md)). It can be used by Apache Kafka servers (brokers and controllers) by setting the `metric.reporters` configuration to `io.strimzi.kafka.metrics.ServerKafkaMetricsReporter` and the `kafka.metrics.reporters` configuration to `io.strimzi.kafka.metrics.ServerYammerMetricsReporter`. All the existing metrics-reporter configurations will stay the same. The differences are:
+2. `server-metrics-reporter`: This module will depend on the client-metrics-reporter module and also on Apache Kafka server JARs required to capture Yammer metrics (as described in [Proposal #64](https://github.com/strimzi/proposals/blob/main/064-prometheus-metrics-reporter.md)). It can be used by Apache Kafka servers (brokers and controllers) by setting the `metric.reporters` configuration to `io.strimzi.kafka.metrics.prometheus.ServerKafkaMetricsReporter` and the `kafka.metrics.reporters` configuration to `io.strimzi.kafka.metrics.prometheus.ServerYammerMetricsReporter`. All the existing metrics-reporter configurations will stay the same. The differences are:
    - the reporters class names (it used to be `io.strimzi.kafka.metrics.KafkaPrometheusMetricsReporter` and `io.strimzi.kafka.metrics.YammerPrometheusMetricsReporter`)
    - the dependencies to add to the classpath
 
