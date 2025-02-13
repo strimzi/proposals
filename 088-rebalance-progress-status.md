@@ -65,7 +65,7 @@ status:
 In the `ConfigMap`, we will add the following fields:
 - **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until the partition rebalance is complete.
 - **completedByteMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer value in the range [0-100].
-- **executorState**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
+- **executorState.json**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
 Since the progress information is constant, we can safely add it to the existing `ConfigMap` maintained for and tied to the `KafkaRebalance` resource.
 This keeps `KafkaRebalance` information organized in one place, simplifies the proposal implementation, and has insignificant impact on the storage of the `ConfigMap`.
@@ -80,7 +80,7 @@ metadata:
 data:
   estimatedTimeToCompletionInMinutes: 5 [1]
   completedByteMovementPercentage: 80 [2]
-  executorState: [3]
+  executorState.json: [3]
   {
    "abortingPartitions":0,
    "averageConcurrentPartitionMovementsPerBroker":5,
@@ -112,7 +112,7 @@ data:
 We will provide the progress information for the `KafkaRebalance` states where it is relevant:
 
 
-| State/Field     | `estimatedTimeToCompletionInMinutes`                                   | `completedByteMovementPercentage`                                                                                                    | `executorState`                                                                                                                                                                                      |
+| State/Field     | `estimatedTimeToCompletionInMinutes`                                   | `completedByteMovementPercentage`                                                                                                    | `executorState.json`                                                                                                                                                                                 |
 |-----------------|------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ProposalReady` | -                                                                      | 0                                                                                                                                    | -                                                                                                                                                                                                    |
 | `Rebalancing`   | The estimated time it will take for the ongoing rebalance to complete. | The percentage of byte movement of the ongoing partition rebalance that is complete as a rounded down integer in the range  [0-100]. | JSON object from  [/kafkacruisecontrol/state?substates=executor] ( https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of Cruise Control REST API. |
@@ -125,7 +125,7 @@ We will provide the progress information for the `KafkaRebalance` states where i
 
 All the information required for the Cluster Operator to estimate the values of `estimatedTimeToCompletionInMinutes` and `completedByteMovementPercentage` fields can be derived from the Cruise Control server configurations and the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) REST API endpoint.
 However, the actual formulas used to produce values for these fields depend on the state of the `KafkaRebalance` resource.
-Checkout the example in the [Field: executorState](#field-executorstate) section to see where the fields used in the formulas below come from.
+Checkout the example in the [Field: executorState.json](#field-executorstate.json) section to see where the fields used in the formulas below come from.
 
 ### Field: `estimatedTimeToCompletionInMinutes`
 
@@ -152,10 +152,10 @@ $$
 
 **Notes:**
 - $r$: The average rate of data transfer in megabytes per second, calculated as the ratio of finished data movement to the elapsed time.
-- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $T_{\text{current}}$: The current time when the estimate is being calculated, expressed as the number of milliseconds since the Unix epoch.
-- $T_{\text{start}}$: The time when the rebalance task was triggered, expressed as the number of milliseconds since the Unix epoch, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
-- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $T_{\text{start}}$: The time when the rebalance task was triggered, expressed as the number of milliseconds since the Unix epoch, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
+- $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $ETC$: The estimated time to completion in minutes based on the average rate of data transfer, the value of the `estimatedTimeToCompletionInMinutes` field.
 
 #### State: `Stopped`
@@ -196,7 +196,7 @@ $$
 
 **Notes:**
 - $DMP$: The percentage of byte data that has been moved as a rounded down integer in the range [0-100], the value of the `completedByteMovementPercentage` field.
-- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
+- $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 
 #### State: `Stopped`
@@ -216,7 +216,7 @@ Therefore, we reuse the same value of `completedByteMovementPercentage` from the
 The rebalance is complete so we hardcode the value to `100`.
 This emphasizes that the rebalance is complete and helps clear up ambiguity surrounding what the `Ready` state means in the `KafkaRebalance` resource.
 
-### Field: `executorState`
+### Field: `executorState.json`
 
 The "non-verbose" JSON payload of the [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint of the Cruise Control REST API.
 
@@ -256,14 +256,14 @@ The field will be assigned the "non-verbose" JSON payload of the [/kafkacruiseco
 #### State: `Stopped`
 
 Once a rebalance has been stopped, it cannot be resumed.
-However, the `executorState` information from when before the rebalance was stopped may still be of value to users.
-Therefore, we reuse the same value of `executorState` from the previous update.
+However, the `executorState.json` information from when before the rebalance was stopped may still be of value to users.
+Therefore, we reuse the same value of `executorState.json` from the previous update.
 
 #### State: `NotReady`
 
 Once a rebalance has been interrupted or completed with errors, it cannot be resumed.
-However, the `executorState` information from when before the rebalance was interrupted or completed may still be of value to users.
-Therefore, we reuse the same value of `executorState` from the previous update.
+However, the `executorState.json` information from when before the rebalance was interrupted or completed may still be of value to users.
+Therefore, we reuse the same value of `executorState.json` from the previous update.
 
 #### State: `Ready`
 
@@ -332,9 +332,9 @@ Example accessing `completedByteMovementPercentage` field.
 kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["completedByteMovementPercentage"]'
 ```
 
-Example accessing `executorState` field.
+Example accessing `executorState.json` field.
 ```shell
-kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["executorState"] | fromjson | .'
+kubectl get configmaps <my_rebalance_configmap_name> -o json | jq '.["data"]["executorState.json"] | fromjson | .'
 ```
 
 ### Affected/not affected projects
