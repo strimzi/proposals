@@ -47,14 +47,14 @@ While Zookeeper-based deployments are still supported, they are outside the scop
 
 - **A supported cloud native networking technology**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
 The prototype detailed within this proposal requires advance manual setup of an overlay network offered by a [Cloud Native Network](https://landscape.cncf.io/guide#runtime--cloud-native-network) project to provide connectivity between Kafka runtimes in different Kubernetes clusters.
-There is currently a choice between two projects:
+There are currently two projects that can successfully support the prototype operator:
     1. [Submariner](https://submariner.io/) provides an implementation of [Kubernetes Multi-Cluster Services (MCS)](https://multicluster.sigs.k8s.io/guides/#implementation-status).
     The Kafka runtime pods use these new services to communicate between one another.
     Other MCS implementations are expected to be viable, but have not yet been prototyped.
     2. [Cilium](https://cilium.io/) provides support for a [Cluster Mesh](https://docs.cilium.io/en/stable/network/clustermesh/intro/) (an MCS API implementation is currently in beta).
     The MCS API is not used by the prototype, but manual re-configuration of Kubernetes CoreDNS is required.
 
-    The [draft reference documentation](https://aswinayyolath.github.io/stretch-kafka-docs) for the prototype includes detailed steps describing how to pre-configure both [Submariner](https://aswinayyolath.github.io/stretch-kafka-docs/setting-up-submariner/) and [Cilium](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-cilium/).
+    The draft [README](https://aswinayyolath.github.io/stretch-kafka-docs) for the prototype includes detailed steps describing how to pre-configure both [Submariner](https://aswinayyolath.github.io/stretch-kafka-docs/setting-up-submariner/) and [Cilium](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-cilium/).
 
 ### Design
 
@@ -76,7 +76,7 @@ This approach will allow users to manage the definition of their stretch Kafka c
 
 ### Prototype
 
-A working prototype can be deployed using the steps outlined in a [draft README](https://aswinayyolath.github.io/stretch-kafka-docs/) that is being iteratively revised.
+A working prototype can be deployed using the steps outlined in a draft [README](https://aswinayyolath.github.io/stretch-kafka-docs/) that is being iteratively revised.
 The following sections will describe the key aspects of the prototype highlighting areas that would benefit from community feedback and input.
 
 #### User configuration of a supported Cloud Native Network project
