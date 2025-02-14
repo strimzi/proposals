@@ -151,12 +151,12 @@ ETC = \frac{D_{total} - D_{moved}}{r \cdot 60000}
 $$
 
 **Notes:**
-- $r$: The average rate of data transfer in megabytes per second, calculated as the ratio of finished data movement to the elapsed time.
+- $r$: The average rate of data transfer in megabytes per millisecond, calculated as the ratio of finished data movement to the elapsed time.
 - $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $T_{\text{current}}$: The current time when the estimate is being calculated, expressed as the number of milliseconds since the Unix epoch.
 - $T_{\text{start}}$: The time when the rebalance task was triggered, expressed as the number of milliseconds since the Unix epoch, extracted from the `triggeredTaskReason` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
-- $ETC$: The estimated time to completion in minutes based on the average rate of data transfer, the value of the `estimatedTimeToCompletionInMinutes` field.
+- $ETC$: The estimated time to completion in minutes based on the average rate of data transfer, the value of the `estimatedTimeToCompletionInMinutes` field. In this formula, we multiply the rate, $r$, by 60000 to convert it from megabytes per millisecond to megabytes per minute.
 
 #### State: `Stopped`
 
@@ -191,11 +191,11 @@ This emphasizes that the rebalance has not started and helps clear up ambiguity 
 The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer in the range [0-100].
 
 $$
-\text{DMP} = \left\lfloor \frac{D_{moved}}{D_{total}} \times 100 \right\rfloor
+\text{BMP} = \left\lfloor \frac{D_{moved}}{D_{total}} \times 100 \right\rfloor
 $$
 
 **Notes:**
-- $DMP$: The percentage of byte data that has been moved as a rounded down integer in the range [0-100], the value of the `completedByteMovementPercentage` field.
+- $BMP$: The percentage of bytes that have been moved as a rounded down integer in the range [0-100], the value of the `completedByteMovementPercentage` field.
 - $D_{moved}$: The number of megabytes already moved by the rebalance, provided by `finishedDataMovement` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate.json) REST API endpoint.
 - $D_{total}$: The total number of megabytes planned to be moved for the rebalance, provided by `totalDataToMove` field from the [/kafkacruisecontrol/state?substates=executor](#field-executorstate) REST API endpoint.
 
@@ -275,6 +275,7 @@ For ease of implementation and minimizing the load on the CruiseControl REST API
 
 In the event that Cruise Control runs into an error when rebalancing, when operator transitions the `KafkaRebalance` resource to the `NotReady` state, it will leave the `progress` section and `ConfigMap` as is.
 In the event that the Cruise Control REST API returns an error or fails to respond to the operator when querying the `/kafkacruisecontrol/state?substates=executor` endpoint during a rebalance, the operator will add a "Warning" condition with error message from the failed REST API call but leave the existing progress section and progress `ConfigMap` as is.
+In the event that the Cruise Control REST API returns an error for several reconciliations, the "Warning" condition will only be updated when the error reason or message changes.
 
 When Cruise Control state retrieval fails, the `KafkaRebalance` resource will be updated as follows:
 
@@ -321,6 +322,8 @@ status:
 
 The progress information will be stored in a `ConfigMap` with the same name as the `KafkaRebalance` resource.
 Using the name of the `ConfigMap` we can view its data from the command line using the Kubernetes CLI.
+
+For `KafkaRebalance` states where progress fields have been omitted, the command will return `null`.
 
 Example accessing `estimatedTimeToCompletionInMinutes` field.
 ```shell
