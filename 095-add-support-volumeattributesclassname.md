@@ -1,11 +1,8 @@
-<!-- This template is provided as an example with sections you may wish to comment on with respect to your proposal. Add or remove sections as required to best articulate the proposal. -->
-
 # Add `volumeAttributesClassName` to the storage configuration
 
 Add the ability to set `volumeAttributesClassName` in the configuration for `PersistentClaimStorage`.
 `VolumeAttributesClasses` provide the ability to decouple storage parameters like
 IOPS, throughput, fstype or any other cloud specific ones from the `StorageClass`.
-
 
 ## Current situation
 
@@ -24,10 +21,10 @@ losing data.
 
 ## Proposal
 
-To accommodate this change, the `PersistentClaimStorage` (PCS) API needs an additional field `volumeAttributesClassName`.
-When this field changes in the PCS, the Cluster Operator (CO) can map it to the generated PVC and let
-the CSI Driver take care of provisioning. There shouldn't be a need to validate the VAC since the
-parameter names depend on the cloud provider.
+To accommodate this change, the `PersistentClaimStorage` (PCS) API needs an additional field `volumeAttributesClass`.
+When this field changes in the PCS, the Cluster Operator (CO) can map it to the generated PVC's
+`volumeAttributesClassName` and let the CSI Driver take care of provisioning. There shouldn't be
+a need to validate the VAC since the parameter names depend on the cloud provider.
 
 The [`external-provisioner`](https://github.com/kubernetes-csi/external-provisioner) `csi-provisioner`
 usually checks whether the `driverName` in the VAC is the same as the `provisioner` in the SC.
@@ -59,7 +56,7 @@ spec:
     type: persistent-claim
     size: 16Gi
     class: ebs
-    volumeAttributesClassName: ebs-fast
+    volumeAttributesClass: ebs-fast
     deleteClaim: true
 ```
 
