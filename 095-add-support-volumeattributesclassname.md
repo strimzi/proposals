@@ -1,19 +1,23 @@
 # Add `volumeAttributesClassName` to the storage configuration
 
-Add the ability to set `volumeAttributesClassName` in the configuration for `PersistentClaimStorage`.
+Volumes in Strimzi are configured using the `PersistentClaimStorage` model. This is part
+of the Strimzi API's `Kafka` and `KafkaNodePool` among others. This proposal goes over the
+ability to set `volumeAttributesClassName` in the configuration for `PersistentClaimStorage`.
 `VolumeAttributesClasses` provide the ability to decouple storage parameters like
 IOPS, throughput, fstype or any other cloud specific ones from the `StorageClass`.
 
 ## Current situation
 
 It is  not possible to set the `volumeAttributesClassName` using [`PersistentClaimStorage`](https://github.com/strimzi/strimzi-kafka-operator/blob/c1b20f726dddbcd2a070c2eeb14fd30902027aec/api/src/main/java/io/strimzi/api/kafka/model/kafka/PersistentClaimStorage.java).
-This is currently being managed using various annotations
+To change any configuration parameters of the physical volume backing a `PersistentVolumeClaim`,
+users have to rely on the `StorageClass`'s `spec.parameters` field. This couples the parameters
+and the class.
 
 ## Motivation
 
 Kubernetes v1.31 added a new method of configuring storage parameters for `PersistentVolumes` (PV)
 using [`VolumeAttributesClass`](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/) (VAC).
-`PersistentVolumeClaims` (PVC) can then refer to them using `volumeAttribtesClassName` along with their
+`PersistentVolumeClaims` (PVC) can then refer to them using `volumeAttributesClassName` along with their
 corresponding `storageClassName`. This decouples storage parameters specification from the `StorageClass`
 (SC) into the VAC. In a PVC, the `storageClassName` field is immutable, whereas the
 `volumeAttributesClassName` isn't. This makes it possible to dynamically reconfigure the PV without
@@ -83,10 +87,11 @@ Here the user is expected to have a VAC named ebs-fast which has the same `drive
 the corresponding cloud provider's CSI driver.
 
 When a user decides to update the `volumeAttributesClassName` of a PVC, the CSI driver will
-apply the changes. This might result in a cloud provider error being thrown as well. In that
-case, it is expected that the user deals with fixing any errors with the VAC and SC. For
-example, the AWS EBS CSI driver posts this error when changing the VAC right after
-provisioning it and the user is expected to fix it.
+apply the changes. This update will ideally happen via the PCS which in-turn updates the PVC.
+This might result in a cloud provider error being thrown as well. This error will be an
+event on the corresponding PVC's status. In that case, it is expected that the user deals
+with fixing any errors with the VAC and SC. For example, the AWS EBS CSI driver posts this
+error when changing the VAC right after provisioning it and the user is expected to fix it.
 
 ```
   Warning  VolumeModifyFailed     26s (x5 over 66s)      external-resizer ebs.csi.aws.com                                                          rpc error: code = Internal desc = Could not modify volume "vol-0fa7ff557865862c2": volume "vol-0fa7ff557865862c2" in OPTIMIZING state, cannot currently modify
