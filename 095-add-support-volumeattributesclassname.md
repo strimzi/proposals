@@ -3,7 +3,7 @@
 Volumes in Strimzi are configured using the `PersistentClaimStorage` model. This is part
 of the Strimzi API's `Kafka` and `KafkaNodePool` among others. This proposal goes over the
 ability to set `volumeAttributesClassName` in the configuration for `PersistentClaimStorage`.
-`VolumeAttributesClasses` provide the ability to decouple storage parameters like
+`VolumeAttributesClass` provides the ability to decouple storage parameters like
 IOPS, throughput, fstype or any other cloud specific ones from the `StorageClass`.
 
 ## Current situation
