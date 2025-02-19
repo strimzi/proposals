@@ -14,7 +14,7 @@ Unfortunately, neither of these methods are particularly user-friendly.
 ## Motivation
 
 Information surrounding the progress of an executing partition rebalance is useful for planning future cluster operations, such as worker node maintenance, scaling, or upgrading brokers.
-Knowing details like the duration and data left to transfer for an ongoing partition rebalance can help users schedule maintenance windows effectively and access the impact of continuing versus canceling a rebalance.
+Knowing details like the duration and data left to transfer for an ongoing partition rebalance can help users schedule maintenance windows effectively and assess the impact of continuing versus canceling a rebalance.
 While it is ideal to complete a rebalance before performing certain operations, such as draining nodes, having this information allows users to schedule these operations more optimally.
 
 Further, having this information readily available and easily accessible via Kubernetes primitives, allows users and third-party tools like the Kubernetes CLI or 3rd party tools to easily track the progression of a partition rebalance.
@@ -63,7 +63,7 @@ status:
 [2] The `ConfigMap` containing information related to the ongoing partition rebalance.
 
 In the `ConfigMap`, we will add the following fields:
-- **estimatedTimeToCompletionInMinutes**: The estimated amount time it will take in minutes until the partition rebalance is complete.
+- **estimatedTimeToCompletionInMinutes**: The estimated time it will take in minutes until the partition rebalance is complete.
 - **completedByteMovementPercentage**: The percentage of the byte movement of the partition rebalance that is completed as a rounded down integer value in the range [0-100].
 - **executorState.json**: The “non-verbose” JSON payload from the [`/kafkacruisecontrol/state?substates=executor`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint, providing details about the executor's current status, including partition movement progress, concurrency limits, and total data to move.
 
@@ -105,7 +105,7 @@ data:
 
 [3] The “non-verbose” JSON payload from [/kafkacruisecontrol/state?substates=executor](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control) endpoint.
 
-[4] The broker load from the optimization proposal as a JSON string that already maintained in the `ConfigMap`.
+[4] The broker load from the optimization proposal as a JSON string that is already maintained in the `ConfigMap`.
 
 ### Field values per `KafkaRebalance` State
 
@@ -321,7 +321,7 @@ status:
 ### Accessing progress fields using Kubernetes CLI
 
 The progress information will be stored in a `ConfigMap` with the same name as the `KafkaRebalance` resource.
-Using the name of the `ConfigMap` we can view its data from the command line using the Kubernetes CLI.
+Using the name of the `ConfigMap` we can view its data from the command line using the Kubernetes CLI in a similar way to how we already access broker load information.
 
 For `KafkaRebalance` states where progress fields have been omitted, the command will return `null`.
 
@@ -357,7 +357,7 @@ For inter-broker rebalances, the accuracy of the estimation is dependent on the 
 For intra-broker rebalances, the accuracy of the estimation is dependent on broker disk read/write bandwidth.
 These are only a couple of the challenges and complications of providing such an estimate, in a future proposal we can discuss in more detail.
 
-** Rough estimation for inter-broker rebalances:**
+**Rough estimation for inter-broker rebalances:**
 
 We could only provide an accurate estimate for inter-broker rebalances with an accurate estimate of the network capacity of the brokers.
 Therefore, the calculation would be dependent on how well users configure their network capacity settings.
@@ -372,7 +372,7 @@ Notes:
 - $NB$: The average network bandwidth per broker in the cluster in bytes per second, derived from the `spec.cruiseControl.brokerCapacity.inboundNetwork` and `spec.cruiseControl.brokerCapacity.outboundNetwork` fields in the `Kafka` custom resource.
 - $R_t$: The replication throttle applied to replicas being moved in and out per broker in bytes per second, provided by Cruise Control  [`default.replication.throttle`](https://github.com/linkedin/cruise-control/wiki/Configurations) configuration.
 
-** Rough estimation for intra-broker rebalances:**
+**Rough estimation for intra-broker rebalances:**
 
 It is challenging to provide an accurate estimate for intra-broker rebalances without an estimate for disk read/write bandwidth and getting disk bandwidth is non-trivial for Strimzi.
 
