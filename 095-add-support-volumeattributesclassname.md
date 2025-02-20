@@ -4,11 +4,11 @@ Volumes in Strimzi are configured using the `PersistentClaimStorage` model. This
 
 ## Current situation
 
-It is  not possible to set the `volumeAttributesClassName` using [`PersistentClaimStorage`](https://github.com/strimzi/strimzi-kafka-operator/blob/c1b20f726dddbcd2a070c2eeb14fd30902027aec/api/src/main/java/io/strimzi/api/kafka/model/kafka/PersistentClaimStorage.java). To change any configuration parameters of the physical volume backing a `PersistentVolumeClaim`, users have to rely on the `StorageClass`'s `spec.parameters` field. This couples the parameters and the class.
+It is not possible to set the `volumeAttributesClassName` using [`PersistentClaimStorage`](https://github.com/strimzi/strimzi-kafka-operator/blob/c1b20f726dddbcd2a070c2eeb14fd30902027aec/api/src/main/java/io/strimzi/api/kafka/model/kafka/PersistentClaimStorage.java). To change any configuration parameters of the physical volume backing a `PersistentVolumeClaim`, users have to rely on the `StorageClass`'s `spec.parameters` field. This couples the parameters and the class.
 
 ## Motivation
 
-Kubernetes v1.31 added a new method of configuring storage parameters for `PersistentVolumes` (PV) using [`VolumeAttributesClass`](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/) (VAC). `PersistentVolumeClaims` (PVC) can then refer to them using `volumeAttributesClassName` along with their corresponding `storageClassName`. This decouples storage parameters specification from the `StorageClass` (SC) into the VAC. In a PVC, the `storageClassName` field is immutable, whereas the `volumeAttributesClassName` isn't. This makes it possible to dynamically reconfigure the PV without losing data.
+Kubernetes v1.31 added a new method of configuring storage parameters for `PersistentVolumes` (PV) using [`VolumeAttributesClass`](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/) (VAC). These VACs are a cluster-wide resource. `PersistentVolumeClaims` (PVC) can then refer to them using `volumeAttributesClassName` along with their corresponding `storageClassName`. This decouples storage parameters specification from the `StorageClass` (SC) into the VAC. In a PVC, the `storageClassName` field is immutable, whereas the `volumeAttributesClassName` isn't. This makes it possible to dynamically reconfigure the PV without losing data.
 
 ## Proposal
 
