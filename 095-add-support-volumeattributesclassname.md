@@ -12,7 +12,7 @@ Kubernetes v1.31 added a new method of configuring storage parameters for `Persi
 
 ## Proposal
 
-To accommodate this change, the `PersistentClaimStorage` (PCS) API needs an additional field `volumeAttributesClass`. When this field changes in the PCS, the Cluster Operator (CO) can map it to the generated PVC's `volumeAttributesClassName` and let the CSI Driver take care of provisioning. There shouldn't be a need to validate the VAC since the parameter names depend on the cloud provider.
+To accommodate this change, the `PersistentClaimStorage` (PCS) API needs an additional string field `volumeAttributesClass`. When this field changes in the PCS, the Cluster Operator (CO) can map it to the generated PVC's `volumeAttributesClassName` and let the CSI Driver take care of provisioning. There shouldn't be a need to validate the VAC since the parameter names depend on the cloud provider.
 
 The [`external-provisioner`](https://github.com/kubernetes-csi/external-provisioner) `csi-provisioner` usually checks whether the `driverName` in the VAC is the same as the `provisioner` in the SC. The operator could check that pre-emptively, but cannot depend on the CSI driver to use that implementation of a csi-provisioner. The user would be responsible for making sure the VACs and the SCs are configured correctly before configuring the PCS.
 
