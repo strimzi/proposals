@@ -7,14 +7,17 @@ Anomalies are detected by Cruise Control using the anomaly detector manager.
 ## Current situation
 
 During normal operations it's common for Kafka clusters to become unbalanced (through partition key skew, uneven partition placement etc.) or for problems to occur with disks or other underlying hardware which makes the cluster unhealthy.  
-Currently, if we encounter any such scenario we need to fix these issues manually i.e. if there is some broker failure then we might move the partition replicas from that corrupted broker to some other healthy broker by using the `KafkaRebalance` custom resource in the [`remove-broker`](https://strimzi.io/docs/operators/latest/full/deploying.html#proc-generating-optimization-proposals-str) mode.
-With smaller clusters, it is feasible to fix things manually. However, for larger ones it can be very time-consuming, or just not feasible, to fix all the issue on your own.
+Currently, if we encounter any such scenario we need to fix these issues manually i.e. if there is some goal violation and the cluster is imbalanced then we might move the partition replicas across the brokers to fix the violated goal by using the `KafkaRebalance` custom resource in the [`rebalance`](https://strimzi.io/docs/operators/latest/full/deploying.html#proc-generating-optimization-proposals-str) mode.
+With smaller clusters, it is feasible to fix things manually. However, for larger ones it can be very time-consuming, or just not feasible, to fix all the anomalies on your own.
 
 ## Motivation
 
-With the help of the self-healing feature we can resolve the issues like disk failure, broker failure and other issues automatically.
-Cruise Control treats these issues as "anomalies", the detection of which is the responsibility of the anomaly detector mechanism.
-Currently, users are [able to set]((https://strimzi.io/docs/operators/latest/full/deploying.html#setting_up_alerts_for_anomaly_detection)) the notifier to one of those included with Cruise Control (<list of included notifiers>).
+With the help of the self-healing feature we can resolve the anomalies causing unhealthy/imbalanced cluster automatically.
+We can also fix/mitigate the other anomalies like topic violation, disk failure and broker failure etc.
+The detection of anomalies is the responsibility of the anomaly detector mechanism.
+Notifiers in Cruise Control are used to send notification to user about the self-healing operations being performed in the cluster.
+Notifiers can be useful as they provide visibility to the user regarding the actions that are being performed by Cruise COntrol regarding self-healing for e.g. anomaly being detected, anomaly fix being started etc.
+Currently, users are [able to set](https://strimzi.io/docs/operators/latest/full/deploying.html#setting_up_alerts_for_anomaly_detection) the notifier to one of those included with Cruise Control (SelfHealingNotifier, AlertaNotifier, SlackNotifier etc).
 However, any anomaly that is detected would then need to be fixed manually by using the `KafkaRebalance` custom resource.
 It would be useful for users of Strimzi to be able to have these anomalies fixed automatically whenever they are detected.
 
@@ -26,29 +29,29 @@ It would be useful for users of Strimzi to be able to have these anomalies fixed
 
 #### Anomaly Detector Manager
 
-The anomaly detector manager helps in detecting the anomalies and also handling the detected anomalies.
+The anomaly detector manager helps in detecting the anomalies as well as handling them.
 It acts as a coordinator between the detector classes as well as the classes which will be handling and resolving the anomalies.
-Various detector classes like `GoalViolationDetector`, `DiskFailureDetector`, `KafkaBrokerFailureDetector` etc. are used for the anomaly detection, which runs periodically to check if the cluster have their corresponding anomalies or not (This periodic check can be easily configured through the `anomaly.detection.interval.ms` configuration).
-Every detector class works in a different way to detect their corresponding anomalies. A `KafkaBrokerFailureDetector` will require a deep usage of requesting metadata to the Kafka cluster (i.e. broker failure) while if we talk about `DiskFailureDetector` it will be more inclined towards using the admin client API. In the same way the `MetricAnomalyDetector` will be making use of metrics and other detector like `GoalViolationDetector` and `TopicAnomalyDetector` will have their own way to detect anomalies.
+Various detector classes like `GoalViolationDetector`, `DiskFailureDetector`, `KafkaBrokerFailureDetector` etc. are used for the anomaly detection, which runs periodically to check if the cluster have their corresponding anomalies or not (The frequency of this check can be easily configured through the `anomaly.detection.interval.ms` configuration).
+Detector classes have different mechanisms to detect their corresponding anomalies. For example, `KafkaBrokerFailureDetector` utilises Kafka Metadata API whereas `DiskFailureDetector` and `TopicAnomalyDetector` utilises Kafka Admin API. Furthermore, `MetricAnomalyDetector` and `GoalViolationDetector` uses metrics to detect the anomalies.
 The detected anomalies can be of various types:
-* Goal Violation - This happens if certain optimization goals are violated (e.g. DiskUsageDistributionGoal etc.). These goals can be configured independently (through the `self.healing.goals` config) to those used for manual rebalancing..
+* Goal Violation - This happens if certain optimization goals are violated (e.g. DiskUsageDistributionGoal etc.). These goals can be configured independently (through the `self.healing.goals` configuration under the `spec.cruiseControl.config` section) to those used for manual rebalancing(goals configured in the KafkaRebalance custom resource).
 * Topic Anomaly - Can happen when one or more topics in cluster violates user-defined properties (e.g. some partitions are too large in disk).
 * Broker Failure - It happens when a non-empty broker crashes or leaves a cluster.
 * Disk Failure - This failure happens if one of the non-empty disks fails (related to a Kafka Cluster with JBOD disks).
 * Metric anomaly - This failure happens if metrics collected by Cruise Control have some anomaly in their value (e.g. a sudden rise in the log flush time metrics).
 
 The detected anomalies are inserted into a priority queue and the anomaly with the highest property is picked first to resolve.
-The anomaly detector manager calls the notifier to get an action regarding, whether the anomaly should be fixed, delayed or ignored.
-If the action is fix, then the anomaly detector manager calls the classes that are required to resolve the anomaly.
+The anomaly detector manager calls the notifier to get an action regarding whether the anomaly should be fixed, delayed, or ignored.
+If the action is `FIX`, then the anomaly detector manager calls the classes that are required to resolve the anomaly.
 
-Anomaly detection also has several other [configurations](https://github.com/linkedin/cruise-control/wiki/Configurations#anomalydetector-configurations), such as the detection interval and the anomaly notifier class, which can effect the performance of the Cruise Control server and the latency of the anomaly detection.
+Anomaly detection also has various [configurations](https://github.com/linkedin/cruise-control/wiki/Configurations#anomalydetector-configurations), such as the detection interval and the anomaly notifier class, which can affect the performance of the Cruise Control server and the latency of the anomaly detection.
 
 #### Notifiers in Cruise Control
 
 Whenever anomalies are detected, Cruise Control provides the ability to notify the user regarding the detected anomalies using optional notifier classes.
-The notification sent by these classes increases the visibility of the operation that are taken by Cruise Control.
+The notification sent by these classes increases the visibility of the operations that are taken by Cruise Control.
 However, the notifier class used by Cruise Control is configurable and custom notifiers can be used by setting the `anomaly.notifier.class` property.
-The notifier class returns the `action` that is going to be taken on the notified anomaly.
+The notifier class returns the `action` that is going to be taken on the flagged anomaly.
 These actions can be classified into three types:
 * FIX - Start the anomaly fix
 * CHECK - Delay the anomaly fix
@@ -63,10 +66,10 @@ If self-healing is enabled in Cruise Control and anomalies are detected, then a 
 The action returned by the notifier would decide whether the anomaly should be fixed or not.
 If the notifier has returned `FIX` as the action then the classes which are responsible for resolving the anomaly would be called.
 Each detected anomaly is implemented by a specific class which leverages a corresponding other class to run a fix.
-For example, the `BrokerFailures` class uses the `RemoveBrokersRunnable` class, the `DiskFailure` class use the `RemoveDisksRunnable` class and so on.
+For example, the `GoalViolations` class uses the `RebalanceRunnable` class, the `DiskFailure` class use the `RemoveDisksRunnable` class and so on.
 An optimization proposal will then be generated by these `Runnable` classes and that proposal will be applied on the cluster to fix the anomaly.
 In case the anomaly detected is unfixable for e.g. violated hard goals that cannot be fixed typically due to lack of physical hardware(insufficient number of racks to satisfy rack awareness, insufficient number of brokers to satisfy Replica Capacity Goal, or insufficient number of resources to satisfy resource capacity goals), the anomaly wouldn't be fixed and the cruise control logs will be updated with `self-healing is not possible due to unfixable goals` warning.
-When self-healing starts, you can check the anomaly status by polling the `state` endpoint with the `substate` configured as `anomaly_detector`. This would provide the anomaly details like `anomalyId`, `anomalyType` and the status of the anomaly etc.
+When self-healing starts, you can check the anomaly status by polling the [`state` endpoint](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control). This would provide the anomaly details like `anomalyId`, `anomalyType` and the status of the anomaly etc.
 For example, the detected anomaly would look like this:
 ```shell
 #...
@@ -76,17 +79,18 @@ statusUpdateDate=2024-12-09T09:49:47Z,
 failedDisksByTimeMs={2={/var/lib/kafka/data-1/kafka-log2=1733737786603}}, 
 status=FIX_STARTED}]}
 ```
+where the `anomalyID` represents the task id assigned to the anomaly, `failedDisksByTimeMs` represents the disk which failed, `detectionDate` and `statusUpdateDate` represet the date and time when the anomaly was detected and the status of the anomaly was updated.
 
 The anomaly status would change based on how the healing progresses. The anomaly can transition to these possible status:
 * DETECTED - The anomaly is just detected and no action is yet taken on it 
 * IGNORED - Self healing is either disabled or the anomaly is unfixable
-* FIX_STARTED - The anomaly has started getting fixed
+* FIX_STARTED - The anomaly fix has started
 * FIX_FAILED_TO_START - The proposal generation for the anomaly fix failed 
 * CHECK_WITH_DELAY - The anomaly fix is delayed 
-* LOAD_MONITOR_NOT_READY - Monitor which is monitoring the workload of a Kafka cluster is in loading or bootstrap state
+* LOAD_MONITOR_NOT_READY - Monitor for workload of a Kafka cluster is in loading or bootstrap state
 * COMPLETENESS_NOT_READY - Completeness not met for some goals. The completeness describes the confidence level of the data in the metric sample aggregator. If this is low then some Goal classes may refuse to produce proposals.
 
-We can also poll the `state` endpoint, with `substate` parameter as `executor`, to get details on the tasks that are currently being performed by Cruise Control.
+We can again poll the [`state` endpoint](https://github.com/linkedin/cruise-control/wiki/REST-APIs#query-the-state-of-cruise-control), with `substate` parameter as `executor`, to get details on the tasks that are currently being performed by Cruise Control.
 For example:
 ```shell
 ExecutorState: {state: INTER_BROKER_REPLICA_MOVEMENT_TASK_IN_PROGRESS,
@@ -97,6 +101,7 @@ ExecutorState: {state: INTER_BROKER_REPLICA_MOVEMENT_TASK_IN_PROGRESS,
 	Disk /var/lib/kafka/data-1/kafka-log2 on broker 2 failed at 2024-12-09T09:49:46Z
  }}
 ```
+which gives more information about inter broker replica movements tasks which are: in-progress , pending, aborted, finished etc.
 
 ### Enabling self-healing configuration in the Strimzi operator
 
@@ -115,7 +120,8 @@ We are using a feature gate for this feature due to various reasons:
 
 ### Enabling self-healing in the Kafka custom resource
 
-When the feature gate is enabled, the operator will set the `self.healing.enabled` Cruise Control configuration to `true` and allow the users to set other appropriate `self-healing` related [configurations](https://github.com/linkedin/cruise-control/wiki/Configurations#selfhealingnotifier-configurations).
+When the `UseSelfHealing` feature gate is enabled, users will be able to activate self-healing by configuring the [`self.healing` Cruise Control configurations](https://github.com/linkedin/cruise-control/wiki/Configurations#selfhealingnotifier-configurations) in the `spec.cruiseControl.config` of their `Kafka` resource.
+When the `UseSelfHealing` feature gate is disabled, users will not be able to activate self-healing and all `self.healing` Cruise Control configurations will be ignored.
 
 Here is an example of how the configured Kafka custom resource could look:
 ```yaml
@@ -134,19 +140,19 @@ spec:
 
 Where the user wants to enable self-healing for some specific anomalies, they can use configurations like `self.healing.broker.failure.enabled` for broker failure, `self.healing.goal.violation.enabled` for goal violation etc.
 
-### Strimzi Notifier
+### KubernetesEventsNotifier
 
 Cruise Control provides `AnomalyNotifier` interface which has multiple abstract methods on what to do if certain anomalies are detected.
 `SelfHealingNotifier` is the base class that contains the logic of self-healing and override the methods in by implementing the `AnomalyNotifier` interface. 
-Some of those methods are:`onGoalViolation()`, `onBrokerFailure()`, `onDisk Failure`, `alert()` etc.
-The `SelfHealingNotifier` class can then be further used to implement your own notifier
-The other custom notifier offered by Cruise control are also based upon the `SelfHealingNotifier`.
+Some of those methods are:`onGoalViolation()`, `onBrokerFailure()`, `onDiskFailure`, `alert()` etc.
+The `SelfHealingNotifier` class can then be further used to implement your own notifier.
+The other custom notifiers offered by Cruise control are also based upon the `SelfHealingNotifier`.
 
-We will be using our own notifier implementation called `StrimziNotifer`(set via the `anomaly.notifier.class` config).
-Strimzi will configure Cruise Control to always use the `StrimziNotifier` to notify regarding the anomalies and take action on them.
+We will be using our own notifier implementation called `KubernetesEventsNotifier`(set via the `anomaly.notifier.class` config).
+Strimzi will configure Cruise Control to always use the `KubernetesEventsNotifier` to notify regarding the anomalies and take action on them.
 
 For effective alerts and monitoring, we will be making use of Kubernetes events to signal to users what operations Cruise Control is performing automatically.
-The `StrimziNotifier` will override the `alert()` method of the `SelfHealingNotifier` and will trigger and publish events whenever an anomaly is detected.
+The `KubernetesEventsNotifier` will override the `alert()` method of the `SelfHealingNotifier` and will trigger and publish events whenever an anomaly is detected.
 These events would publish information regarding the anomaly like the anomalyID, the type of anomaly which was detected etc.
 The events would help the user to understand the anomalies that are present, when the anomalies appeared in their cluster and also would help them know what is going on in their clusters.
 
@@ -177,13 +183,13 @@ The event published would look like this:
   type: Normal
 ```
 
-The `StrimziNotifier` class is going to reside in a separate module in the operator repository called the `strimzi-cruise-control-notifier` so that a seperate jar for the notifier can be built for inclusion in the Cruise Control container image.
-We will also need to include the fabric8 client dependencies in the notifier JAR that will be used for generating the Kubernetes events as well as for reading the annotation on the Kafka resource from the notifier.
+The `KubernetesEventsNotifier` class is going to reside in a separate repository called the `kubernetes-event-notifier`, so that users can use it when using self-healing to build a separate jar for the notifier for inclusion in the Kafka image to run on as part of Cruise Control.
+We will also need to include the fabric8 client dependencies in the notifier JAR that will be used for generating the Kubernetes events.
 
 ### Pausing the self-healing feature
 
 The user should also have the option to pause the self-healing feature, in case they know or plan to do some rolling restart of the cluster or some rebalance they are going to perform which can cause issue with the self-healing itself.
-For this, we will be having an annotation called `strimzi.io/self-healing-paused`.
+For this, we will be having an annotation called `strimzi.io/self-healing-paused` on the `Kafka` custom resource.
 We can set this annotation on the Kafka custom resource to pause the self-healing feature.
 self-healing is not paused by default so missing annotation would mean that anomalies detected will keep getting healed automatically.
 When self-healing is paused, it would mean that all the anomalies that are detected after the pause annotation is applied would be ignored and no fix would be done for them.
@@ -212,21 +218,21 @@ metadata:
   uid: 71928731-df71-4b9f-ac77-68961ac25a2f
 ```
 
-We will have checks on methods like `onGoalViolation`, `onBrokerFailure`, `onTopicAnomaly` etc. in the `StrimziNotifier` to check if the `pause` annotation is applied on the Kafka custom resource or not.
+We will have checks on methods like `onGoalViolation`, `onBrokerFailure`, `onTopicAnomaly` etc. in the `StrimziNotifier` to check if the `strimzi.io/self-healing-paused: true` annotation is applied on the Kafka custom resource or not.
 If the annotation is applied then this check will set the `action` to be taken on the anomaly as `IGNORE` and the anomalies wouldn't be fixed.
 
 ### Strimzi Operations while self-healing is running/fixing an anomaly 
 
-Self-healing is a very robust and resilient feature due to its ability to tackle issues which can appear while the healing of cluster is happening.
+Self-healing is a very robust and resilient feature due to its ability to tackle issues while healing a cluster.
 
 #### What happens when self-healing is running/fixing an anomaly and brokers are rolled
 
-If a broker fails, self-healing will trigger and Cruise Control will try to move the partition replicas from the failed broker to other healthy brokers in the Kafka cluster.
-If, during the process of moving partitions from the failed broker, another broker in the Kafka cluster gets deleted or rolled, then Cruise Control would finish the transfer from the failed broker but log that `self-healing finished successful with error`.
+If some anomaly is getting healed , Cruise Control will then try to fix/mitigate the anomaly by moving the partition replicas across the brokers in the Kafka cluster.
+If, during the process of moving partitions replicas among the brokers in the Kafka cluster, some broker that was being used gets deleted or rolled, then Cruise Control would finish self-healing process and log that `self-healing finished successful with error`.
 If the deleted or rolled broker comes back before the periodic anomaly check interval, then self-healing would start again only for the earlier failed broker with a new anomalyId since it was not fixed properly. 
 In case the deleted broker doesn't come back healthy within the periodic anomaly check interval then another new anomaly for the deleted broker will be created and the earlier detected failed broker would also persist but will be updated with a new anomalyId.
 
-#### What happens when self-healing is running/fixing an anomaly and Kafka Rebalance is applied
+#### What happens when self-healing is running/fixing an anomaly and Kafka Rebalance is approved
 
 If self-healing is ongoing and a `KafkaRebalance` resource is posted in the middle of it then the `KafkaRebalance` resource will move to `NotReady` state, stating that there is already a rebalance ongoing. 
 For example
@@ -250,9 +256,13 @@ status:
   observedGeneration: 1
 ```
 
+#### What happens when self-healing is running/fixing an anomaly and Kafka Rebalance is applied to ask for a proposal
+
+If self-healing is ongoing and a `KafkaRebalance` resource is applied in the middle of it then Cruise Control will still generate an optimization proposal. The proposal should be based on the cluster shape at that particular timestamp.
+
 ## Affected/not affected projects
 
-A new module name `strimzi-notifier` will be added to the operator repository.
+A new repository named `kubernetes-event-notifier` will be added under the Strimzi.
 The `strimzi-notifier` module should build as a jar and then be included in the cruise control image.
 
 ## Rejected Alternatives
