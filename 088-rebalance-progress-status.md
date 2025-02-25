@@ -37,7 +37,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-11-05T15:28:23.995129903Z"
     status: "True"
-    type: ProposalReady | Rebalancing | Stopped | Ready
+    type: ProposalReady | Rebalancing | Stopped | NotReady | Ready
   observedGeneration: 1
   optimizationResult:
     afterBeforeLoadConfigMap: my-rebalance
