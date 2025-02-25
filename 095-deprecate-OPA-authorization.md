@@ -68,7 +68,7 @@ Only in the first Strimzi version that drops the support for the `v1beta2` API a
 * Stop bundling the OPA authorizer plugin in the Strimzi container images
 * Remove the production code for configuring the OPA authorization
 * Remove the OPA system test
-* Update the documentation
+* Update the documentation to remove the `type: opa` authorization content.
 
 From this version on, users will have to use a custom container image to add the OPA authorizer plugin and the `type: custom` authorization to use it.
 
