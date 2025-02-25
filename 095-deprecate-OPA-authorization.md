@@ -4,7 +4,7 @@ This proposal suggests to deprecate and later remove the Open Policy Agent (OPA)
 
 ## Current situation
 
-Strimzi currently support [Open Policy Agent authorization plugin](https://github.com/StyraInc/opa-kafka-plugin) for Kafka brokers.
+Strimzi currently supports [Open Policy Agent authorization plugin](https://github.com/StyraInc/opa-kafka-plugin) for Kafka brokers.
 The plugin is bundled as part of our Apache Kafka container images.
 Users can configure it in the `Kafka` custom resource using the `type: opa` authorization.
 For example:
@@ -25,7 +25,7 @@ Supporting the `type: opa` authorization and bundling the plugin in our images i
 * With every new Kafka release, we need to make sure the dependencies are aligned between Kafka, other plugins and the OPA Authorizer plugin
 * We need to maintain the system tests and make sure we use an reasonably up-to-date OPA version
 
-While there seem to be some users using the `type: opa` authorization, it does not seem to be widely used.
+While some users appear to be using the `type: opa` authorization, it does not seem to be widely adopted.
 For the users using the OPA authorizer, there is also a possible workaround.
 They can continue using the OPA authorizer plugin even after we remove the dedicated support for it by following these steps:
 1. Add the OPA authorizer plugin to the Kafka container image
@@ -61,9 +61,10 @@ This proposal suggests to immediately within Strimzi 0.46:
 
 While deprecated, we will still continue bundling the OPA authorizer plugin as part of Strimzi.
 
-As part of Strimzi `v1` CRD API, we will remove `type: opa` authorization from the `v1` API.
+When the Strimzi `v1` CRD API is added, it will not support the `type: opa` anymore.
+But as the `type: opa` authorization will be still part of the `v1beta2` API, the support in Cluster Operator and in container images has to remain.
 
-Finally, in the first Strimzi version that drops the support for the `v1beta2` API, we will:
+Only in the first Strimzi version that drops the support for the `v1beta2` API and supports the `v1` API only, we will:
 * Stop bundling the OPA authorizer plugin in the Strimzi container images
 * Remove the production code for configuring the OPA authorization
 * Remove the OPA system test
@@ -82,6 +83,6 @@ Other users will not be impacted.
 
 ## Rejected alternatives
 
-As an alternative path, we can consider dropping the OPA support completely already before the `v1` CRD API.
+As an alternative path, we could consider dropping the OPA support completely already before the `v1` CRD API.
 For example drop the binaries and stop using the `type: opa` authorization already in an earlier Strimzi version such as Strimzi 0.48.
 However, I decided to start the proposal with the OPA authorization removal as part of the `v1beta2` API version removal.
