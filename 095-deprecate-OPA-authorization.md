@@ -84,4 +84,4 @@ Other users will not be impacted.
 
 As an alternative path, we can consider dropping the OPA support completely already before the `v1` CRD API.
 For example drop the binaries and stop using the `type: opa` authorization already in an earlier Strimzi version such as Strimzi 0.48.
-However, I decide to start the proposal with the removal with the removal of the `v1beta2` API version.
+However, I decided to start the proposal with the OPA authorization removal as part of the `v1beta2` API version removal.
