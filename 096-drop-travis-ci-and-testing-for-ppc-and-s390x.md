@@ -26,11 +26,23 @@ _Note that Strimzi's Travis CI quota is sponsored by IBM._
 ## Proposal
 
 This proposal suggests removing the existing Travis CI configurations from the Strimzi Kafka Bridge and Strimzi Kafka OAuth repositories, effectively eliminating Travis CI usage from the Strimzi organization.
+From a CI perspective, we will be able to focus solely on Azure Pipelines, which has been the main CI system for Strimzi for the past few years.
 Regarding the current support matrix, we will not make any changes, meaning that all currently supported architectures — `amd64`, `arm64`, `ppc64le`, and `s390x` — will continue to be supported by the Strimzi project.
+
+For Strimzi Kafka Bridge, the affected pipeline includes a Java build with unit tests on the `ppc64le` and `s390x` architectures using OpenJDK 17.
+Its removal will not impact anything crucial, as artifacts are already built and tested as part of Azure Pipelines.
+
+The situation with Strimzi Kafka OAuth is slightly more complex because Azure Pipelines does not currently execute the integration test suite for the library.
+Before removing Travis CI from this repository, the integration test execution must first be migrated to Azure Pipelines.
+However, SpotBugs checks, artifact builds, and pushes are already handled by Azure Pipelines, meaning the only affected part is testing.
+
+The main part of Strimzi testing — system tests from the Operators repository — has never been executed on `ppc64le` or `s390x`.
+As a result, this proposal does not introduce any changes in that regard, and the overall quality of the Operators will remain unaffected.
 
 We will newly use the following terminology:
 - the `amd64` architecture will have the status `supported`, which means that all available tests will be run on this architecture on regular basis as we do now
 - the `ppc64le`, `s390x`, and `arm64` architectures will have the status `supported, not tested`, meaning that tests will not be regularly executed on these architectures
+As a result, we will add an architecture support matrix table to the project's `README.md` using the terminology described above.
 
 All reported bugs related to the `ppc64le`, `s390x`, and `arm64` architectures will be appropriately triaged during Community calls and resolved based on the triage outcome, without any changes to the current process.
 
