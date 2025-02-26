@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 96 | [Split metrics-reporter into client and server modules](./096-split-metrics-reporter-into-modules.md) |
 | 95 | [Add `volumeAttributesClassName` to the storage configuration](./095-add-support-volumeattributesclassname.md) |
 | 94 | [Deprecate `secrets` field in `type: custom` authentication in `Kafka` CR](./094-deprecate-secrets-field-in-custom-server-authentication.md) |
 | 93 | [Support Single step multi version downgrade for KRaft based clusters](./093-single-step-multi-version-downgrade.md) |
