@@ -125,6 +125,147 @@ The value of the environment variable uses a "map" format as shown below:
 ```
 
 The secrets referenced here must currently contain the kubeconfig for a the Kubenetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
+This allows the central Strimzi operator to authenticate with multiple Kubernetes clusters.
+However, this approach introduces two key challenges:
+
+- Security Risk – The Kubeconfig file stored in these secrets grants broad access to the entire remote cluster. 
+If a user provides a full Kubeconfig, it could unintentionally expose all cluster resources, creating a potential security vulnerability.
+- Short-Lived Tokens – The tokens within the Kubeconfig files are short-lived (typically expiring within 48 hours), requiring frequent renewal and adding complexity to long-term automation.
+
+#### Proposed Solution
+To address these issues, we propose:
+
+##### 1. Restricting Permissions Using ServiceAccount, Role, and RoleBinding
+Instead of using a full Kubeconfig with broad permissions, a dedicated `ServiceAccount` will be created in each remote cluster.
+This `ServiceAccount` will be assigned only the necessary permissions via a `Role` and `RoleBinding`, ensuring the central Strimzi operator has only the required access to manage Kafka-related resources.
+
+Example YAML
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stretch-operator
+  namespace: <namespace>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stretch-operator-role
+  namespace: <namespace>
+rules:
+- apiGroups:
+  - core.strimzi.io
+  resources:
+  - strimzipodsets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - configmaps
+  - secrets
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - multicluster.x-k8s.io
+  resources:
+  - serviceexports
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stretch-operator-rolebinding
+  namespace: <namespace>
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stretch-operator-role
+subjects:
+- kind: ServiceAccount
+  name: stretch-operator
+  namespace: <namespace>
+
+```
+
+With this setup:
+
+- The ServiceAccount stretch-operator is created in the remote cluster.
+- The Role stretch-operator-role defines specific permissions only for managing Kafka-related resources.
+- The RoleBinding stretch-operator-rolebinding links the ServiceAccount to the Role, ensuring it has limited access.
+
+##### 2. Using Long-Lived Credentials for Stability
+
+By default, Kubeconfig tokens expire within 48 hours, causing operational disruptions.
+Prior to Kubernetes 1.24, ServiceAccounts automatically generated long-lived tokens, but this was deprecated.
+To enable long-lived tokens, we manually create a service account token secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-long-lived-secret
+  annotations:
+    kubernetes.io/service-account.name: stretch-operator
+type: kubernetes.io/service-account-token
+```
+
+This ensures that the generated token remains valid indefinitely, avoiding frequent expiration issues.
+The central operator can now use this token in the Kubeconfig file securely, without the risk of sudden authentication failures.
+
+Now instead of exposing a full administrator Kubeconfig, we generate a minimal Kubeconfig that includes only the long-lived (access restricted) token for authentication
+
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://api.example.com:6443
+  name: example-cluster
+contexts:
+- context:
+    cluster: example-cluster
+    namespace: <namespace>
+    user: stretch-operator-user
+  name: stretch-cluster-context
+current-context: stretch-cluster-context
+kind: Config
+preferences: {}
+users:
+- name: stretch-operator-user
+  user:
+    token: <TOKEN>
+
+```
+This Kubeconfig is stored in a Kubernetes Secret and used by the central Strimzi operator for authentication.
+
+#### Expected Benefits
+
+- By granting only minimal permissions, we ensure that remote clusters are not fully exposed.
+- Long-lived credentials eliminate the need for frequent token refreshes.
+
 
 Additionally, a Kafka node pool resource definition must indicate which cluster will host the Kafka brokers/controllers for that node pool.
 The prototype uses a `spec.cluster` field within a KafkaNodePool definition that will have a value that matches one of the identifiers from the above map.
