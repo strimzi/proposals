@@ -65,21 +65,21 @@ spec:
     renewalDays: <integer> # days before notAfter when we should start renewal
     certificateExpirationPolicy: <renew-certificate|replace-key>
     type: <strimzi.io|cert-manager.io> # (1)
-    certManagerIssuerRef: # (2)
-      name: <string>
-      kind: <Issuer|ClusterIssuer>
-      group: <string> # cert-manager.io by default
-    publicCert: # (3)
-      secretName: <string>
-      certificate: <string>
+    certManager: # (2)
+      issuerRef: # (3)
+        name: <string>
+        kind: <Issuer|ClusterIssuer>
+        group: <string> # cert-manager.io by default
+      caCert: # (4)
+        secretName: <string>
+        certificate: <string>
 ```
 
-1. The`type` property will default to `strimzi.io` when not set and will use the existing behaviour, allowing backwards compatibility.
+1. The `type` property will default to `strimzi.io` when not set and will use the existing behaviour, allowing backwards compatibility.
    The option `cert-manager.io` will only be valid if `generateCertificateAuthority` is set to `false`.
-2. The property `certManagerIssuerRef` will only be used by Strimzi if `type` is set to `cert-manager.io`.
-  The `name`, `kind`, and `group` properties will be copied over into the `Certificate` custom resource Strimzi creates.
-3. The property `publicCert` will only be used by Strimzi if `type` is set to `cert-manager.io`.
-  The `secretName` and `certificate` properties will be used to locate the CA public certificate that must be trusted by Strimzi components in order to trust the end-entity certificates that cert-manager issues.
+2. The properties under `certManager` will only be used by Strimzi if `type` is set to `cert-manager.io`. 
+3. The `issuerRef.name`, `issuerRef.kind`, and `issuerRef.group` properties will be copied over into the `Certificate` custom resource Strimzi creates.
+4. The `caCert.secretName` and `caCert.certificate` properties will be used to locate the CA public certificate that must be trusted by Strimzi components in order to trust the end-entity certificates that cert-manager issues.
 
 ### User steps
 
@@ -90,19 +90,25 @@ To make use of this new option the user will have to:
 3. Create a `Secret` containing the CA public cert for Strimzi to trust.
    The `Secret` must contain a data entry with all the CAs bundled into one PEM file.
    Users can optionally use [trust-manager](https://cert-manager.io/docs/trust/trust-manager/) to create this Secret, but they are responsible for installing trust-manager and creating the `Bundle` CR with a single `target` entry.
-4. Create a `Kafka` resource with `clusterCa.type` and/or `clientsCa.type` set to `cert-manager.io`, and `certManagerIssuerRef` and `publicCert` configured.
+4. Create a `Kafka` resource with `clusterCa.type` and/or `clientsCa.type` set to `cert-manager.io`, and `certManager.issuerRef` and `certManager.caCert` configured.
 
 ### Internal handling of Cluster CA
 
-Strimzi uses two generation annotations to track how Cluster CA certificates are trusted and Cluster CA issued certificates are used:
-* `strimzi.io/cluster-ca-key-generation` on Kafka pods to indicate the generation of the CA private key that signed the CA public cert trusted by that pod
-* `strimzi.io/cluster-ca-cert-generation` on Secrets containing certificates to indicate the generation of the CA public cert at the time the certificate was issued
+Strimzi uses two generation annotations to track how Cluster CA certificates are trusted and Cluster CA issued certificates are used.
 
-The `strimzi.io/cluster-ca-cert-generation` annotation is also used on Kafka pods to indicate the generation of the CA public cert associated with the certificate it is currently presenting.
+On Kafka pods:
+* `strimzi.io/cluster-ca-key-generation` to indicate the generation of the CA private key that signed the CA public cert trusted by that pod
+* `strimzi.io/cluster-ca-cert-generation` to indicate the generation of the CA public cert associated with the certificate it is currently presenting.
+
+On Secrets containing certificates:
+* `strimzi.io/ca-key-generation` to indicate the generation of the CA private key this Secret contains
+* `strimzi.io/ca-cert-generation` to indicate the generation of the CA public cert this Secret contains
+* `strimzi.io/cluster-ca-cert-generation` to indicate the generation of the CA public cert at the time the certificate was issued
 
 The following sections go into more detail about how we will use these annotations when cert-manager is issuing certificates.
 At a high level:
 * Strimzi will use cert path validation using the `java.security` libraries to determine whether a new Cluster CA public cert was signed with a new private key.
+  This is done using the new Cluster CA public cert and the existing operator end-entity certificate, Strimzi does not need access to the CA private key.
 * If a new private key was used, Strimzi will increment both the `strimzi.io/ca-key-generation` and `strimzi.io/ca-cert-generation` annotations on the Cluster CA cert Secret and roll the Kafka pods from CaReconciler to trust the new public cert.
 * If the private key has not changed, Strimzi will increment only the `strimzi.io/ca-cert-generation` annotation on the Cluster CA cert Secret and roll the Kafka pods from KafkaReconciler to trust the new public cert.
 * If a new end-entity certificate is issued, Strimzi will use cert path validation to verify it is trusted by the latest Cluster CA cert Secret before using it.
@@ -110,13 +116,13 @@ At a high level:
 
 #### Handling Cluster CA trust rollout
 
-When a new Kafka cluster is created Strimzi will copy the CA public cert from the Secret identified in `clusterCa.publicCert` to the `<CLUSTER_NAME>-cluster-ca-cert` Secret in a data entry named `ca.crt`.
+When a new Kafka cluster is created Strimzi will copy the CA public cert from the Secret identified in `clusterCa.certManager.caCert` to the `<CLUSTER_NAME>-cluster-ca-cert` Secret in a data entry named `ca.crt`.
 Strimzi will add three annotations to the `<CLUSTER_NAME>-cluster-ca-cert` Secret:
 * `strimzi.io/ca-cert-hash` with the value being a hash of the certificate.
 * `strimzi.io/ca-key-generation` initially set to 0.
 * `strimzi.io/ca-cert-generation` initially set to 0.
 
-During a reconciliation Strimzi will check the hash of the certificate stored in `clusterCa.publicCert` Secret to see if an update is needed.
+During a reconciliation Strimzi will check the hash of the certificate stored in `clusterCa.certManager.caCert` Secret to see if an update is needed.
 If the certificate has changed Strimzi will perform cert path validation using the `java.security` libraries to determine whether a new Cluster CA public cert was signed with a new private key.
 If the private key has not changes, Strimzi will copy over the new certificate, replacing the existing one.
 It will also update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/ca-cert-generation` annotation.
@@ -165,9 +171,9 @@ Strimzi will review the `Certificate` resource every time it does a reconciliati
 
 If during a reconciliation Strimzi determines (using cert path validation) that a new private key has been used, Strimzi will:
 1. Rename the existing cert in the `<CLUSTER_NAME>-cluster-ca-cert` Secret to `ca-YYYY-MM-DDTHH-MM-SSZ.crt` and copy over the new certificate.
-2. Update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/ca-cert-generation` and `strimzi.io/ca-key-generation` annotations.
+2. Update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/ca-cert-generation` and `strimzi.io/ca-key-generation` annotations on the `<CLUSTER_NAME>-cluster-ca-cert` Secret.
 3. Roll the Kafka pods to trust the new CA cert, incrementing the `strimzi.io/cluster-ca-key-generation` annotation on the pods.
-4. Once new end-entity certificates are issued that trust the new Cluster CA public cert, copy over the new Kafka certificates, updating the `strimzi.io/cluster-ca-cert-generation` annotation on the Secrets.
+4. Once new end-entity certificates are issued that trust the new Cluster CA public cert, copy over the new Kafka certificates, updating the `strimzi.io/cluster-ca-cert-generation` annotation on the Kafka certificate Secrets.
 5. Roll the Kafka pods to use the new Kafka certificates, updating the `strimzi.io/cluster-ca-cert-generation` annotations on the pods.
 6. Then on the next reconciliation, since the Kafka pods now have correct cert and key generation, and the Kafka certificate Secrets have the correct cert generation, copy over the new operator certificate.
 7. Since the Kafka pods now have correct cert generation, and the Kafka certificate Secrets have the correct cert generation, remove the old CA public cert from the `<CLUSTER_NAME>-cluster-ca-cert` Secret.
@@ -182,8 +188,8 @@ When using cert-manager to manage certificates, Strimzi will also check the anno
 
 ### User Operator/Clients CA
 
-When a new Kafka cluster is created Strimzi will copy the CA public cert from the Secret identified in `clientsCa.publicCert` to the `<CLUSTER_NAME>-clients-ca-cert` Secret.
-Strimzi will add two annotations to the `<CLUSTER_NAME>-cluster-ca-cert` Secret:
+When a new Kafka cluster is created Strimzi will copy the CA public cert from the Secret identified in `clientsCa.certManager.caCert` to the `<CLUSTER_NAME>-clients-ca-cert` Secret.
+Strimzi will add two annotations to the `<CLUSTER_NAME>-clients-ca-cert` Secret:
 * `strimzi.io/ca-cert-hash` with the value being a hash of the certificate.
 * `strimzi.io/ca-cert-generation` initially set to 0.
 
@@ -198,10 +204,10 @@ The User operator will be updated to have four environment variables to configur
 These will be set by the Cluster operator when the User operator is deployed as part of the Entity operator and when `spec.clientsCa.type` is set to `cert-manager.io`.
 
 When a `KafkaUser` with `spec.authentication.type` set to `tls` is created Strimzi will create a `Certificate` custom resource.
-Strimzi will specify the required CN/SANs in the `Certificate` resource for the user certificate.
-Strimzi will specify the `Secret` for the certificate to be stored to match the name of the `KafkaUser` resource.
-Strimzi will request the certificate in both PEM and PKCS12 format.
-Strimzi will wait for the usual operation timeout during the reconciliation loop for the `Certificate` status to indicate that the certificate has been issued before continuing.
+User Operator will specify the required CN/SANs in the `Certificate` resource for the user certificate.
+User Operator will specify the `Secret` for the certificate to be stored to match the name of the `KafkaUser` resource.
+User Operator will request the certificate in both PEM and PKCS12 format.
+User Operator will wait for the usual operation timeout during the reconciliation loop for the `Certificate` status to indicate that the certificate has been issued before continuing.
 
 #### Tracking changes to KafkaUser certificates
 
@@ -211,9 +217,9 @@ Since the user's clients are directly using the cert-manager created Secret, Str
 
 #### Handling Clients CA cert renewals and key replacements
 
-During a reconciliation Strimzi will check the hash of the certificate stored in the user's CA public cert Secret to see if an update is needed.
-If the certificate has changed Strimzi will copy over the new certificate to replace the existing one.
-It will also update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/clients-ca-cert-generation` annotations.
+During a reconciliation Strimzi will check the hash of the certificate stored in the user's Clients CA public cert Secret to see if an update is needed.
+If the certificate has changed Strimzi will copy over the new certificate to replace the existing one in the `<CLUSTER_NAME>-clients-ca-cert` Secret.
+It will also update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/clients-ca-cert-generation` annotations on the `<CLUSTER_NAME>-clients-ca-cert` Secret.
 
 Once the annotations are updated Strimzi will update the annotation on the Kafka brokers Secret and the Kafka pods and roll the Kafka pods to trust the new CA cert.
 
@@ -232,27 +238,33 @@ This affects the Cluster Operator and User Operator.
 ## Compatibility
 
 This feature will be optional and disabled by default.
+The `spec.clientsCa/clusterCa.type` property will default to `strimzi.io` when not set and will use the existing behaviour, allowing backwards compatibility.
+
+The feature will also be put behind a feature gate called `CertManagerCaType`.
+The feature gate will default to `false`, allowing community members to start testing this feature in development, but preventing it being used in production.
+After two releases if the feature seems stable the Strimzi maintainers will consider changing it to enabled by default.
+Once the feature gate is enabled by default, the `spec.clientsCa/clusterCa.type` will still default to `strimzi.io` so users will still have to enable the feature by setting it to `cert-manager.io`.
 
 ### Migrating to this feature
 
 To start using this feature in an existing Kafka cluster the user must:
 1. Install cert-manager and create an `Issuer`.
 2. Create Secrets to store the Cluster CA and/or Clients CA public certs
-3. Update the `Kafka` resource to have `clusterCa.type` and/or `clientsCa.type` set to `cert-manager.io`, `clusterCa.generateCertificateAuthority` and/or `clientsCa.generateCertificateAuthority` set to `false`, and `certManagerIssuerRef` and `publicCert` configured.
+3. Update the `Kafka` resource to have `clusterCa.type` and/or `clientsCa.type` set to `cert-manager.io`, `clusterCa.generateCertificateAuthority` and/or `clientsCa.generateCertificateAuthority` set to `false`, and `certManager.issuerRef` and `certManager.caCert` configured.
 
 When using this feature for the ClientsCa:
-* On the next Cluster operator reconciliation Strimzi will copy the new certificate over to `<CLUSTER_NAME>-clients-ca-cert` replacing the old certificate and increment the cert generation annotation.
+* On the next Cluster operator reconciliation Strimzi will copy the new certificate over to `<CLUSTER_NAME>-clients-ca-cert` replacing the old certificate and increment the `strimzi.io/ca-cert-generation` annotation.
 * Strimzi will roll the Kafka pods to trust the new CA cert.
 * On the next User Operator reconciliation Strimzi will create `Certificate` resources for all the existing `KafkaUser` custom resources.
 
 When using this feature for the ClusterCa:
-* On the next Cluster operator reconciliation Strimzi will copy the new certificate over to `<CLUSTER_NAME>-cluster-ca-cert` (renaming and keeping the old certificate), increment the cert generation annotation and add the key generation annotation.
+* On the next Cluster operator reconciliation Strimzi will copy the new certificate over to `<CLUSTER_NAME>-cluster-ca-cert` (renaming and keeping the old certificate), increment the `strimzi.io/ca-cert-generation` annotation and add the `strimzi.io/ca-key-generation` annotation.
 * Strimzi will roll the pods once to trust the new CA cert.
 * Strimzi will create `Certificate` resources for all the components and wait for the certificates to be issued.
 * Strimzi will copy over the new certificates into the pod Secrets.
 * Strimzi will roll the pods to use the new certificates.
 
-Once all the pods have the correct cert generation annotation Strimzi can update the `<CLUSTER_NAME>-cluster-ca-cert` and/or `<CLUSTER_NAME>-clients-ca-cert` Secrets to remove the old CA cert, roll the Kafka pods, and delete the `<CLUSTER_NAME>-cluster-ca` and/or `<CLUSTER_NAME>-clients-ca` Secrets.
+Once all the pods have the correct `strimzi.io/cluster-ca-cert-generation` annotation Strimzi can update the `<CLUSTER_NAME>-cluster-ca-cert` and/or `<CLUSTER_NAME>-clients-ca-cert` Secrets to remove the old CA cert, roll the Kafka pods, and delete the `<CLUSTER_NAME>-cluster-ca` and/or `<CLUSTER_NAME>-clients-ca` Secrets.
 
 ### Stopping using this feature
 
