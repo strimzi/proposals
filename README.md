@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 97 | [Deprecate and remove `type: opa` authorization in Kafka CR](./097-deprecate-OPA-authorization.md) |
 | 96 | [Split metrics-reporter into client and server modules](./096-split-metrics-reporter-into-modules.md) |
 | 95 | [Add `volumeAttributesClassName` to the storage configuration](./095-add-support-volumeattributesclassname.md) |
 | 94 | [Deprecate `secrets` field in `type: custom` authentication in `Kafka` CR](./094-deprecate-secrets-field-in-custom-server-authentication.md) |
