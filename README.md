@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 98 | [Rebalance progress status](./098-rebalance-progress-status.md) |
 | 97 | [Deprecate and remove `type: opa` authorization in Kafka CR](./097-deprecate-OPA-authorization.md) |
 | 96 | [Split metrics-reporter into client and server modules](./096-split-metrics-reporter-into-modules.md) |
 | 95 | [Add `volumeAttributesClassName` to the storage configuration](./095-add-support-volumeattributesclassname.md) |
