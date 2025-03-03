@@ -137,6 +137,55 @@ Each of the component reconcilers will check the `strimzi.io/cluster-ca-cert-gen
 When Strimzi needs to issue a certificate, instead of using the existing internal mechanism it will create a `Certificate` custom resource.
 Strimzi will specify the required CN/SANs in the `Certificate` resource for the end-entity certificate.
 Strimzi will set the `secretName` field in the `Certificate` resource as `<CERT_SECRET>-cm`, where `<CERT_SECRET>` is the name of the Secret Strimzi currently uses, for example `<CLUSTER_NAME>-cluster-operator-certs-cm`.
+
+Here is an example of a `Certificate` resource Strimzi might create for a Kafka pod:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-cluster-dual-role-0
+  namespace: kafka
+spec:
+  secretName: my-cluster-dual-role-0-cm
+  secretTemplate:
+    labels:
+      app.kubernetes.io/instance: my-cluster
+      app.kubernetes.io/managed-by: cert-manager
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/part-of: strimzi-my-cluster
+      strimzi.io/cluster: my-cluster
+      strimzi.io/component-type: kafka
+      strimzi.io/kind: Kafka
+      strimzi.io/name: my-cluster-kafka
+
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+
+  duration: 8760h # 365d
+  renewBefore: 720h # 30d
+
+  isCA: false
+
+  subject:
+    organizations:
+      - io.strimzi
+  commonName: my-cluster-kafka
+  dnsNames:
+    - my-cluster-kafka-bootstrap.kafka
+    - my-cluster-kafka-bootstrap.kafka.svc.cluster.local
+    - my-cluster-kafka-brokers.kafka.svc
+    - my-cluster-dual-role-0.my-cluster-kafka-brokers.kafka.svc
+    # ...
+
+  issuerRef:
+    name: ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
 Strimzi will wait for the usual operation timeout during the reconciliation loop for the `Certificate` status to indicate that the certificate has been issued before continuing.
 When issuing cluster certificates (e.g for each Kafka pod etc), once the certificate has been issued, Strimzi will copy the certificate across from the cert-manager provided Secret into its own existing Secret.
 Strimzi will annotate the Secret it manages with:
