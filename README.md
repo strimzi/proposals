@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 99 | [Drop Travis-CI and testing efforts for `ppc64le` and `s390x` architectures](./099-drop-travis-ci-and-testing-for-ppc-and-s390x.md) |
 | 98 | [Rebalance progress status](./098-rebalance-progress-status.md) |
 | 97 | [Deprecate and remove `type: opa` authorization in Kafka CR](./097-deprecate-OPA-authorization.md) |
 | 96 | [Split metrics-reporter into client and server modules](./096-split-metrics-reporter-into-modules.md) |
