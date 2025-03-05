@@ -128,7 +128,7 @@ If the private key has not changes, Strimzi will copy over the new certificate, 
 It will also update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/ca-cert-generation` annotation.
 Each of the component reconcilers will check the `strimzi.io/cluster-ca-cert-generation` on their pods during their reconcile loop, and update the pod annotation and roll the pods if the generation is out of date. 
 
-> ![Renewing the cluster CA public cert](./images/087-cert-renewals.png)
+> ![Renewing the cluster CA public cert](./images/100-cert-renewals.png)
 >
 > Fig 1: Existing and proposed workflow when the user provides a new cluster CA public cert
 
@@ -212,7 +212,7 @@ If the certificate is not trusted:
 
 Strimzi will review the `Certificate` resource every time it does a reconciliation to see if any changes to the requested certificate are needed, for example updating SANs.
 
-> ![Issuing new component end-entity certificates](./images/087-new-ee-certs.png)
+> ![Issuing new component end-entity certificates](./images/100-new-ee-certs.png)
 >
 > Fig 2: Proposed workflow when cert-manager issues new component end-entity certificates
 
@@ -231,7 +231,7 @@ If during a reconciliation Strimzi determines (using cert path validation) that 
 Today we only check the `strimzi.io/cluster-ca-cert-generation` annotation on the Kafka pods to decide whether to update the operator certificate Secret and remove the old Cluster CA cert.
 When using cert-manager to manage certificates, Strimzi will also check the annotation on the Kafka certificate Secrets before making either of these changes.
 
-> ![Replacing the cluster CA private key](./images/087-new-cluster-ca-key-replacement.png)
+> ![Replacing the cluster CA private key](./images/100-new-cluster-ca-key-replacement.png)
 >
 > Fig 3: Proposed workflow when the user provides a new cluster CA public cert that has been signed by a new private key
 
@@ -272,11 +272,11 @@ It will also update the `strimzi.io/ca-cert-hash` and increment the `strimzi.io/
 
 Once the annotations are updated Strimzi will update the annotation on the Kafka brokers Secret and the Kafka pods and roll the Kafka pods to trust the new CA cert.
 
-> ![Renewing/replacing the clients CA public cert/private key](./images/087-existing-renew-replace-clientca-certs.png)
+> ![Renewing/replacing the clients CA public cert/private key](./images/100-existing-renew-replace-clientca-certs.png)
 >
 > Fig 4: Existing workflow when the user provides a new clients CA public cert
 
-> ![Renewing/replacing the clients CA public cert/private key](./images/087-new-renew-replace-clientsca-cert.png)
+> ![Renewing/replacing the clients CA public cert/private key](./images/100-new-renew-replace-clientsca-cert.png)
 >
 > Fig 5: Proposed workflow when the user provides a new clients CA public cert
 
