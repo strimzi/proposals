@@ -65,7 +65,6 @@ This would mean an example event would now look like:
 2. The restart message will be updated to include the Pod name to make it easier to identify the affected Pod when listing events.
 3. The `related` field is added pointing to the Pod that is being rolled.
 
-
 ## Affected/not affected projects
 
 This only affects the Strimzi cluster operator.
@@ -78,4 +77,11 @@ When the v1 API lands users are likely to be reviewing the changelog more thorou
 
 ## Rejected alternatives
 
-N/A
+### Removing the restart events
+
+We could fully remove the restart events.
+There seem to be some users using them, but as far as we know it is a relatively small number of users.
+
+If we remove the events entirely users must view the logs to see why a Pod was restarted.
+Since the logs are fairly busy this can be hard to find, unless using a dedicated logging collection tool.
+Even though the events do add some overhead, it isn't a great deal and they are a useful way to check why a Pod is restarting without having to trawl through logs.
