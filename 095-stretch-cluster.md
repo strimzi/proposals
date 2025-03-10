@@ -357,6 +357,11 @@ Even if ownership across Kubernetes cluster boundaries were possible, it would i
 
 The prototype does not yet have a mechanism for controlled cleanup of remote resources when a user deliberately deletes the Kafka and KafkaNodePool CRs from the central cluster. Currently, when a user deletes these CRs, all related resources in the central cluster are removed, but remote cluster resources remain. Finding a way to handle this cleanup while avoiding unintended deletions is an open challenge.
 
+### Rack Awareness in Stretch Clusters
+We conducted initial experiments to enable rack awareness in a Stretch Kafka cluster, ensuring that replicas are distributed across multiple Kubernetes clusters based on topology labels. This approach improves fault tolerance by leveraging Kubernetes zone-aware scheduling or manually assigned zone labels for non-zone-aware clusters
+
+For detailed implementation steps and test results, refer to our prototype [documentation](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-Rack-Awareness-In-Stretch-Cluster/)
+
 #### Entity operator
 We would recommend that all KafkaTopic and KafkaUser resources are managed from the cluster that holds Kafka and KafkaNodePool resources, and that should be the cluster where the entity operator should be enabled.
 This will maintain all resource management from a central point.
