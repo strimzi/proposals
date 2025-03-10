@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 101 | [Redesign Restart Events](./101-redesign-restart-events.md) |
 | 100 | [External Certificate Manager](./100-external-certificate-manager.md) |
 | 99 | [Drop Travis-CI and testing efforts for `ppc64le` and `s390x` architectures](./099-drop-travis-ci-and-testing-for-ppc-and-s390x.md) |
 | 98 | [Rebalance progress status](./098-rebalance-progress-status.md) |
