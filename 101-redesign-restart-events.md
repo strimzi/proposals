@@ -72,8 +72,9 @@ This only affects the Strimzi cluster operator.
 ## Compatibility
 
 This will be a change for users, however since the events being emitted aren't versioned there is no clear way to indicate this change.
-However, we can introduce this change at the same time as the v1 API.
-When the v1 API lands users are likely to be reviewing the changelog more thoroughly than for other releases, increasing the likelihood that they will not be caught out by the change.
+The 0.46 release already includes several major changes like ZooKeeper and MirrorMaker 1 removal.
+As a result it is reasonable to assume for this release users will be closely reviewing the changelog, so we should aim to include this change in that release.
+If it misses the deadline we can wait for the v1 API as discussed in `Rejected alternatives`.
 
 ## Rejected alternatives
 
@@ -85,3 +86,9 @@ There seem to be some users using them, but as far as we know it is a relatively
 If we remove the events entirely users must view the logs to see why a Pod was restarted.
 Since the logs are fairly busy this can be hard to find, unless using a dedicated logging collection tool.
 Even though the events do add some overhead, it isn't a great deal and they are a useful way to check why a Pod is restarting without having to trawl through logs.
+
+### Waiting until the v1 API
+
+A previous version of this proposal suggested releasing this change at the same time as the v1 API.
+When the v1 API lands users are likely to be reviewing the changelog more thoroughly than for other releases, increasing the likelihood that they will not be caught out by the change.
+The same statement is true for the 0.46 release since that release has other major changes like ZooKeeper and MirrorMaker 1 removal.
