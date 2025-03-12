@@ -125,7 +125,7 @@ The value of the environment variable uses a "map" format as shown below:
       cluster-id-b.secret=<secret-name-cluster-b>
 ```
 
-The secrets referenced here must currently contain the kubeconfig for a the Kubenetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
+The secrets referenced here must currently contain the kubeconfig for the Kubenetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
 This allows the central Strimzi operator to authenticate with multiple Kubernetes clusters.
 However, this approach introduces two key challenges:
 
