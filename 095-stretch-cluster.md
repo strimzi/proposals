@@ -24,7 +24,7 @@ While a stretch Kafka cluster offers several advantages, it also introduces some
 - **Increased Network Complexity and Costs**: The communication between brokers and controllers across clusters relies on network connectivity, which can be less reliable and more costly than intra-cluster communication.
 This necessitates careful consideration of network architecture and associated costs.
 
-- **Latency Requirements**: Stretch Kafka clusters are best suited for environments with low-latency network connections between the Kubernetes clusters.
+- **Latency Requirements**: Stretch Kafka clusters are best suited for environments with low-latency and high-bandwidth network connections between the Kubernetes clusters.
 High latency can adversely affect the performance and synchronization of Kafka nodes, potentially leading to delays or errors in replication and client communication.
 Defining the minimal acceptable latency between clusters is crucial to ensure optimal performance.
 
