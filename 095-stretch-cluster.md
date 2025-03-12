@@ -30,7 +30,7 @@ Defining the minimal acceptable latency between clusters is crucial to ensure op
 
 ## Proposal
 
-This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, distributing brokers and controllers across multiple Kubernetes clusters.
+This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, distributing broker, controller and combined Kafka nodes across multiple Kubernetes clusters.
 The intent is to focus on high-availability of the Kafka control plane and data plane.
 The proposal outlines high-level topology and design concepts for such deployments, with a plan to incrementally include finer design and implementation details for various aspects.
 
