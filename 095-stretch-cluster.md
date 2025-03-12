@@ -14,7 +14,7 @@ A stretch Kafka cluster allows Kafka nodes to be distributed across multiple Kub
 
 - **High Availability**: Distributing Kafka brokers across multiple Kubernetes cluster significantly enhances resilience by enabling the system to tolerate the outage of a Kubernetes cluster without disrupting service to clients.
 
-- **Migration Flexibility**: The ability to move Kafka nodes between Kubernetes environments without downtime, supporting maintenance or migrations.
+- **Migration Flexibility**: The ability to move Kafka nodes between Kubernetes environments or cloud providers without downtime, supporting maintenance or migrations.
 
 - **Resource Optimization**: Efficiently utilizing resources across multiple clusters, which can be advantageous in environments with varying cluster capacities or during scaling operations.
 
