@@ -31,10 +31,13 @@ Defining the minimal acceptable latency between clusters is crucial to ensure op
 ## Proposal
 
 This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, distributing brokers and controllers across multiple Kubernetes clusters.
-The intent is to focus on high-availability of the data plane.
+The intent is to focus on high-availability of the control plane and data plane.
 The proposal outlines high-level topology and design concepts for such deployments, with a plan to incrementally include finer design and implementation details for various aspects.
 
 ### Prerequisites
+
+- **KRaft**: As Kafka and Strimzi transition towards KRaft-based clusters, this proposal focuses exclusively on enabling stretch deployments for KRaft-based Kafka clusters.
+While Zookeeper-based deployments are still supported, they are outside the scope of this proposal.
 
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters will require multiple Kubernetes clusters.
 To ensure Kafka controller quorum in the event of a Kubernetes cluster outage, it is recommended to distribute controllers across at least three Kubernetes clusters. In a two cluster setup, there is a risk of losing quorum if the wrong cluster fails, which can lead to Kafka becoming unavailable.
@@ -42,8 +45,6 @@ To ensure Kafka controller quorum in the event of a Kubernetes cluster outage, i
 - **Low Latency**: Kafka clusters should be deployed in environments that allow low-latency communication between Kafka brokers and controllers.
 Stretch Kafka clusters should be deployed in environments such as data centers or availability zones within a single region, and not across distant regions where high latency could impair performance.
 
-- **KRaft**: As Kafka and Strimzi transition towards KRaft-based clusters, this proposal focuses exclusively on enabling stretch deployments for KRaft-based Kafka clusters.
-While Zookeeper-based deployments are still supported, they are outside the scope of this proposal.
 
 - **A supported cloud native networking technology**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
 The prototype detailed within this proposal requires advance manual setup of an overlay network offered by a [Cloud Native Network](https://landscape.cncf.io/guide#runtime--cloud-native-network) project to provide connectivity between Kafka runtimes in different Kubernetes clusters.
@@ -351,7 +352,7 @@ These updates ensure brokers and controllers can be discovered and communicate a
 
 #### Resource cleanup on remote Kubernetes clusters
 
-Currently, resources created in the remote clusters do not have `OwnerReferences`. The main reason is that the `Kafka` and `KafkaNodePool` CRs exist only in the central cluster. If resources in remote clusters were to reference them as owners, they would be immediately deleted by Kubernetes' garbage collection mechanism since their owners do not exist in the remote clusters.
+In our POC, resources created in the remote clusters do not have `OwnerReferences`. The main reason is that the `Kafka` and `KafkaNodePool` CRs exist only in the central cluster. If resources in remote clusters were to reference them as owners, they would be immediately deleted by Kubernetes' garbage collection mechanism since their owners do not exist in the remote clusters.
 
 Even if ownership across Kubernetes cluster boundaries were possible, it would introduce another issue: if the central cluster were to go down, any resources in remote clusters with OwnerReferences pointing to central cluster resources would also be deleted automatically. This is not the intended behaviour, as we want remote resources to remain operational even if the central cluster becomes temporarily unavailable.
 
