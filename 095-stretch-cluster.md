@@ -1,20 +1,26 @@
 # Stretch Kafka cluster
 
-The Strimzi Kafka operator currently manages Kafka clusters within a single Kubernetes cluster.
-This proposal aims to extend this support to stretch Kafka clusters, where brokers and controllers of a single Kafka cluster are distributed across multiple Kubernetes clusters.
+The Strimzi Kafka Operator currently manages Kafka clusters within a single Kubernetes cluster.
+This proposal aims to extend its support to stretch Kafka clusters, where the brokers and controllers of a single Kafka cluster are distributed across multiple Kubernetes clusters.
 
 ## Current situation
 
-At present, the availability of Strimzi-managed Kafka clusters is limited by the availability of the underlying Kubernetes cluster.
+At present, the availability of Strimzi-managed Kafka clusters is constrained by the availability of the underlying Kubernetes cluster.
 If a Kubernetes cluster experiences an outage, the entire Kafka cluster becomes unavailable, disrupting all connected Kafka clients.
+
+While it is possible to enhance availability by running Kubernetes across multiple availability zones and configuring Strimzi with affinity rules, tolerations, or topology spread constraints, this approach is limited to a single Kubernetes control plane. 
+Additionally, if not self-hosted, deploying across multiple availability zones typically incurs higher cloud hosting costs. 
+A stretch Kafka cluster offers an alternative approach by distributing Kafka brokers and controllers across multiple Kubernetes clusters, reducing dependency on a single cluster's control plane while improving resilience.
 
 ## Motivation
 
 A stretch Kafka cluster allows Kafka nodes to be distributed across multiple Kubernetes clusters. This approach also facilitates many valuable use cases, such as:
 
-- **High Availability**: Distributing Kafka brokers across multiple Kubernetes cluster significantly enhances resilience by enabling the system to tolerate the outage of a Kubernetes cluster without disrupting service to clients.
+- **High Availability**: Distributing Kafka brokers across multiple Kubernetes clusters significantly enhances resilience by enabling the system to tolerate the outage of an entire Kubernetes cluster without disrupting service to clients. 
+Unlike MirrorMaker 2 (MM2), a stretch cluster provides strong data durability through synchronous replication and enables fast disaster recovery with automated client failover
 
-- **Migration Flexibility**: The ability to move Kafka nodes between Kubernetes environments or cloud providers without downtime, supporting maintenance or migrations.
+- **Migration Flexibility**: A stretch Kafka cluster enables seamless migration, whether it's moving the entire cluster across Kubernetes environments or cloud providers without downtime, or relocating individual Kafka nodes as needed. 
+This flexibility helps with maintenance, scaling, and workload transitions between environments.
 
 - **Resource Optimization**: Efficiently utilizing resources across multiple clusters, which can be advantageous in environments with varying cluster capacities or during scaling operations.
 
@@ -42,8 +48,9 @@ While Zookeeper-based deployments are still supported, they are outside the scop
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters will require multiple Kubernetes clusters.
 To ensure Kafka controller quorum in the event of a Kubernetes cluster outage, it is recommended to distribute controllers across at least three Kubernetes clusters. In a two cluster setup, there is a risk of losing quorum if the wrong cluster fails, which can lead to Kafka becoming unavailable.
 
-- **Low Latency**: Kafka clusters should be deployed in environments that allow low-latency communication between Kafka brokers and controllers.
-Stretch Kafka clusters should be deployed in environments such as data centers or availability zones within a single region, and not across distant regions where high latency could impair performance.
+- **Low Latency and High Bandwidth**:  Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
+Stretch Kafka clusters should be deployed in environments such as data centers or availability zones within a single region.
+Deployments across distant regions, where high latency and limited bandwidth could impair performance, should be avoided.
 
 
 - **A supported cloud native networking technology**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
@@ -101,7 +108,7 @@ metadata:
     strimzi.io/submariner-cluster-id: "cluster1"
 ```
 
-_Note: The prototype operator code currently expects `submariner-cluster-id`, but this is subject to change for something more generic once additional technologies have been prototyped. One suggestion is `strimzi.io/cluster-network-id`._
+_Note: The prototype operator [code](https://github.com/aswinayyolath/strimzi-kafka-operator/compare/main...aswinayyolath:strimzi-kafka-operator:strecth-cluster-prototype?expand=1) currently expects `submariner-cluster-id`, but this is subject to change for something more generic once additional technologies have been prototyped. One suggestion is `strimzi.io/cluster-network-id`._
 
 _Note: This network identifier could have the same value as the Kubernetes cluster identifier described in the following section and both aspects would benefit from community feedback and input._
 
@@ -127,18 +134,28 @@ The value of the environment variable uses a "map" format as shown below:
 
 The secrets referenced here must currently contain the kubeconfig for the Kubenetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
 This allows the central Strimzi operator to authenticate with multiple Kubernetes clusters.
-However, this approach introduces two key challenges:
 
-- Security Risk – The Kubeconfig file stored in these secrets grants broad access to the entire remote cluster. 
-If a user provides a full Kubeconfig, it could unintentionally expose all cluster resources, creating a potential security vulnerability.
-- Short-Lived Tokens – The tokens within the Kubeconfig files are short-lived (typically expiring within 48 hours), requiring frequent renewal and adding complexity to long-term automation.
+Additionally, a Kafka node pool resource definition must indicate which cluster will host the Kafka brokers/controllers for that node pool.
+The prototype uses a `spec.cluster` field within a KafkaNodePool definition that will have a value that matches one of the identifiers from the above map.
+If the `spec.cluster` field is missing from the KafkaNodePool definition, it is currently assumed that the broker/controller pods will run on the central Kubernetes cluster.
 
-#### Proposed Solution
-To address these issues, we propose:
+_Note: This cluster identifier could have the same value as the network identifier described in the previous section. Community feedback/input very welcome!_
 
-##### 1. Restricting Permissions Using ServiceAccount, Role, and RoleBinding
-Instead of using a full Kubeconfig with broad permissions, a dedicated `ServiceAccount` will be created in each remote cluster.
-This `ServiceAccount` will be assigned only the necessary permissions via a `Role` and `RoleBinding`, ensuring the central Strimzi operator has only the required access to manage Kafka-related resources.
+#### Authentication & Security Considerations for Multi-Cluster Access
+
+The central Strimzi operator needs access to multiple Kubernetes clusters to manage Kafka nodes across them. 
+This is typically achieved by storing the necessary credentials in Kubernetes Secrets, with each secret containing a kubeconfig file that provides authentication details for a remote cluster.
+
+To securely manage access, users should ensure that their kubeconfig files follow best practices for minimal privilege access. 
+The operator itself does not impose specific authentication mechanisms but relies on the credentials provided by the user
+
+##### Recommended Approach for Token-Based Authentication
+For users opting for token-based authentication, we recommend
+
+###### 1. Using a Dedicated ServiceAccount with Scoped Permissions
+
+- Instead of embedding a full administrator kubeconfig, create a `ServiceAccount` in each remote cluster.
+- Assign only the necessary permissions using a `Role` and `RoleBinding`.
 
 Example YAML
 
@@ -211,17 +228,12 @@ subjects:
 
 ```
 
-With this setup:
+###### 2. Generating a Long-Lived Token for the ServiceAccount
 
-- The ServiceAccount stretch-operator is created in the remote cluster.
-- The Role stretch-operator-role defines specific permissions only for managing Kafka-related resources.
-- The RoleBinding stretch-operator-rolebinding links the ServiceAccount to the Role, ensuring it has limited access.
+- Since ServiceAccount tokens in Kubernetes 1.24+ are short-lived, a manually created ServiceAccount token secret ensures persistent authentication.
 
-##### 2. Using Long-Lived Credentials for Stability
 
-By default, Kubeconfig tokens expire within 48 hours, causing operational disruptions.
-Prior to Kubernetes 1.24, ServiceAccounts automatically generated long-lived tokens, but this was deprecated.
-To enable long-lived tokens, we manually create a service account token secret
+Example
 
 ```yaml
 apiVersion: v1
@@ -233,10 +245,10 @@ metadata:
 type: kubernetes.io/service-account-token
 ```
 
-This ensures that the generated token remains valid indefinitely, avoiding frequent expiration issues.
-The central operator can now use this token in the Kubeconfig file securely, without the risk of sudden authentication failures.
+###### 3. Storing Minimal Credentials in Kubeconfig
+- Instead of using a full admin kubeconfig, generate a scoped kubeconfig containing only the necessary token.
 
-Now instead of exposing a full administrator Kubeconfig, we generate a minimal Kubeconfig that includes only the long-lived (access restricted) token for authentication
+Example Kubeconfig
 
 ```yaml
 apiVersion: v1
@@ -258,21 +270,25 @@ users:
 - name: stretch-operator-user
   user:
     token: <TOKEN>
-
 ```
-This Kubeconfig is stored in a Kubernetes Secret and used by the central Strimzi operator for authentication.
 
-#### Expected Benefits
+##### Flexibility for Other Authentication Mechanisms
+While token-based authentication is one option, users may choose alternative methods based on their security policies. 
+Some users might
 
-- By granting only minimal permissions, we ensure that remote clusters are not fully exposed.
-- Long-lived credentials eliminate the need for frequent token refreshes.
+- Use mTLS authentication, which requires client TLS certificates inside the kubeconfig instead of tokens.
+- Use username/password authentication with external authentication providers.
+- Integrate OIDC-based authentication for federated identity management.
 
+The Strimzi operator itself remains agnostic to the authentication method used. 
+It simply consumes the kubeconfig provided by the user. 
+The responsibility of securing credentials—whether using tokens, certificates, or other mechanisms—lies with the user.
 
-Additionally, a Kafka node pool resource definition must indicate which cluster will host the Kafka brokers/controllers for that node pool.
-The prototype uses a `spec.cluster` field within a KafkaNodePool definition that will have a value that matches one of the identifiers from the above map.
-If the `spec.cluster` field is missing from the KafkaNodePool definition, it is currently assumed that the broker/controller pods will run on the central Kubernetes cluster.
+##### Expected Benefits
 
-_Note: This cluster identifier could have the same value as the network identifier described in the previous section. Community feedback/input very welcome!_
+-  Users can apply least-privilege principles by configuring kubeconfig files with scoped permissions.
+- Long-lived credentials prevent frequent authentication failures.
+- The operator supports any authentication mechanism that Kubernetes itself supports, allowing users to integrate it into their existing security model.
 
 #### Other prototype configuration items and limitations
 
@@ -307,7 +323,7 @@ Within the prototype operator, this is used to conditionally break the expectati
 4. Submariner [requires an adjustment](https://aswinayyolath.github.io/stretch-kafka-docs/Deploying-Strimzi-in-Stretch-Mode/#updating-clusterrole-for-submariner) to the `ClusterRole` for the Strimzi cluster operator in the central Kubernetes cluster.
 
 5. The prototype operator currently creates new Kubernetes client instances at the required stage of reconciliation for the range of Kubernetes resources involved.
-This approach was quick to implement, but results in duplicate code.
+This approach was quick to implement, but results in duplicate [code](https://github.com/aswinayyolath/strimzi-kafka-operator/compare/main...aswinayyolath:strimzi-kafka-operator:strecth-cluster-prototype?expand=1#diff-ac9b17492d6e343d1a402e70ab4460b2f56e6d3a66600f707cb354523384c651R263).
 A design for better management of Kubernetes clients for remote clusters is required and is dependent upon community input.
 
 **All aspects of user configuration described above would benefit from further discussion within the community.**
