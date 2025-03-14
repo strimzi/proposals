@@ -24,7 +24,7 @@ This flexibility helps with maintenance, scaling, and workload transitions betwe
 
 - **Resource Optimization**: Efficiently utilizing resources across multiple clusters, which can be advantageous in environments with varying cluster capacities or during scaling operations.
 
-### Limitations and Considerations
+## Limitations and Considerations
 While a stretch Kafka cluster offers several advantages, it also introduces some challenges and considerations:
 
 - **Increased Network Complexity and Costs**: The communication between brokers and controllers across clusters relies on network connectivity, which can be less reliable and more costly than intra-cluster communication.
@@ -40,7 +40,7 @@ This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kaf
 The intent is to focus on high-availability of the Kafka control plane and data plane.
 The proposal outlines high-level topology and design concepts for such deployments, with a plan to incrementally include finer design and implementation details for various aspects.
 
-### Prerequisites
+## Prerequisites
 
 - **KRaft**: As Kafka and Strimzi transition towards KRaft-based clusters, this proposal focuses exclusively on enabling stretch deployments for KRaft-based Kafka clusters.
 While Zookeeper-based deployments are still supported, they are outside the scope of this proposal.
@@ -64,9 +64,9 @@ There are currently two projects that can successfully support the prototype ope
 
     The draft [README](https://aswinayyolath.github.io/stretch-kafka-docs) for the prototype includes detailed steps describing how to pre-configure both [Submariner](https://aswinayyolath.github.io/stretch-kafka-docs/setting-up-submariner/) and [Cilium](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-cilium/).
 
-### Design
+## Design
 
-#### Topology of a stretch cluster
+### Topology of a stretch cluster
 
 ![Stretch cluster topology](./images/095-stretch-cluster-topology.png)
 
@@ -378,6 +378,42 @@ The prototype does not yet have a mechanism for controlled cleanup of remote res
 We conducted initial experiments to enable rack awareness in a Stretch Kafka cluster, ensuring that replicas are distributed across multiple Kubernetes clusters based on topology labels. This approach improves fault tolerance by leveraging Kubernetes zone-aware scheduling or manually assigned zone labels for non-zone-aware clusters
 
 For detailed implementation steps and test results, refer to our prototype [documentation](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-Rack-Awareness-In-Stretch-Cluster/)
+
+### Disaster Recovery - Handling Central Cluster Failure
+
+In a stretch Kafka deployment, the central Kubernetes cluster manages Kafka resources across multiple clusters, but Kafka brokers and controllers continue operating even if the central cluster fails.
+We have performed some testing on the central cluster failure scenario, which is documented [here](https://aswinayyolath.github.io/stretch-kafka-docs/Testing-cluster-failover/).
+The key challenge is restoring the administrative control plane while ensuring minimal downtime for Kafka clients.
+
+#### Recovery Approaches
+There are several possible recovery methods
+
+##### 1. Manual Recovery (Baseline Approach)
+Users bring up a new Kubernetes cluster and manually apply the Kafka, KafkaNodePool CRs.
+Alternatively, an existing remote cluster can be promoted to central by applying these CRs and updating the Cluster Operator deployment.
+This approach is simple and reliable but requires user intervention.
+
+##### 2. GitOps-Based Recovery
+
+Users store CRs in GitOps tools (e.g., ArgoCD, Flux).
+When a new central cluster is created, GitOps tools automatically reconcile the resources.
+This reduces manual effort but requires GitOps workflows to be set up in advance.
+
+##### 3. CR Replication with Manual Failover
+
+The central Cluster Operator replicates Kafka, KafkaNodePool across remote clusters as backup copies.
+These CRs are annotated as inactive (e.g., strimzi.io/standby=true) so that remote clusters do not reconcile them.
+In case of failure, users remove the standby annotation and update the CO deployment to promote the cluster to central.
+This accelerates recovery but adds complexity in keeping replicated CRs up to date.
+
+##### 4. Automated Failover (Future Consideration)
+The system detects central cluster failure and automatically elects a new primary cluster.
+Replicated CRs become active, and the CO resumes reconciliation from the new cluster.
+This offers zero manual intervention but requires leader election, coordination, and consistent state replication, which are non-trivial.
+
+#### Recommended Approach
+As a starting point, we recommend manual recovery (Option 1) and GitOps-based recovery (Option 2) due to their simplicity and lower implementation overhead.
+We do not plan to implement automated failover (Option 4) at this stage. However, CR replication (Option 3) remains an option if users demand a faster failover mechanism.
 
 #### Entity operator
 We would recommend that all KafkaTopic and KafkaUser resources are managed from the cluster that holds Kafka and KafkaNodePool resources, and that should be the cluster where the entity operator should be enabled.
