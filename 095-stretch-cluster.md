@@ -399,21 +399,6 @@ Users store CRs in GitOps tools (e.g., ArgoCD, Flux).
 When a new central cluster is created, GitOps tools automatically reconcile the resources.
 This reduces manual effort but requires GitOps workflows to be set up in advance.
 
-##### 3. CR Replication with Manual Failover
-
-The central Cluster Operator replicates Kafka, KafkaNodePool across remote clusters as backup copies.
-These CRs are annotated as inactive (e.g., strimzi.io/standby=true) so that remote clusters do not reconcile them.
-In case of failure, users remove the standby annotation and update the CO deployment to promote the cluster to central.
-This accelerates recovery but adds complexity in keeping replicated CRs up to date.
-
-##### 4. Automated Failover (Future Consideration)
-The system detects central cluster failure and automatically elects a new primary cluster.
-Replicated CRs become active, and the CO resumes reconciliation from the new cluster.
-This offers zero manual intervention but requires leader election, coordination, and consistent state replication, which are non-trivial.
-
-#### Recommended Approach
-As a starting point, we recommend manual recovery (Option 1) and GitOps-based recovery (Option 2) due to their simplicity and lower implementation overhead.
-We do not plan to implement automated failover (Option 4) at this stage. However, CR replication (Option 3) remains an option if users demand a faster failover mechanism.
 
 #### Entity operator
 We would recommend that all KafkaTopic and KafkaUser resources are managed from the cluster that holds Kafka and KafkaNodePool resources, and that should be the cluster where the entity operator should be enabled.
@@ -430,3 +415,21 @@ Other aspects requiring consideration and research:
 ## Affected/not affected projects
 
 This proposal only impacts strimzi-kafka-operator project.
+
+
+## Rejected Alternatives
+
+The following approaches were considered but are out of scope for this proposal due to added complexity or implementation overhead
+
+### CR Replication with Manual Failover
+
+The central Cluster Operator replicates Kafka, KafkaNodePool across remote clusters as backup copies.
+These CRs are annotated as inactive (e.g., strimzi.io/standby=true) so that remote clusters do not reconcile them.
+In case of failure, users remove the standby annotation and update the CO deployment to promote the cluster to central.
+While this accelerates recovery, it adds complexity in keeping replicated CRs up to date.
+
+### Automated Failover
+
+The system detects central cluster failure and automatically elects a new primary cluster.
+Replicated CRs become active, and the CO resumes reconciliation from the new cluster.
+This approach eliminates manual intervention but requires leader election, coordination, and consistent state replication, which are non-trivial challenges.
