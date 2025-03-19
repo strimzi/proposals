@@ -43,7 +43,7 @@ The proposal outlines high-level topology and design concepts for such deploymen
 ## Prerequisites
 
 - **KRaft**: As Kafka and Strimzi transition towards KRaft-based clusters, this proposal focuses exclusively on enabling stretch deployments for KRaft-based Kafka clusters.
-While Zookeeper-based deployments are still supported, they are outside the scope of this proposal.
+Strimzi will not support stretch clusters for Zookeeper-based deployments.
 
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters will require multiple Kubernetes clusters.
 To ensure Kafka controller quorum in the event of a Kubernetes cluster outage, it is recommended to distribute controllers across at least three Kubernetes clusters. In a two cluster setup, there is a risk of losing quorum if the wrong cluster fails, which can lead to Kafka becoming unavailable.
