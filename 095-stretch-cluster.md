@@ -78,6 +78,37 @@ The central cluster acts as the control plane where a user will create all the c
 A Kafka node pool definition can be configured to specify a Kubernetes cluster (central cluster or one of the member clusters) as the deployment target.
 The operator on the central cluster is responsible for creating all necessary resources (including `StrimziPodSet` resources) for the node pool on the target Kubernetes cluster. 
 
+#### Remote cluster resources created by the central operator in a Stretch Kafka deployment
+
+In a Stretch Kafka setup, the Kafka and KafkaNodePool CRs are defined only in the central cluster.
+However, these CRs are responsible for creating several Kubernetes resources that are required for Kafka broker and controller pods to be in a running state.
+Since remote (member) clusters do not have direct access to these CRs, the Strimzi Operator running in the central cluster must ensure that the necessary resources are created in the remote clusters as well.
+
+The following table outlines the Kubernetes resources created by each Strimzi Custom Resource (Kafka, KafkaNodePool, and StrimziPodSet).
+In a Stretch Kafka deployment, the operator on the central cluster must ensure that all resources created by the Kafka CR and KafkaNodePool CR are also replicated in the remote clusters, including Persistent Volume Claims (PVCs) for storage.
+
+| Kubernetes Resource                          | Created by Kafka CR | Created by KafkaNodePool CR | Created by StrimziPodSet CR |
+|----------------------------------------------|----------------------|----------------------------|----------------------------|
+| **Service Account**                          | ✅                   |                            |                            |
+| **Config Map for Broker Pods**               |                      | ✅                          |                            |
+| **Config Map for Controller Pods**           |                      | ✅                          |                            |
+| **Client CA Secret**                         | ✅                   |                            |                            |
+| **Client CA Cert Secret**                    | ✅                   |                            |                            |
+| **Cluster CA Secret**                        | ✅                   |                            |                            |
+| **Cluster CA Cert Secret**                   | ✅                   |                            |                            |
+| **Kafka Broker Certificates Secret**         | ✅                   |                            |                            |
+| **Kafka Broker Service**                     | ✅                   |                            |                            |
+| **Broker Pods**                               |                      |                            | ✅                          |
+| **Controller Pods**                           |                      |                            | ✅                          |
+| **Persistent Volume Claims (PVCs) for storage** |                      | ✅                          |                            |
+
+In addition, Strimzi also creates PodDisruptionBudget and Network Policy. However, we cannot use the Network Policy as Strimzi creates it today because it restricts all internal traffic outside the namespace where Strimzi is installed.
+To enable pod-to-pod communication across clusters, we should either not create the Network Policy or modify it to include specific rules that allow cross-cluster communication.
+At present, we do not need to worry too much about PodDisruptionBudget. We can create it in the remote cluster in the same way we create other Kubernetes resources.
+
+Furthermore, depending on the listener configuration, the Kafka CR may also create LoadBalancer, Ingress, NodePort, and Route services to expose Kafka externally.
+By ensuring that all necessary resources including ConfigMaps, Secrets, Services, and PVCs—are created in the appropriate clusters, the central operator enables  Kafka deployment across multiple Kubernetes clusters in a Stretch Kafka setup.
+
 Operators deployed to remote clusters are only responsible for reconciling `StrimziPodSet` resources that are created remotely by the operator running in the central cluster.
 
 This approach will allow users to manage the definition of their stretch Kafka cluster in a single location.
