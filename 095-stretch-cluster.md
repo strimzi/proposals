@@ -230,7 +230,8 @@ TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 
 **Modified format for a stretch Kafka cluster**
 
-When Kafka is deployed using "stretch mode", the operator modifies `advertised.listeners` to include a network identifier, such as the Submariner or Cilium `stretch-cluster-id`. The modified format is:
+When a Kafka cluster is deployed across multiple Kubernetes clusters, the operator modifies `advertised.listeners` to include a Kubernetes cluster identifier (`stretch-cluster-id`) that the user defines when [configuring a supported Cloud Native Network project](#step-1-user-configuration-of-a-supported-cloud-native-network-project).
+The modified format is:
 
 ```
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
@@ -238,7 +239,7 @@ PLAIN-9092://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<names
 TLS-9093://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9093
 ```
 
-The `<stretch-cluster-id>` is dynamically retrieved from an annotation on the `KafkaNodePool` resource.
+The `<stretch-cluster-id>` is dynamically retrieved from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
 
 **Modified `controller.quorum.voters` format**
 
