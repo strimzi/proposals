@@ -211,6 +211,8 @@ _Note: The prototype might not exactly align with this proposal so please refer 
 
 The Strimzi operator itself remains agnostic to the authentication method used; It simply consumes the kubeconfig provided by the user. 
 The responsibility for securing credentials, whether using tokens, certificates, or other mechanisms, lies with the user.
+We have provided additional details on securing remote cluster credentials in a multi-cluster Kafka deployment [here](https://aswinayyolath.github.io/stretch-kafka-docs/Secure-remote-cluster-credentials/). 
+This document outlines best practices for securing remote cluster credentials when using token-based kubeconfig authentication.
 
 #### Example of multi-cluster advertised.listener and controller.quorum.voters
 
