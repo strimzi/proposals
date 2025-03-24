@@ -224,10 +224,11 @@ _Note: The prototype might not exactly align with this proposal so please refer 
 
 #### Authentication & Security Considerations for Multi-Cluster Access
 
-The Strimzi operator itself remains agnostic to the authentication method used; It simply consumes the kubeconfig provided by the user. 
+The Strimzi operator itself remains agnostic to the authentication method used; It simply consumes the kubeconfig provided by the user.
+Users can choose from multiple authentication mechanisms based on their security requirements.
 The responsibility for securing credentials, whether using tokens, certificates, or other mechanisms, lies with the user.
-We have provided additional details on securing remote cluster credentials in a multi-cluster Kafka deployment [here](https://aswinayyolath.github.io/stretch-kafka-docs/Secure-remote-cluster-credentials/). 
-This document outlines best practices for securing remote cluster credentials when using token-based kubeconfig authentication.
+Common approaches include token-based authentication using a long-lived ServiceAccount token, mTLS authentication with client TLS certificates, OIDC-based authentication leveraging an identity provider, and basic authentication with a username and password.
+Each method provides different levels of security and flexibility, allowing users to integrate with their existing security infrastructure while ensuring secure access to remote Kubernetes clusters.
 
 #### Example of multi-cluster advertised.listener and controller.quorum.voters
 
