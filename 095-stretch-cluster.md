@@ -118,6 +118,21 @@ The value of the environment variable uses a "map" format as shown below:
 The secrets referenced here must contain the kubeconfig for the Kubenetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
 This allows the central Strimzi operator to authenticate with multiple Kubernetes clusters.
 
+**Example Secret**
+
+Below is an example Kubernetes Secret containing a kubeconfig for a remote cluster
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-name-cluster-a
+  namespace: strimzi
+type: Opaque
+data:
+  kubeconfig: <base64-encoded-kubeconfig>
+```
+
 When this environment variable is set, the cluster operator will understand it needs to deploy a stretch Kafka cluster.
 The custom actions taken as a result of this environment variable include:
 1. The value of `STRIMZI_NETWORK_POLICY_GENERATION` is assumed to be `false` irrespective of the value set by the user.
