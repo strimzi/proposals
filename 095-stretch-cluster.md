@@ -267,6 +267,10 @@ controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-
 
 These updates ensure brokers and controllers can be discovered and communicate across clusters without relying on traditional external access methods.
 
+#### External Access
+
+When external listeners are configured, they will be set up across all participating clusters, along with their corresponding bootstrap addresses. External access mechanisms, such as Routes, Ingress, or LoadBalancer services, will be deployed in each cluster, allowing clients to seamlessly connect to the stretch cluster.
+
 #### Resource cleanup on remote Kubernetes clusters
 
 In our POC, resources created in the remote clusters do not have `OwnerReferences`. The main reason is that the `Kafka` and `KafkaNodePool` CRs exist only in the central cluster. If resources in remote clusters were to reference them as owners, they would be immediately deleted by Kubernetes' garbage collection mechanism since their owners do not exist in the remote clusters.
