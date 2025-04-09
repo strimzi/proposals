@@ -105,7 +105,7 @@ The information outlined above will be provided as an environment variable for t
 The value of the environment variable uses a "map" format as shown below:
 
 ```yaml
-- name: STRIMZI_K8S_CLUSTERS
+- name: STRIMZI_REMOTE_KUBE_CONFIG
   value: |
       cluster-id-a.url=<cluster-a URL>
       cluster-id-a.secret=<secret-name-cluster-a>
