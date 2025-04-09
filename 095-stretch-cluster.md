@@ -176,6 +176,7 @@ metadata:
 ```
 
 The identifier used here must match one of the values defined by the user in 'Step 1' and consequently added to the environment variable map value in 'Step 2'.
+If this annotation is omitted or the identifier does not match any of the values defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable, the operator will deploy the node pool to the central Kubernetes cluster.
 
 #### Remote cluster resources created by the central operator in a stretch cluster
 
