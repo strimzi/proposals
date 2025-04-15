@@ -141,13 +141,16 @@ This annotation will allow the remote cluster operator to reconcile the `Strimzi
 
 ##### Remote cluster operator configuration
 
-The operator running in the remote cluster must be set to only reconcile `StrimziPodSet` resources by setting the existing environment variable:
+To optimize resource usage in the remote cluster, the operator can optionally be configured to reconcile only `StrimziPodSet` resources by setting the existing environment variable:
 
 ```yaml
 - name: STRIMZI_POD_SET_RECONCILIATION_ONLY
   value: true
 ```
 
+This is not required for stretch clusters to function correctly.
+If this variable is not set, the operator will still work as expected.
+It simply won't benefit from the reduced memory/CPU footprint and cleaner logs that come with narrowing the scope of reconciliation.
 This configuration will minimise the resources required by the cluster operator on the remote Kubernetes clusters and simplify logging output.
 
 #### Step 3: Create Kafka and KafkaNodePool resources in the central cluster
