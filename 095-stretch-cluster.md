@@ -157,7 +157,7 @@ This configuration will minimise the resources required by the cluster operator 
 
 ##### Kafka CR
 
-The `Kafka` CR must include a new annotation to specify the chosen Cloud native network project:
+To enable stretch cluster functionality, the `Kafka` CR must include a new annotation to specify the cloud-native networking technology used for cross-cluster communication:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -167,9 +167,22 @@ metadata:
     strimzi.io/stretch-cluster-network: "cilium"
 ```
 
+This annotation is not used to set up cross-cluster networking — that remains the responsibility of the user or platform. 
+Instead, it allows the Cluster Operator to apply any technology-specific configuration or integration needed for the stretch cluster to function correctly.
+For example, when using Submariner, the operator may need to automatically create `ServiceExport` resources to enable service discovery across clusters.
+Other technologies like Cilium do not require such configuration.
+
+The annotation also makes the implementation future-proof: as support for more networking technologies is added, this field allows the operator to adapt its behavior accordingly.
+
+If the annotation is omitted, the operator will assume "cilium" as the default, as it does not require additional configuration.
+A validating webhook will be used to ensure the annotation, if present, contains a supported value.
+If an unsupported value is specified, the webhook will reject the Kafka CR with an appropriate error message listing the valid options.
+
 ##### KafkaNodePool CR
 
-The `KafkaNodePool` CR must include a new annotation to specify the target Kubernetes cluster where the node pool resources should be deployed:
+The `KafkaNodePool` CR remains in the central cluster but must include a new annotation to indicate the target Kubernetes cluster where the corresponding Kafka node resources should be deployed.
+Based on this annotation, the Cluster Operator will create the associated resources — including StrimziPodSet, Services, Secrets, ConfigMaps, and others — in the specified remote cluster.
+The `KafkaNodePool` itself is never deployed outside the central cluster.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
