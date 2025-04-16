@@ -149,7 +149,7 @@ The `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable defines the cloud-nat
 Specifying this value in the Cluster Operator deployment is essential because different networking technologies may require different handling or integration steps by the operator.
 For example, when using Submariner, the operator needs to create additional Kubernetes resources such as ServiceExport objects to enable seamless service discovery and communication across clusters.
 In contrast, technologies like Cilium Cluster Mesh handle cross-cluster service resolution automatically and do not require any extra configuration from the operator.
-By making this a required environment variable, we ensure that the operator is explicitly informed about the underlying network technology and can perform any necessary setup accordingly.
+By making this a defined environment variable, we ensure that the operator is explicitly informed about the underlying network technology and can perform any necessary setup accordingly.
 This approach also makes the implementation extensible and future-proof, as additional technologies can be supported by adding their respective handling logic to the operator based on this variable.
 
 
