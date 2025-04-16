@@ -100,9 +100,10 @@ The operator running in the central Kubernetes cluster must be provided with the
 - The identifier for each Kubernetes cluster defined in 'Step 1'.
 - A URL endpoint for the Kubernetes API server running in each remote cluster.
 - Credential(s) to allow authentication with the remote Kubernetes API server(s).
+- The cross-cluster networking technology used for stretch cluster communication (e.g., Cilium, Submariner,...).
 
-The information outlined above will be provided as an environment variable for the cluster operator.
-The value of the environment variable uses a "map" format as shown below:
+The information outlined above will be provided as environment variables for the cluster operator.
+The values of the environment variables use the following format:
 
 ```yaml
 - name: STRIMZI_REMOTE_KUBE_CONFIG
@@ -111,6 +112,9 @@ The value of the environment variable uses a "map" format as shown below:
       cluster-id-a.secret=<secret-name-cluster-a>
       cluster-id-b.url=<cluster-b URL>
       cluster-id-b.secret=<secret-name-cluster-b>
+
+- name: STRIMZI_STRETCH_CLUSTER_NETWORK
+  value: "cilium" # or any other supported networking technology
 ```
 
 The secrets referenced here must contain the kubeconfig for the Kubernetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
@@ -131,13 +135,35 @@ data:
   kubeconfig: <base64-encoded-kubeconfig>
 ```
 
-When this environment variable is set, the Cluster Operator will recognize that it needs to deploy a stretch Kafka cluster. As part of this mode:
+When the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set, the Cluster Operator will recognize that it needs to deploy a stretch Kafka cluster. 
+As part of this mode:
 The custom actions taken as a result of this environment variable include:
 1. The value of `STRIMZI_NETWORK_POLICY_GENERATION` is always treated as **`false`**, regardless of the value provided by the user or the default (true).
 This is to ensure that network traffic between Kubernetes clusters is not blocked due to network policies.
 The Cluster Operator will log a warning to inform the user that any value set for this variable is being ignored in stretch mode.
 2. The `StrimziPodSet` resources created in a remote cluster will include an annotation `strimzi.io/remote-podset: true`.
 This annotation will allow the remote cluster operator to reconcile the `StrimziPodSet` without a `Kafka` and `KafkaNodePool` CR being present in the same cluster.
+
+
+The `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable defines the cloud-native networking technology used for cross-cluster communication in a stretch Kafka deployment.
+Specifying this value in the Cluster Operator deployment is essential because different networking technologies may require different handling or integration steps by the operator.
+For example, when using Submariner, the operator needs to create additional Kubernetes resources such as ServiceExport objects to enable seamless service discovery and communication across clusters.
+In contrast, technologies like Cilium Cluster Mesh handle cross-cluster service resolution automatically and do not require any extra configuration from the operator.
+By making this a required environment variable, we ensure that the operator is explicitly informed about the underlying network technology and can perform any necessary setup accordingly.
+This approach also makes the implementation extensible and future-proof, as additional technologies can be supported by adding their respective handling logic to the operator based on this variable.
+
+
+If the `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable is not explicitly defined, the Cluster Operator will default to "cilium", as it does not require any operator-driven configuration for cross-cluster service discovery.
+A warning will be logged to inform users of this default behavior.
+The warning will look something like:
+
+```
+STRIMZI_STRETCH_CLUSTER_NETWORK is not defined. Defaulting to 'cilium'.
+```
+
+This approach ensures that stretch mode remains functional even if the variable is omitted.
+However, if the user has not set up any cross-cluster networking technology (such as Cilium, Submariner, or others) in the underlying Kubernetes clusters, the stretch cluster will not function correctly regardless of the operator configuration.
+It is the user’s responsibility to ensure that appropriate cross-cluster networking is in place for pod-to-pod communication across clusters.
 
 ##### Remote cluster operator configuration
 
@@ -157,26 +183,11 @@ This configuration will minimise the resources required by the cluster operator 
 
 ##### Kafka CR
 
-To enable stretch cluster functionality, the `Kafka` CR must include a new annotation to specify the cloud-native networking technology used for cross-cluster communication:
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: Kafka
-metadata:
-  annotations:
-    strimzi.io/stretch-cluster-network: "cilium"
-```
-
-This annotation is not used to set up cross-cluster networking — that remains the responsibility of the user or platform. 
-Instead, it allows the Cluster Operator to apply any technology-specific configuration or integration needed for the stretch cluster to function correctly.
-For example, when using Submariner, the operator may need to automatically create `ServiceExport` resources to enable service discovery across clusters.
-Other technologies like Cilium do not require such configuration.
-
-The annotation also makes the implementation future-proof: as support for more networking technologies is added, this field allows the operator to adapt its behavior accordingly.
-
-If the annotation is omitted, the operator will assume "cilium" as the default, as it does not require additional configuration.
-A validating webhook will be used to ensure the annotation, if present, contains a supported value.
-If an unsupported value is specified, the webhook will reject the Kafka CR with an appropriate error message listing the valid options.
+There is no change required to the Kafka custom resource (Kafka CR).
+The Kafka resource remains exactly as defined in the existing Strimzi API, and users can continue to define their cluster configurations in the standard way.
+Most stretch-related configuration — such as cross-cluster networking technology and remote cluster access credentials — is handled through environment variables in the Cluster Operator deployment.
+This simplifies the Kafka CR and keeps global operational concerns decoupled from workload specifications.
+Cluster-specific configuration, such as the target remote cluster for each node pool, is specified in the KafkaNodePool CR via annotations.
 
 ##### KafkaNodePool CR
 
