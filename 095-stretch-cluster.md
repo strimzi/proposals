@@ -59,9 +59,6 @@ Manual configuration of a [Cloud Native Network](https://landscape.cncf.io/guide
 Any project that can support direct pod-to-pod communication across multiple Kubernetes clusters should be compatible with the proposed solution.
 The initial implementation will be based upon [Cilium](https://cilium.io/) that provides support for a [Cluster Mesh](https://docs.cilium.io/en/stable/network/clustermesh/intro/), but the design will allow for this to be extended to other mature CNCF networking projects.
 
-A [prototype](#prototype) has been proven using Cilium and [Submariner](https://submariner.io/).
-Submariner provides an implementation of [Kubernetes Multi-Cluster Services (MCS)](https://multicluster.sigs.k8s.io/guides/#implementation-status).
-
 ### High-level architecture
 
 #### Topology of a stretch cluster
@@ -100,7 +97,7 @@ The operator running in the central Kubernetes cluster must be provided with the
 - The identifier for each Kubernetes cluster defined in 'Step 1'.
 - A URL endpoint for the Kubernetes API server running in each remote cluster.
 - Credential(s) to allow authentication with the remote Kubernetes API server(s).
-- The cross-cluster networking technology used for stretch cluster communication (e.g., Cilium, Submariner,...).
+- The cross-cluster networking technology used for stretch cluster communication.
 
 The information outlined above will be provided as environment variables for the cluster operator.
 The values of the environment variables use the following format:
@@ -136,7 +133,7 @@ data:
 ```
 
 When the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set, the Cluster Operator will recognize that it needs to deploy a stretch Kafka cluster. 
-As part of this mode:
+
 The custom actions taken as a result of this environment variable include:
 1. The value of `STRIMZI_NETWORK_POLICY_GENERATION` is always treated as **`false`**, regardless of the value provided by the user or the default (true).
 This is to ensure that network traffic between Kubernetes clusters is not blocked due to network policies.
@@ -144,25 +141,22 @@ The Cluster Operator will log a warning to inform the user that any value set fo
 2. The `StrimziPodSet` resources created in a remote cluster will include an annotation `strimzi.io/remote-podset: true`.
 This annotation will allow the remote cluster operator to reconcile the `StrimziPodSet` without a `Kafka` and `KafkaNodePool` CR being present in the same cluster.
 
+The `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable specifies the cloud-native networking technology used for cross-cluster communication in a stretch Kafka deployment.
 
-The `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable defines the cloud-native networking technology used for cross-cluster communication in a stretch Kafka deployment.
-Specifying this value in the Cluster Operator deployment is essential because different networking technologies may require different handling or integration steps by the operator.
-For example, when using Submariner, the operator needs to create additional Kubernetes resources such as ServiceExport objects to enable seamless service discovery and communication across clusters.
-In contrast, technologies like Cilium Cluster Mesh handle cross-cluster service resolution automatically and do not require any extra configuration from the operator.
+Allowing this additional configuration for the Cluster Operator deployment provides an extension point for additional CNCF networking projects to be used.
 By making this a defined environment variable, we ensure that the operator is explicitly informed about the underlying network technology and can perform any necessary setup accordingly.
-This approach also makes the implementation extensible and future-proof, as additional technologies can be supported by adding their respective handling logic to the operator based on this variable.
 
-
-If the `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable is not explicitly defined, the Cluster Operator will default to "cilium", as it does not require any operator-driven configuration for cross-cluster service discovery.
-A warning will be logged to inform users of this default behavior.
-The warning will look something like:
+Although Cilium does not require any specific operator actions to enable cross-cluster service discovery, other overlay networks might require additional configuration that can be automated by the Cluster Operator.
+For this reason, if the `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable is not explicitly defined, the Cluster Operator will default to "cilium".
+The following warning will be logged to inform users of this default behavior:
 
 ```
 STRIMZI_STRETCH_CLUSTER_NETWORK is not defined. Defaulting to 'cilium'.
 ```
 
-This approach ensures that stretch mode remains functional even if the variable is omitted.
-However, if the user has not set up any cross-cluster networking technology (such as Cilium, Submariner, or others) in the underlying Kubernetes clusters, the stretch cluster will not function correctly regardless of the operator configuration.
+This approach allows for a single environment variable (`STRIMZI_REMOTE_KUBE_CONFIG`) to toggle stretch cluster reconciliation.
+
+However, if the user has not configured Cilium, the stretch cluster will not function correctly regardless of the operator configuration.
 It is the user’s responsibility to ensure that appropriate cross-cluster networking is in place for pod-to-pod communication across clusters.
 
 ##### Remote cluster operator configuration
@@ -340,16 +334,28 @@ This proposal only impacts strimzi-kafka-operator project.
 
 ## Rejected alternatives
 
+### Cloud native network projects
+
+The following CNCF network projects were considered, but have been rejected for the reasons outlined below:
+
+#### [Submariner](https://submariner.io/)
+
+- The [prototype](#prototype) has been tested with both Cilium and Submariner, but our [performance testing](https://aswinayyolath.github.io/stretch-kafka-docs/Testing-performance/#findings) showed a significant performance deficit when using Submariner.
+- Submariner does not support the Amazon Kubernetes service (EKS).
+- Submariner is a 'sandbox' CNCF project, while Cilium is 'graduated'.
+
+### Disaster recovery
+
 The following disaster recovery approaches were considered but are out of scope for this proposal due to added complexity or implementation overhead:
 
-### CR replication with manual failover
+#### CR replication with manual failover
 
 The central cluster operator replicates `Kafka` and `KafkaNodePool` resources across remote clusters as backup copies.
 These CRs are annotated as inactive (e.g., `strimzi.io/standby=true`) so that remote clusters do not reconcile them.
 In case of failure, users remove the standby annotation and update the operator deployment to promote the cluster to central.
 While this accelerates recovery, it adds complexity in keeping replicated CRs up to date.
 
-### Automated failover
+#### Automated failover
 
 The system detects central cluster failure and automatically elects a new primary cluster.
 Replicated CRs become active, and the CO resumes reconciliation from the new cluster.
