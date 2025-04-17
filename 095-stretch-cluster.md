@@ -334,6 +334,19 @@ We recommend that all `KafkaTopic` and `KafkaUser` resources are managed from th
 This will maintain the central cluster as the single control plane for resource management.
 The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
 
+## Feature Enablement and Rollout Plan
+The Stretch Kafka Cluster support will be introduced as an optional feature behind a feature gate called `UseStretchCluster`.
+The maturity and rollout of this feature gate will follow the standard Strimzi process:
+- The feature gate will be disabled by default, allowing early adopters and community members to safely test the functionality without affecting production environments.
+- After at least two Strimzi releases, and based on user feedback and observed stability, enabling the feature gate by default may be considered.
+
+Existing Kafka cluster deployments will remain unaffected unless users explicitly enable the UseStretchCluster feature gate and configure the necessary settings.
+
+## Kafka Connect and MirrorMaker2 Considerations
+This proposal does not cover stretching Kafka Connect or Kafka MirrorMaker 2.
+However, these components can continue to be deployed in the central cluster and will function as they do today.
+Operators running in remote clusters will not manage KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
+
 ## Affected/not affected projects
 
 This proposal only impacts strimzi-kafka-operator project.
