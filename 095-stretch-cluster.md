@@ -28,7 +28,7 @@ This flexibility helps with maintenance, scaling, and workload transitions betwe
 
 This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, distributing broker, controller and combined Kafka nodes across multiple Kubernetes clusters.
 The intent is to focus on high-availability of the Kafka data plane.
-The proposal outlines high-level topology and design concepts for such deployments, with a plan to incrementally include finer design and implementation details for relevant aspects.
+The proposal outlines the high-level topology, design concepts, and detailed implementation considerations for such deployments.
 
 ### Limitations and Considerations
 While a stretch Kafka cluster offers several advantages, it also introduces some challenges and considerations:
@@ -161,17 +161,23 @@ It is the user’s responsibility to ensure that appropriate cross-cluster netwo
 
 ##### Remote cluster operator configuration
 
-To optimize resource usage in the remote cluster, the operator can optionally be configured to reconcile only `StrimziPodSet` resources by setting the existing environment variable:
+When deploying the operator to remote clusters, it is **strongly recommended** to configure the operator to reconcile only StrimziPodSet resources by setting the existing environment variable:
 
 ```yaml
 - name: STRIMZI_POD_SET_RECONCILIATION_ONLY
   value: true
 ```
 
-This is not required for stretch clusters to function correctly.
-If this variable is not set, the operator will still work as expected.
-It simply won't benefit from the reduced memory/CPU footprint and cleaner logs that come with narrowing the scope of reconciliation.
-This configuration will minimise the resources required by the cluster operator on the remote Kubernetes clusters and simplify logging output.
+Although this configuration is technically optional for stretch clusters to function correctly, setting it provides important safeguards:
+
+- It minimizes the resources (CPU and memory) required by the operator on remote Kubernetes clusters.
+- It simplifies the operator logs by reducing noise.
+- It prevents accidental reconciliation of other Strimzi resources (such as Kafka, KafkaNodePool, or KafkaConnect) if they are mistakenly created in the remote cluster, avoiding unintended behavior.
+
+If this variable is not set, the operator will still work for stretch cluster functionality.
+However, it will attempt to reconcile any Strimzi resources found in the remote cluster, which may lead to unexpected results.
+Therefore, it is highly recommended to set `STRIMZI_POD_SET_RECONCILIATION_ONLY=true` when deploying the operator to remote clusters in a stretch cluster deployment.
+The official Strimzi documentation should clearly state that it is highly recommended to set STRIMZI_POD_SET_RECONCILIATION_ONLY=true when deploying the operator to remote clusters, to ensure correct behavior and minimize the risk of misconfiguration.
 
 #### Step 3: Create Kafka and KafkaNodePool resources in the central cluster
 
