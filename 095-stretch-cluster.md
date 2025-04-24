@@ -56,10 +56,11 @@ Deployments across geographically distant regions, where high latency and limite
 
 - **A supported Multicluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
 Manual configuration of a [Multicluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required.
-Any implementation that can support direct pod-to-pod communication across multiple Kubernetes clusters should be compatible with the proposed solution.
-The initial implementation will be based upon [Cilium](https://cilium.io) that provides support for a [Cluster Mesh](https://docs.cilium.io/en/stable/network/clustermesh/intro) and the MCS-API as of version 1.17.
-Other possible Multicluster API implementations that could be supported over time are listed on [this page](https://multicluster.sigs.k8s.io/guides).
-It is the user’s responsibility to ensure that an appropriate Multicluster Services API implementation is in place for pod-to-pod communication across clusters.
+Possible Multicluster API implementations are listed on [this page](https://multicluster.sigs.k8s.io/guides).
+It is the user’s responsibility to ensure that an appropriate configuration is in place for pod-to-pod communication across clusters.
+
+It is not feasible to test stretch cluster functionality with every MCS-API implementation.
+Therefore, a single implementation will be selected for test purposes that is most closely aligned with Strimzi test infrastructure.
 
 ### High-level architecture
 
@@ -79,16 +80,13 @@ The operator on the central cluster is responsible for creating all necessary re
 
 The following sections will describe the key aspects of the proposal.
 
-#### Step 1: User configuration of Cilium cluster mesh
+#### Step 1: User configuration of the chosen MCS-API implementation
 
-An overlay network must be [configured manually using Cilium](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-cilium/).
-When installing Cilium on a Kubernetes cluster, the user must specify a `cluster.name` to define a unique identifier for each cluster.
+When configuring Multicluster Services the user must specify a unique identifier for each Kubernetes cluster.
 
 The Strimzi cluster operator will use this identifier in two ways:
-1. Generating `advertised.listeners` and `controller.quorum.voters` configuration.
+1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [example](#example-of-multi-cluster-advertisedlistener-and-controllerquorumvoters)).
 2. Determining the target Kubernetes cluster for node pool resources.
-
-Kubernetes [CoreDNS must also be reconfigured](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-cilium/#setting-up-coredns-for-multi-cluster-dns-resolution) to allow DNS resolution across multiple Kubernetes clusters.
 
 #### Step 2: Deploy a cluster operator to each Kubernetes cluster
 
@@ -249,7 +247,7 @@ TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 
 **Modified format for a stretch cluster**
 
-When a Kafka cluster is deployed across multiple Kubernetes clusters, the operator modifies `advertised.listeners` to include a Kubernetes cluster identifier (`stretch-cluster-id`) that the user defines when [configuring Cilium](#step-1-user-configuration-of-cilium-cluster-mesh).
+When a Kafka cluster is deployed across multiple Kubernetes clusters, the operator modifies `advertised.listeners` to include a Kubernetes cluster identifier (`stretch-cluster-id`) that the user defines when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation).
 The modified format is:
 
 ```
@@ -321,25 +319,15 @@ The maturity and rollout of this feature gate will follow the standard Strimzi p
 Existing Kafka cluster deployments will remain unaffected unless users explicitly enable the UseStretchCluster feature gate and configure the necessary settings.
 
 ## Kafka Connect and MirrorMaker2 Considerations
-This proposal does not cover stretching Kafka Connect or Kafka MirrorMaker 2.
-However, these components can continue to be deployed in the central cluster and will function as they do today.
-Operators running in remote clusters will not manage KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
+This proposal does not cover stretching Kafka Connect, Kafka MirrorMaker 2 or the Kafka Bridge.
+These components can continue to be deployed in the central cluster and will function as they do today.
+Operators running in remote clusters will not manage KafkaBridge, KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
 
 ## Affected/not affected projects
 
 This proposal only impacts strimzi-kafka-operator project.
 
 ## Rejected alternatives
-
-### Cloud native network projects
-
-The following CNCF network projects were considered, but have been rejected for the reasons outlined below:
-
-#### [Submariner](https://submariner.io/)
-
-- The [prototype](#prototype) has been tested with both Cilium and Submariner, but our [performance testing](https://aswinayyolath.github.io/stretch-kafka-docs/Testing-performance/#findings) showed a significant performance deficit when using Submariner.
-- Submariner does not support the Amazon Kubernetes service (EKS).
-- Submariner is a 'sandbox' CNCF project, while Cilium is 'graduated'.
 
 ### Disaster recovery
 
