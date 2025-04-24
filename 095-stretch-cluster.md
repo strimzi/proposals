@@ -50,14 +50,16 @@ The recommended minimum number of Kubernetes clusters is 3 because this is the m
 However, the cluster operator will not block deployment of a stretch cluster with fewer than 3 Kubernetes clusters as this will be useful for test and development use cases.
 The cluster operator will log a warning similar to the existing warning logged when deploying fewer than 3 ZooKeeper nodes.
 
-- **Low Latency and High Bandwidth**:  Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
+- **Low Latency and High Bandwidth**: Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
 Stretch Kafka clusters should therefore be deployed in data centers or availability zones within a single region.
 Deployments across geographically distant regions, where high latency and limited bandwidth could impair performance, should be avoided.
 
-- **A supported cloud native networking technology**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
-Manual configuration of a [Cloud Native Network](https://landscape.cncf.io/guide#runtime--cloud-native-network) project is required.
-Any project that can support direct pod-to-pod communication across multiple Kubernetes clusters should be compatible with the proposed solution.
-The initial implementation will be based upon [Cilium](https://cilium.io/) that provides support for a [Cluster Mesh](https://docs.cilium.io/en/stable/network/clustermesh/intro/), but the design will allow for this to be extended to other mature CNCF networking projects.
+- **A supported Multicluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
+Manual configuration of a [Multicluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required.
+Any implementation that can support direct pod-to-pod communication across multiple Kubernetes clusters should be compatible with the proposed solution.
+The initial implementation will be based upon [Cilium](https://cilium.io) that provides support for a [Cluster Mesh](https://docs.cilium.io/en/stable/network/clustermesh/intro) and the MCS-API as of version 1.17.
+Other possible Multicluster API implementations that could be supported over time are listed on [this page](https://multicluster.sigs.k8s.io/guides).
+It is the user’s responsibility to ensure that an appropriate Multicluster Services API implementation is in place for pod-to-pod communication across clusters.
 
 ### High-level architecture
 
@@ -97,7 +99,6 @@ The operator running in the central Kubernetes cluster must be provided with the
 - The identifier for each Kubernetes cluster defined in 'Step 1'.
 - A URL endpoint for the Kubernetes API server running in each remote cluster.
 - Credential(s) to allow authentication with the remote Kubernetes API server(s).
-- The cross-cluster networking technology used for stretch cluster communication.
 
 The information outlined above will be provided as environment variables for the cluster operator.
 The values of the environment variables use the following format:
@@ -109,9 +110,6 @@ The values of the environment variables use the following format:
       cluster-id-a.secret=<secret-name-cluster-a>
       cluster-id-b.url=<cluster-b URL>
       cluster-id-b.secret=<secret-name-cluster-b>
-
-- name: STRIMZI_STRETCH_CLUSTER_NETWORK
-  value: "cilium" # or any other supported networking technology
 ```
 
 The secrets referenced here must contain the kubeconfig for the Kubernetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
@@ -140,24 +138,6 @@ This is to ensure that network traffic between Kubernetes clusters is not blocke
 The Cluster Operator will log a warning to inform the user that any value set for this variable is being ignored in stretch mode.
 2. The `StrimziPodSet` resources created in a remote cluster will include an annotation `strimzi.io/remote-podset: true`.
 This annotation will allow the remote cluster operator to reconcile the `StrimziPodSet` without a `Kafka` and `KafkaNodePool` CR being present in the same cluster.
-
-The `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable specifies the cloud-native networking technology used for cross-cluster communication in a stretch Kafka deployment.
-
-Allowing this additional configuration for the Cluster Operator deployment provides an extension point for additional CNCF networking projects to be used.
-By making this a defined environment variable, we ensure that the operator is explicitly informed about the underlying network technology and can perform any necessary setup accordingly.
-
-Although Cilium does not require any specific operator actions to enable cross-cluster service discovery, other overlay networks might require additional configuration that can be automated by the Cluster Operator.
-For this reason, if the `STRIMZI_STRETCH_CLUSTER_NETWORK` environment variable is not explicitly defined, the Cluster Operator will default to "cilium".
-The following warning will be logged to inform users of this default behavior:
-
-```
-STRIMZI_STRETCH_CLUSTER_NETWORK is not defined. Defaulting to 'cilium'.
-```
-
-This approach allows for a single environment variable (`STRIMZI_REMOTE_KUBE_CONFIG`) to toggle stretch cluster reconciliation.
-
-However, if the user has not configured Cilium, the stretch cluster will not function correctly regardless of the operator configuration.
-It is the user’s responsibility to ensure that appropriate cross-cluster networking is in place for pod-to-pod communication across clusters.
 
 ##### Remote cluster operator configuration
 
