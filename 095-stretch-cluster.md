@@ -141,23 +141,21 @@ This annotation will allow the remote cluster operator to reconcile the `Strimzi
 
 ##### Remote cluster operator configuration
 
-When deploying the operator to remote clusters, it is **strongly recommended** to configure the operator to reconcile only StrimziPodSet resources by setting the existing environment variable:
+When deploying the operator to remote clusters, the operator must be configured to reconcile only StrimziPodSet resources by setting the existing environment variable:
 
 ```yaml
 - name: STRIMZI_POD_SET_RECONCILIATION_ONLY
   value: true
 ```
 
-Although this configuration is technically optional for stretch clusters to function correctly, setting it provides important safeguards:
+This configuration provides important safeguards:
 
 - It minimizes the resources (CPU and memory) required by the operator on remote Kubernetes clusters.
 - It simplifies the operator logs by reducing noise.
-- It prevents accidental reconciliation of other Strimzi resources (such as Kafka, KafkaNodePool, or KafkaConnect) if they are mistakenly created in the remote cluster, avoiding unintended behavior.
+- It prevents accidental reconciliation of other Strimzi resources (such as Kafka, KafkaNodePool, or KafkaConnect) if they are mistakenly created in the remote cluster.
 
-If this variable is not set, the operator will still work for stretch cluster functionality.
-However, it will attempt to reconcile any Strimzi resources found in the remote cluster, which may lead to unexpected results.
-Therefore, it is highly recommended to set `STRIMZI_POD_SET_RECONCILIATION_ONLY=true` when deploying the operator to remote clusters in a stretch cluster deployment.
-The official Strimzi documentation should clearly state that it is highly recommended to set STRIMZI_POD_SET_RECONCILIATION_ONLY=true when deploying the operator to remote clusters, to ensure correct behavior and minimize the risk of misconfiguration.
+It is therefore essential to set `STRIMZI_POD_SET_RECONCILIATION_ONLY=true` when deploying the operator to remote clusters in a stretch cluster deployment.
+The official Strimzi documentation should clearly state that it is necessary to set STRIMZI_POD_SET_RECONCILIATION_ONLY=true when deploying the operator to remote clusters.
 
 #### Step 3: Create Kafka and KafkaNodePool resources in the central cluster
 
