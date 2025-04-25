@@ -161,7 +161,7 @@ The official Strimzi documentation should clearly state that it is necessary to 
 
 There is no change required to the Kafka custom resource (Kafka CR).
 The Kafka resource remains exactly as defined in the existing Strimzi API, and users can continue to define their cluster configurations in the standard way.
-Most stretch-related configuration — such as cross-cluster networking technology and remote cluster access credentials — is handled through environment variables in the Cluster Operator deployment.
+Remote cluster access credentials are configured through environment variables in the Cluster Operator deployment.
 This simplifies the Kafka CR and keeps global operational concerns decoupled from workload specifications.
 Cluster-specific configuration, such as the target remote cluster for each node pool, is specified in the KafkaNodePool CR via annotations.
 
@@ -179,8 +179,9 @@ metadata:
     strimzi.io/stretch-cluster-id: "cluster3"
 ```
 
-The identifier used here must match one of the values defined by the user in 'Step 1' and consequently added to the environment variable map value in 'Step 2'.
-If this annotation is omitted or the identifier does not match any of the values defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable, the operator will deploy the node pool to the central Kubernetes cluster.
+The identifier used here is required and must match one of the values defined by the user in 'Step 1' and added to the environment variable map value in 'Step 2'.
+This annotation is used to construct critical Kafka configuration properties such as `controller.quorum.voters` and `advertised.listeners`.
+If the identifier does not match any of the values defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable, the operator will deploy the node pool to the central Kubernetes cluster.
 
 #### Remote cluster resources created by the central operator in a stretch cluster
 
