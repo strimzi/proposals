@@ -85,7 +85,7 @@ The following sections will describe the key aspects of the proposal.
 When configuring Multicluster Services the user must specify a unique identifier for each Kubernetes cluster.
 
 The Strimzi cluster operator will use this identifier in two ways:
-1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [example](#example-of-multi-cluster-advertisedlistener-and-controllerquorumvoters)).
+1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [Configuration of Kafka properties in a stretch cluster](#configuration-of-kafka-properties-in-a-stretch-cluster)).
 2. Determining the target Kubernetes cluster for node pool resources.
 
 #### Step 2: Deploy a cluster operator to each Kubernetes cluster
@@ -183,7 +183,12 @@ The identifier used here is required and must match one of the values defined by
 This annotation is used to construct critical Kafka configuration properties such as `controller.quorum.voters` and `advertised.listeners`.
 If the identifier does not match any of the values defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable, the operator will deploy the node pool to the central Kubernetes cluster.
 
-#### Remote cluster resources created by the central operator in a stretch cluster
+#### Cluster operator behaviour
+
+The following sections outline actions taken by the cluster operator.
+These steps are consistent for any Kubernetes network configuration.
+
+##### Remote cluster resources created by the central operator in a stretch cluster
 
 In a stretch cluster, the Kafka and KafkaNodePool CRs are created only in the central cluster.
 However, these CRs will trigger the cluster operator to create several Kubernetes resources that are required for Kafka broker and controller pods to start successfully.
@@ -216,23 +221,7 @@ Operators deployed to remote clusters are only responsible for reconciling `Stri
 
 This approach will allow a Kafka administrator to manage the definition of their stretch cluster in a single location (control plane).
 
-#### Prototype
-
-A working prototype can be deployed using the steps outlined in a draft [README](https://aswinayyolath.github.io/stretch-kafka-docs/) that is being iteratively revised.
-
-_Note: The prototype might not always exactly align with this proposal so please refer to the `README` documentation when working with the prototype._
-
-### Additional considerations and reference information
-
-#### Authentication and security considerations for multi-cluster access
-
-The operator remains agnostic to the authentication method used; It simply consumes the kubeconfig provided by the user.
-Users can choose from multiple authentication mechanisms based on their security requirements.
-The responsibility for securing credentials, whether using tokens, certificates or other mechanisms, lies with the user.
-Common approaches include token-based authentication using a long-lived `ServiceAccount` token, mTLS authentication with client TLS certificates, OIDC-based authentication leveraging an identity provider, and basic authentication with a username and password.
-Each method provides different levels of security and flexibility, allowing users to integrate with their existing security infrastructure while ensuring secure access to remote Kubernetes clusters.
-
-#### Example of multi-cluster advertised.listener and controller.quorum.voters
+##### Configuration of Kafka properties in a stretch cluster
 
 The operator configures `advertised.listeners` and `controller.quorum.voters` to support pod-to-pod communication in a stretch cluster.
 
@@ -252,9 +241,9 @@ When a Kafka cluster is deployed across multiple Kubernetes clusters, the operat
 The modified format is:
 
 ```
-advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.cluster.local:9091,
-PLAIN-9092://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.cluster.local:9092,
-TLS-9093://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.cluster.local:9093
+advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
+PLAIN-9092://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9092,
+TLS-9093://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9093
 ```
 
 The `<stretch-cluster-id>` is dynamically retrieved from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
@@ -264,10 +253,26 @@ The `<stretch-cluster-id>` is dynamically retrieved from an [annotation](#kafkan
 Similarly, `controller.quorum.voters` includes all Kafka controllers running in all of the Kubernetes clusters involved in the stretch cluster:
 
 ```
-controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.cluster.local:9090, ...
+controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
 
 These updates ensure brokers and controllers can be discovered and communicate across Kubernetes clusters without relying on traditional external access methods.
+
+#### Prototype
+
+A working prototype can be deployed using the steps outlined in a draft [README](https://aswinayyolath.github.io/stretch-kafka-docs/) that is being iteratively revised.
+
+_Note: The prototype might not always exactly align with this proposal so please refer to the `README` documentation when working with the prototype._
+
+### Additional considerations and reference information
+
+#### Authentication and security considerations for multi-cluster access
+
+The operator remains agnostic to the authentication method used; It simply consumes the kubeconfig provided by the user.
+Users can choose from multiple authentication mechanisms based on their security requirements.
+The responsibility for securing credentials, whether using tokens, certificates or other mechanisms, lies with the user.
+Common approaches include token-based authentication using a long-lived `ServiceAccount` token, mTLS authentication with client TLS certificates, OIDC-based authentication leveraging an identity provider, and basic authentication with a username and password.
+Each method provides different levels of security and flexibility, allowing users to integrate with their existing security infrastructure while ensuring secure access to remote Kubernetes clusters.
 
 #### External access
 
@@ -280,13 +285,13 @@ Resources created in the remote clusters will not have `OwnerReferences` to avoi
 Finalizers will be added by default to the `Kafka` and `KafkaNodePool` resources in the central cluster to ensure the operator removes related remote cluster resources.
 A user can disable the finalizers by setting the `STRIMZI_USE_FINALIZER` environment variable to `false`.
 
-##### Rack awareness in stretch clusters
+#### Rack awareness in stretch clusters
 We conducted initial experiments to enable rack awareness in a Stretch Kafka cluster, ensuring that replicas are distributed across multiple Kubernetes clusters based on topology labels.
 This approach improves fault tolerance by leveraging Kubernetes zone-aware scheduling or manually assigned zone labels for non-zone-aware clusters
 
 For detailed implementation steps and test results, refer to our prototype [documentation](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-Rack-Awareness-In-Stretch-Cluster/)
 
-##### Disaster recovery; Handling central cluster failure
+#### Disaster recovery; Handling central cluster failure
 
 In a stretch Kafka deployment, the central Kubernetes cluster manages Kafka resources across multiple clusters, but Kafka brokers and controllers continue operating even if the central cluster fails.
 We have performed some testing on the central cluster failure scenario, which is documented [here](https://aswinayyolath.github.io/stretch-kafka-docs/Testing-cluster-failover/).
@@ -295,23 +300,18 @@ The key challenge is restoring the administrative control plane while ensuring m
 ###### Recovery approaches
 There are several possible recovery methods:
 
-###### 1. Manual recovery (baseline approach)
+**1. Manual recovery (baseline approach)**
 Users bring up a new Kubernetes cluster and manually apply the `Kafka` and `KafkaNodePool` CRs.
 Alternatively, an existing remote cluster can be promoted to central by applying these CRs and updating the cluster operator deployment.
 This approach is simple and reliable but requires user intervention.
 
-###### 2. GitOps based recovery
+**2. GitOps based recovery**
 
 Users store CRs in GitOps tools (e.g., ArgoCD, Flux).
 When a new central cluster is created, GitOps tools automatically reconcile the resources.
 This reduces manual effort but requires GitOps workflows to be set up in advance.
 
-#### Entity operator
-We recommend that all `KafkaTopic` and `KafkaUser` resources are managed from the central cluster: this is also where the entity operator should be deployed.
-This will maintain the central cluster as the single control plane for resource management.
-The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
-
-## Feature Enablement and Rollout Plan
+#### Feature Enablement and Rollout Plan
 The Stretch Kafka Cluster support will be introduced as an optional feature behind a feature gate called `UseStretchCluster`.
 The maturity and rollout of this feature gate will follow the standard Strimzi process:
 - The feature gate will be disabled by default, allowing early adopters and community members to safely test the functionality without affecting production environments.
@@ -319,14 +319,23 @@ The maturity and rollout of this feature gate will follow the standard Strimzi p
 
 Existing Kafka cluster deployments will remain unaffected unless users explicitly enable the UseStretchCluster feature gate and configure the necessary settings.
 
-## Kafka Connect and MirrorMaker2 Considerations
-This proposal does not cover stretching Kafka Connect, Kafka MirrorMaker 2 or the Kafka Bridge.
-These components can continue to be deployed in the central cluster and will function as they do today.
-Operators running in remote clusters will not manage KafkaBridge, KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
-
 ## Affected/not affected projects
 
-This proposal only impacts strimzi-kafka-operator project.
+This proposal only impacts the strimzi-kafka-operator project.
+
+### Entity operator
+We recommend that all `KafkaTopic` and `KafkaUser` resources are managed from the central cluster: this is also where the entity operator should be deployed.
+This will maintain the central cluster as the single control plane for resource management.
+The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
+
+### Kafka Connect, Kafka Bridge and MirrorMaker2
+This proposal does not cover stretching Kafka Connect, Kafka MirrorMaker 2 or the Kafka Bridge.
+These components will be deployed to the central cluster and will function as they do today.
+Operators running in remote clusters will not manage KafkaBridge, KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
+
+### Drain Cleaner
+This proposal does not affect Drain Cleaner.
+It will be deployed to all Kubernetes clusters involved in a stretch cluster and will function as normal within the scope of each cluster.
 
 ## Rejected alternatives
 
