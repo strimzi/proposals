@@ -54,12 +54,17 @@ The cluster operator will log a warning similar to the existing warning logged w
 Stretch Kafka clusters should therefore be deployed in data centers or availability zones within a single region.
 Deployments across geographically distant regions, where high latency and limited bandwidth could impair performance, should be avoided.
 
-- **A supported Multicluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
-Manual configuration of a [Multicluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required.
-Possible Multicluster API implementations are listed on [this page](https://multicluster.sigs.k8s.io/guides).
+- **A Multicluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
+Manual configuration of a [Multicluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required (see [KEP-1645](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/1645-multi-cluster-services-api#readme)).
+Current Multicluster API implementations are listed on [this page](https://multicluster.sigs.k8s.io/guides).
 It is the user’s responsibility to ensure that an appropriate configuration is in place for pod-to-pod communication across clusters.
 
-It is not feasible to test stretch cluster functionality with every MCS-API implementation.
+Adoption of MCS is developing across major Kubernetes infrastructure providers including [Google](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services) and [Amazon](https://aws.amazon.com/blogs/opensource/kubernetes-multi-cluster-service-discovery-using-open-source-aws-cloud-map-mcs-controller) as well as within major CNCF projects, such as [Istio](https://istio.io/latest/docs/releases/feature-stages/#istio-features).
+In choosing to align with this developing Kubernetes standard, Strimzi can continue to benefit as the list of implementations mature and grow.
+
+The actions taken by the Strimzi cluster operator can be consistent across any platform that implements the MCS API and this avoids the need for customisation or plugins based on the choice of network technology.
+
+It is not feasible to test stretch cluster functionality with every MCS implementation.
 Therefore, a single implementation will be selected for test purposes that is most closely aligned with Strimzi test infrastructure.
 
 ### High-level architecture
