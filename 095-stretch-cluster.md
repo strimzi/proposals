@@ -223,36 +223,50 @@ This approach will allow a Kafka administrator to manage the definition of their
 
 ##### Configuration of Kafka properties in a stretch cluster
 
-The operator configures `advertised.listeners` and `controller.quorum.voters` to support pod-to-pod communication in a stretch cluster.
+In a non-stretch (single Kubernetes cluster) Kafka deployment, the `advertised.listener` of a broker pod typically resolves to the pod's internal DNS address:
 
-**Default `advertised.listeners` format**
-
-In a regular (single Kubernetes cluster) deployment, the `advertised.listeners` configuration uses this format:
-
+```yaml
+<broker-pod-name>.<broker-service-name>.<namespace>.svc.cluster.local
 ```
+
+This DNS name resolves to the pod IP address within the same Kubernetes cluster. 
+Other pods in the cluster can easily reach this pod IP using Kubernetes' internal DNS and networking.
+
+However, in a stretched Kafka cluster, brokers are distributed across multiple Kubernetes clusters.
+In this case, a broker's `advertised.listener` must not only identify the broker pod but also indicate which Kubernetes cluster the pod is running in, so that cross-cluster pod-to-pod communication can happen correctly.
+To enable this, the operator modifies the broker's advertised listener by inserting the stretch cluster identifier (`<stretch-cluster-id>`) into the DNS name:
+
+```yaml
+<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local
+```
+
+Here `<stretch-cluster-id>` is a unique identifier for each participating Kubernetes cluster.
+This allows the DNS name to be resolvable across clusters using Multicluster networking technologies.
+The corresponding IP address resolves to the correct pod IP even if it resides in a different Kubernetes cluster.
+The `<stretch-cluster-id>` is dynamically retrieved by the operator from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
+The `<stretch-cluster-id>` corresponds to the identifier defined by the user when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation), ensuring that brokers are correctly registered in the stretch cluster without requiring manual configuration.
+
+**Example of multi-cluster `advertised.listeners` and `controller.quorum.voters`**
+
+In a single Kubernetes cluster deployment, `advertised.listeners` typically look like this:
+
+```yaml
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9091,
 PLAIN-9092://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9092,
 TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 ```
 
-**Modified format for a stretch cluster**
+In a stretch cluster deployment across multiple Kubernetes clusters, the operator modifies the format to include the `<stretch-cluster-id>`:
 
-When a Kafka cluster is deployed across multiple Kubernetes clusters, the operator modifies `advertised.listeners` to include a Kubernetes cluster identifier (`stretch-cluster-id`) that the user defines when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation).
-The modified format is:
-
-```
+```yaml
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
 PLAIN-9092://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9092,
 TLS-9093://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9093
 ```
 
-The `<stretch-cluster-id>` is dynamically retrieved from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
+Similarly, the `controller.quorum.voters` configuration is updated to reference controllers across all participating clusters:
 
-**Modified `controller.quorum.voters` format**
-
-Similarly, `controller.quorum.voters` includes all Kafka controllers running in all of the Kubernetes clusters involved in the stretch cluster:
-
-```
+```yaml
 controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
 
