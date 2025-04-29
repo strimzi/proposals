@@ -31,6 +31,7 @@ The intent is to focus on high-availability of the Kafka data plane.
 The proposal outlines the high-level topology, design concepts, and detailed implementation considerations for such deployments.
 
 ### Limitations and Considerations
+
 While a stretch Kafka cluster offers several advantages, it also introduces some challenges and considerations:
 
 - **Increased Network Complexity and Costs**: The communication between brokers and controllers across clusters relies on network connectivity, which can be less reliable and more costly than intra-cluster communication.
