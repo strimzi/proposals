@@ -39,7 +39,7 @@ This necessitates careful consideration of network architecture and associated c
 
 - **Latency Requirements**: Stretch Kafka clusters are best suited for environments with low-latency and high-bandwidth network connections between the Kubernetes clusters.
 High latency can adversely affect the performance and synchronization of Kafka nodes, potentially leading to delays or errors in replication and client communication.
-Defining the minimal acceptable latency between clusters is crucial to ensure optimal performance.
+Defining the maximal acceptable latency between clusters is crucial to ensure optimal performance.
 
 ### Prerequisites
 
