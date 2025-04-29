@@ -32,7 +32,7 @@ It also allows workload balancing across clusters of varying sizes, and supports
 
 ## Proposal
 
-This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters by distributing broker, controller, and combined Kafka nodes — including both data plane(Broker Pods) and control plane (Controller Pods) components — across multiple Kubernetes clusters.
+This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, where broker, controller, and combined-role Kafka Pods are expected to be distributed across all the involved Kubernetes clusters.
 The goal is to ensure high availability of Kafka client operations — such as producing and consuming messages — even in the event of a single-cluster failure, including failure of the central cluster.
 The proposal outlines the high-level topology, design concepts, and detailed implementation considerations for such deployments.
 
