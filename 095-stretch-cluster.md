@@ -32,8 +32,8 @@ It also allows workload balancing across clusters of varying sizes, and supports
 
 ## Proposal
 
-This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, distributing broker, controller and combined Kafka nodes across multiple Kubernetes clusters.
-The goal is to ensure high availability of Kafka client operations — such as producing and consuming messages — even in the event of a single-cluster failure, including failure of the central (control plane) cluster.
+This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters by distributing broker, controller, and combined Kafka nodes — including both data plane(Broker Pods) and control plane (Controller Pods) components — across multiple Kubernetes clusters.
+The goal is to ensure high availability of Kafka client operations — such as producing and consuming messages — even in the event of a single-cluster failure, including failure of the central cluster.
 The proposal outlines the high-level topology, design concepts, and detailed implementation considerations for such deployments.
 
 ### Limitations and Considerations
@@ -50,9 +50,11 @@ Defining the maximal acceptable latency between clusters is crucial to ensure op
 ### Prerequisites
 
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters require multiple Kubernetes clusters.
-The recommended minimum number of Kubernetes clusters is 3 because this is the minimum number of controllers required to establish quorum and provide High Availability (HA).
-However, the cluster operator will not block deployment of a stretch cluster with fewer than 3 Kubernetes clusters as this will be useful for test and development use cases.
-The cluster operator will log a warning similar to the existing warning logged when deploying fewer than 3 ZooKeeper nodes.
+The recommended minimum number of clusters is 3 to simplify achieving quorum for Kafka controllers and enhance High Availability (HA) for production-grade deployments.
+However, the Cluster Operator does not enforce this as a hard requirement.
+Stretch clusters can be deployed with fewer than 3 clusters to support migration workflows, resource optimization scenarios, or test and development environments.
+No warning will be logged during deployment based on the number of clusters.
+It is up to the user to ensure that quorum and HA considerations are properly evaluated according to their specific architecture and requirements.
 
 - **Low Latency and High Bandwidth**: Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
 Stretch Kafka clusters should therefore be deployed in data centers or availability zones within a single region.
