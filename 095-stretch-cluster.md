@@ -29,9 +29,16 @@ Unlike MirrorMaker 2 (MM2), a stretch cluster provides strong data durability th
 - **Migration Flexibility**: A stretch Kafka cluster enables seamless migration, whether it's moving the entire cluster across Kubernetes environments or cloud providers without downtime, or relocating individual Kafka nodes as needed. 
 This flexibility helps with maintenance, scaling, and workload transitions between environments.
 
-- **Resource Optimization**: Stretch clusters allow Kafka nodes to be added dynamically to individual clusters with available capacity, avoiding the need for symmetric scaling across all environments.
-This enables operators to optimize infrastructure usage based on real-time resource availability (e.g., only scaling cluster B if cluster A is constrained).
-It also allows workload balancing across clusters of varying sizes, and supports rolling maintenance or upgrades in one cluster while keeping the service available through brokers in the others — provided quorum is preserved.
+- **Resource Optimization**: While HA in stretch Kafka clusters typically requires symmetric provisioning across all participating sites to preserve quorum and fault tolerance, 
+stretch architecture can still offer operational flexibility in how resources are utilized during certain scenarios.
+This includes:
+    - Targeted scaling where operators can temporarily scale out brokers in a site with available capacity to handle load spikes, without immediately provisioning equivalent resources in all other sites  as long as quorum and placement constraints (e.g., rack-awareness) are upheld.
+    - During rolling maintenance or upgrade activities, brokers in other healthy clusters can continue serving clients, minimizing downtime without requiring full overprovisioning at every site.
+    - In real-world deployments, especially in hybrid or multi-cloud environments organizations may face practical constraints such as staggered resource availability or budgetary approvals. 
+      Stretch clusters support gradual, controlled deployment across sites without disrupting availability.
+
+It is important to note that this flexibility does not replace the need for careful capacity planning when high availability is the primary goal. 
+Instead, it allows operators to make the most of temporary or transitional differences in site capacity, helping to optimize infrastructure usage without compromising resilience.
 
 ## Proposal
 
