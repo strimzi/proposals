@@ -1,8 +1,8 @@
 # Using `ImageVolumes` to improve extensibility of Strimzi operands
 
 Strimzi allows users to provide and use custom plugins in multiple different places.
-The most visible type of plugins are the Connector plugins in Apache Kafka Connect.
-But plugins are supported also in other parts of Strimzi.
+The most visible type of plugin is the Connector plugin in Apache Kafka Connect.
+But plugins are also supported in other parts of Strimzi.
 For example:
 
 * Authentication and authorization plugins
@@ -14,7 +14,7 @@ For example:
 * (De)serializers and transformations
 * Cruise Control goals
 
-When users want to use a custom plugin in one of these places, they typically need to build a new container image and tell Strimzi to use it:
+When users want to use a custom plugin in one of these places, they typically need to build a new container image and configure Strimzi to use it by doing the following:
 
 1. Create a new `Dockerfile` that starts `FROM` the Strimzi container image as a base image
 2. Add the plugin to the container image in the `Dockerfile`
@@ -23,21 +23,21 @@ When users want to use a custom plugin in one of these places, they typically ne
 
 These steps can be done manually, but in most cases they are deployed as a job in whatever continuous integration platform is used by the user.
 
-For Kafka Connect connectors, transformations and (de)serializers, Strimzi also offers _Kafka Connect Build_.
-This feature will automatically build a new container image with the plugins specified in the `KafkaConnect` custom resource (in `.spec.build.plugins`) and push it into the container registry provided by the user.
-This container image will be then automatically used by Strimzi in the corresponding Kafka Connect deployment.
-This feature cannot be used for any other operands such as Kafka brokers and controllers, Cruise Control, etc.
+For Kafka Connect connector plugins, which may include transforms and (de)serializers, Strimzi also offers _Kafka Connect Build_.
+This feature automatically builds a new container image containing the plugins specified in the `KafkaConnect` custom resource (under `.spec.build.plugins`) and pushes it into the user's container registry.
+Strimzi then uses this custom container image for the Kafka Connect deployment.
+This build feature is specific to Kafka Connect and cannot be used for other components such as Kafka brokers, controllers, or Cruise Control.
 
 ## Motivation
 
-Both mechanisms offered by Strimzi follow the best practices for using container based infrastructure.
-They utilize a container image with the desired plugins and do not change the software at runtime.
+Strimzi currently provides two mechanisms for including custom plugins that follow container-based best practices: building a custom container image using a Dockerfile or using Kafka Connect Build to generate one automatically.
+Both approaches avoid changing the software at runtime.
 This makes it clear what versions of the software are being used and makes it easy to reproduce and analyze any issues.
 
-However, none of these options are very user friendly.
-They require the user to have their own container registry (either operated directly by them or an account at one of the SaaS container registries).
+However, neither options are very user friendly.
+They require the user to have their own container registry (either operated directly by them or through a SaaS container registry account).
 This often also requires managing additional registry credentials for pushing and pulling the container images.
-With both methods, dealing with CVEs in the base container image is also complicated as the container image needs to be rebuilt to receive any CVE fixes from an updated container image.
+With both methods, dealing with CVEs in the base container image is also complicated, as the custom container image needs to be rebuilt to incorporate any CVE fixes in an updated base image.
 When using custom Dockerfile, Strimzi upgrades can get pretty complicated as well, because the custom container image differs for each Strimzi version.
 So the container image needs to be updated _at the right time_ during the upgrade process.
 
@@ -56,8 +56,9 @@ And this proposal suggests how Strimzi can use the image volumes to let users pr
 
 ### Building container images with plugins
 
-The container images with the plugin artifacts can be build using a `Dockerfile`.
-As the container image is not executable one its own does not require any operating system features, it can start from `scratch` and just add the desired JARs with the plugin(s).
+The container images with the plugin artifacts can be built using a `Dockerfile`.
+As the container image is not executable on its own and does not require any operating system features, it can be based on a `scratch` image, which is an empty base image in Docker.
+We can use this to add the plugins.
 For example:
 
 ```Dockerfile
@@ -79,6 +80,13 @@ The container image contains only the plugin (and its dependencies).
 It does not contain any operating system artifacts or Strimzi JARs.
 Its rebuild is therefore needed only when a new version of the plugin is released.
 
+It is users responsibility to ensure that the files in the container image will not cause any class path conflicts and break the operand.
+(This is the same already today with the pre-existing mechanisms for adding plugins.)
+
+User is also responsible for securing the container images with the plugins and for securing the container registry.
+When pulling images and using them as volumes, Kubernetes will apply the same checks as with the regular container images used by the operand.
+Using the container images with plugins from untrusted sources might constitute a risk.
+
 ### Kafka Connect plugins (connectors, transformations, etc.)
 
 Kafka Connect plugins continue to be handled in their own separate way even with image volumes through a new section in the `KafkaConnect` custom resource.
@@ -94,13 +102,13 @@ The structure of this section is identical to the existing `.spec.build.plugins`
 But the artifact types will be different.
 
 The `.spec.plugins` section will contain a list of plugins.
-Each plugin will consist from one or more artifacts to allow compose the plugin from different libraries if needed.
+Each plugin will consist of one or more artifacts to allow compose the plugin from different libraries if needed.
 As of this proposal, the only artifact type will be `image`.
 It will let users specify the reference to the container image with the plugin that will be mounted and used.
 The image can be specified using a tag or using a digest.
-The advantage of the digest is that it exactly specified the container image that will be used.
+The advantage of the digest is that it exactly specifies the container image that will be used.
 The advantage of the tag is that you can always use the latest version of the plugin without updating the custom resource.
-But it will not be deterministic what is the exact version used.
+But it will not be deterministic which exact version is used.
 
 The following example shows the new YAML of the `KafkaConnect` resource:
 
@@ -134,8 +142,8 @@ For example:
   # ...
 ```
 
-This volume will be afterwards mounted to the Kafka Connect container into a subdirectory structure on the `/opt/kafka/plugins/` path which is used when adding connectors to the custom container image as well.
-The one or more containers will be mounted to `/opt/kafka/plugins/<pluginName>/<imageReferenceHashstub>/`.
+This volume will then be mounted to the Kafka Connect container under a subdirectory structure of the `/opt/kafka/plugins/` path, which is the same location used when adding connectors to the custom container image.
+Each volume is mounted at `/opt/kafka/plugins/<pluginName>/<imageReferenceHashStub>/`.
 For example:
 
 ```yaml
@@ -146,15 +154,16 @@ For example:
     # ...
 ```
 
-When the same plugin name is used in `.spec.build.plugins`, the artifacts from both sections will end up in the same directory tree `/opt/kafka/plugins/<pluginName>/`.
+When the same plugin name is used in `.spec.build.plugins`, the artifacts from both sections will end up in the same directory tree `/opt/kafka/plugins/<pluginName>/`, but the final directory will differ as its name is based on the artifact reference.
+That way, the different plugin artifacts cannot overwrite each other's files.
 
 ### Other plugins
 
-Mounting other plugins in other components is not as common as Kafka Connect connector plugins.
+Mounting plugins in components other than Kafka Connect is less common.
 Most of the other plugins also need to be added to the regular class path of the application rather than to a special `plugin.path`.
 Therefore mounting other plugins does not use a special API.
 It uses the existing additional volumes instead and adds a new volume type named `image` to it to allow mounting image volumes.
-This allows the users to mount the container image into an directory inside the `/mnt` path.
+This allows the users to mount the container image into an directory inside the `/mnt` path (which is the only allowed path where the additional volumes can be mounted).
 
 Afterwards, they can use an environment variable to add the JARs from the mounted container image to the class path.
 For Kafka-based operands and Cruise Control the environment variable to use is `CLASSPATH`.
@@ -219,6 +228,12 @@ spec:
           # ...
 ```
 
+### Upgrades
+
+Apache Kafka plugins are typically compatible with multiple Kafka versions and do not need to be upgraded with every Apache Kafka upgrade.
+However, in case the plugin needs to be upgraded together with the Kafka upgrade, users can change the reference to the container image with the plugin together with changing the Kafka version in the custom resource.
+In case the information is split into multiple different custom resources (e.g. Kafka version in the `Kafka` custom resource and mounted plugins in `KafkaNodePool` custom resource), users can [pause reconciliation](https://strimzi.io/docs/operators/latest/full/deploying.html#proc-pausing-reconciliation-str) while updating the custom resources.
+
 ### Immutability
 
 When using image volumes to provide Apache Kafka plugins, we do not rely anymore that all the software is provided from a single immutable container image provided by Strimzi and later modified by the user to add the custom plugin.
@@ -251,8 +266,8 @@ Each of these are immutable container images and clearly define the software bei
 
 ### Error handling
 
-Strimzi cannot easily detect if the `ImageVolume` feature gate is enabled and if image volumes are supported in given Kubernetes cluster.
-While we will use the documentation to warn users that this feature can be used only in Kubernetes cluster where it is supported, it might always happen that users try to use it even when not supported by Kubernetes.
+Strimzi cannot easily detect if the `ImageVolume` feature gate is enabled and if image volumes are supported in a given Kubernetes cluster.
+While we will use the documentation to warn users that this feature can be used only in Kubernetes cluster where it is supported, it might happen that users try to use it even when not supported by Kubernetes.
 In that case, Kubernetes will ignore the image volume and its volume mount and create the Pod without it (tested with Minikube on Kubernetes 1.31 and 1.32, and with OpenShift 4.18).
 As a result, the plugin will be missing and the user has to choose another way how to add it.
 
@@ -282,7 +297,7 @@ System tests using image volumes might be added at a later stage once the image 
 ## Out of scope
 
 The image volumes have the potential to simplify how we add our own plugins to our Apache Kafka container images and how we structure them.
-We might for example have just a simple Strimzi base image and have the operator mount the different components into it as image volumes on demand:
+For example, we could have a simple Strimzi base image, with the operator mounting additional components as image volumes on demand, such as:
 * The supported Kafka versions
 * 3rd party libraries (i.e. plugins shipped by Strimzi out of the box)
 * Cruise Control and Kafka Exporter
@@ -292,7 +307,7 @@ It would also make sure that software that might contain CVEs will not be actual
 
 However, to be able to propose and implement something like this, we first need all Kubernetes clusters supported by Strimzi to also enable and support the ImageVolume feature gate.
 And it might take several years until we get there.
-Until then, the image volumes can be used only for the _optional_ Strimzi features that have some other alternatives.
+In the meantime, we can let users with supported Kubernetes environments use the image volumes for plugins as described in this proposal.
 
 ## Affected projects
 
@@ -309,7 +324,7 @@ All the pre-existing feature remain unchanged and can continue to be used by the
 ### Feature gate
 
 As discussed in one of the earlier sections, a feature gate was considered to prevent users from using the image volumes feature while not supported in their Kubernetes cluster.
-This idea was rejected, because it might take a ver long time (probably years) until we know for sure that this feature is supported in all Kubernetes versions supported by Strimzi.
+This idea was rejected, because it might take a very long time (probably years) until we know for sure that this feature is supported in all Kubernetes versions supported by Strimzi.
 And as such, it would be impossible to set any real graduation timeline for this feature gate.
 
 ## Additional resources
