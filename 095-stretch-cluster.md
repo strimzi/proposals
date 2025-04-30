@@ -9,9 +9,12 @@ At present, the availability of Strimzi-managed Kafka clusters is constrained by
 If a Kubernetes cluster experiences an outage, the entire Kafka cluster becomes unavailable, disrupting all connected Kafka clients.
 
 While it is possible to enhance availability by running Kubernetes across multiple availability zones and configuring Strimzi with affinity rules, tolerations, or topology spread constraints, such configurations are still limited to a single Kubernetes control plane.
-Any failure or disruption to this control plane can impact cluster operations and affect connected clients. 
-In contrast, the stretch cluster distributes Kafka nodes across independent Kubernetes clusters, each with its own control plane.
-This enhances fault tolerance by ensuring that the failure of one Kubernetes cluster does not prevent Kafka workloads in other clusters from continuing to operate.
+Any failure or disruption to this control plane — or a broader infrastructure issue affecting the cluster — can impact cluster operations and affect connected clients. 
+In contrast, the stretch cluster distributes Kafka nodes across independent Kubernetes clusters, each with its own control plane and fault domain.
+This enhances fault tolerance by enabling Kafka to continue operating even if one entire Kubernetes cluster becomes unavailable.
+
+The intent is not to imply that Kubernetes control planes are unreliable — they are mature and widely used in HA configurations.
+Rather, the stretch approach supports scenarios where users operate multiple isolated Kubernetes clusters for organizational, operational, or regulatory reasons, and want Kafka to span these boundaries while maintaining quorum and availability.
 
 ## Motivation
 
