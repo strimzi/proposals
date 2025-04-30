@@ -35,7 +35,7 @@ It also allows workload balancing across clusters of varying sizes, and supports
 
 ## Proposal
 
-This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, where broker, controller, and combined-role Kafka Pods are expected to be distributed across all the involved Kubernetes clusters.
+This proposal seeks to enhance the Strimzi Kafka operator to support stretch Kafka clusters, where broker, controller, and combined-role Kafka Pods are expected to be distributed across all Kubernetes clusters involved.
 The goal is to ensure high availability of Kafka client operations — such as producing and consuming messages — even in the event of a single-cluster failure, including failure of the central cluster.
 The proposal outlines the high-level topology, design concepts, and detailed implementation considerations for such deployments.
 
@@ -56,7 +56,6 @@ Defining the maximal acceptable latency between clusters is crucial to ensure op
 The recommended minimum number of clusters is 3 to simplify achieving quorum for Kafka controllers and enhance High Availability (HA) for production-grade deployments.
 However, the Cluster Operator does not enforce this as a hard requirement.
 Stretch clusters can be deployed with fewer than 3 clusters to support migration workflows, resource optimization scenarios, or test and development environments.
-No warning will be logged during deployment based on the number of clusters.
 It is up to the user to ensure that quorum and HA considerations are properly evaluated according to their specific architecture and requirements.
 
 - **Low Latency and High Bandwidth**: Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
@@ -90,7 +89,7 @@ The central cluster acts as the control plane where a user will create all the c
 A Kafka node pool definition can be configured to specify a Kubernetes cluster (central cluster or one of the remote clusters) as the deployment target.
 The operator on the central cluster is responsible for creating all necessary resources for the node pool on the target Kubernetes cluster. 
 
-### Low-level design and prototype
+### Low-level design
 
 The following sections will describe the key aspects of the proposal.
 
@@ -190,7 +189,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaNodePool
 metadata:
   annotations:
-    strimzi.io/stretch-cluster-id: "cluster3"
+    strimzi.io/stretch-cluster-alias: "cluster3"
 ```
 
 The identifier used here is required and must match one of the values defined by the user in 'Step 1' and added to the environment variable map value in 'Step 2'.
@@ -248,17 +247,17 @@ Other pods in the cluster can easily reach this pod IP using Kubernetes' interna
 
 However, in a stretched Kafka cluster, brokers are distributed across multiple Kubernetes clusters.
 In this case, a broker's `advertised.listener` must not only identify the broker pod but also indicate which Kubernetes cluster the pod is running in, so that cross-cluster pod-to-pod communication can happen correctly.
-To enable this, the operator modifies the broker's advertised listener by inserting the stretch cluster identifier (`<stretch-cluster-id>`) into the DNS name:
+To enable this, the operator modifies the broker's advertised listener by inserting the stretch cluster identifier (`<stretch-cluster-alias>`) into the DNS name:
 
 ```yaml
-<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local
+<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local
 ```
 
-Here `<stretch-cluster-id>` is a unique identifier for each participating Kubernetes cluster.
+Here `<stretch-cluster-alias>` is a unique identifier for each participating Kubernetes cluster.
 This allows the DNS name to be resolvable across clusters using Multicluster networking technologies.
 The corresponding IP address resolves to the correct pod IP even if it resides in a different Kubernetes cluster.
-The `<stretch-cluster-id>` is dynamically retrieved by the operator from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
-The `<stretch-cluster-id>` corresponds to the identifier defined by the user when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation), ensuring that brokers are correctly registered in the stretch cluster without requiring manual configuration.
+The `<stretch-cluster-alias>` is dynamically retrieved by the operator from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
+The `<stretch-cluster-alias>` corresponds to the identifier defined by the user when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation), ensuring that brokers are correctly registered in the stretch cluster without requiring manual configuration.
 
 **Example of multi-cluster `advertised.listeners` and `controller.quorum.voters`**
 
@@ -270,27 +269,21 @@ PLAIN-9092://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9092,
 TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 ```
 
-In a stretch cluster deployment across multiple Kubernetes clusters, the operator modifies the format to include the `<stretch-cluster-id>`:
+In a stretch cluster deployment across multiple Kubernetes clusters, the operator modifies the format to include the `<stretch-cluster-alias>`:
 
 ```yaml
-advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
-PLAIN-9092://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9092,
-TLS-9093://<broker-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9093
+advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
+PLAIN-9092://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9092,
+TLS-9093://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9093
 ```
 
 Similarly, the `controller.quorum.voters` configuration is updated to reference controllers across all participating clusters:
 
 ```yaml
-controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-id>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
+controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
 
 These updates ensure brokers and controllers can be discovered and communicate across Kubernetes clusters without relying on traditional external access methods.
-
-#### Prototype
-
-A working prototype can be deployed using the steps outlined in a draft [README](https://aswinayyolath.github.io/stretch-kafka-docs/) that is being iteratively revised.
-
-_Note: The prototype might not always exactly align with this proposal so please refer to the `README` documentation when working with the prototype._
 
 ### Additional considerations and reference information
 
@@ -322,7 +315,6 @@ For detailed implementation steps and test results, refer to our prototype [docu
 #### Disaster recovery; Handling central cluster failure
 
 In a stretch Kafka deployment, the central Kubernetes cluster manages Kafka resources across multiple clusters, but Kafka brokers and controllers continue operating even if the central cluster fails.
-We have performed some testing on the central cluster failure scenario, which is documented [here](https://aswinayyolath.github.io/stretch-kafka-docs/Testing-cluster-failover/).
 The key challenge is restoring the administrative control plane while ensuring minimal downtime for Kafka clients.
 
 ###### Recovery approaches
