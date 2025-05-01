@@ -62,7 +62,7 @@ Defining the maximal acceptable latency between clusters is crucial to ensure op
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters require multiple Kubernetes clusters.
 The recommended minimum number of clusters is 3 to simplify achieving quorum for Kafka controllers and enhance High Availability (HA) for production-grade deployments.
 However, the Cluster Operator does not enforce this as a hard requirement.
-Stretch clusters can be deployed with fewer than 3 clusters to support migration workflows, resource optimization scenarios, or test and development environments.
+Stretch clusters can be deployed with fewer than 3 clusters to support migration workflows (as part of Migration Flexibility), resource optimization scenarios, or test and development environments.
 It is up to the user to ensure that quorum and HA considerations are properly evaluated according to their specific architecture and requirements.
 
 - **Low Latency and High Bandwidth**: Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
