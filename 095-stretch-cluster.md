@@ -62,7 +62,7 @@ Defining the maximal acceptable latency between clusters is crucial to ensure op
 - **Multiple Kubernetes clusters**: Stretch Kafka clusters require multiple Kubernetes clusters.
 The recommended minimum number of clusters is 3 to simplify achieving quorum for Kafka controllers and enhance High Availability (HA) for production-grade deployments.
 However, the Cluster Operator does not enforce this as a hard requirement.
-Stretch clusters can be deployed with fewer than 3 clusters to support migration workflows (as part of Migration Flexibility), resource optimization scenarios, or test and development environments.
+Stretch clusters can be deployed with fewer than 3 clusters to allow migration flexibility, resource optimization scenarios, or test and development environments.
 It is up to the user to ensure that quorum and HA considerations are properly evaluated according to their specific architecture and requirements.
 
 - **Low Latency and High Bandwidth**: Kafka clusters should be deployed in environments that provide low-latency and high-bandwidth communication between Kafka brokers and controllers.
@@ -314,10 +314,10 @@ Finalizers will be added by default to the `Kafka` and `KafkaNodePool` resources
 A user can disable the finalizers by setting the `STRIMZI_USE_FINALIZER` environment variable to `false`.
 
 #### Rack awareness in stretch clusters
-We conducted initial experiments to enable rack awareness in a Stretch Kafka cluster, ensuring that replicas are distributed across multiple Kubernetes clusters based on topology labels.
-This approach improves fault tolerance by leveraging Kubernetes zone-aware scheduling or manually assigned zone labels for non-zone-aware clusters
-
-For detailed implementation steps and test results, refer to our prototype [documentation](https://aswinayyolath.github.io/stretch-kafka-docs/Setting-up-Rack-Awareness-In-Stretch-Cluster/)
+For Kubernetes clusters that are not zone aware, the worker nodes across all Kubernetes clusters involved must be labelled with a zone alias.
+The zone alias cannot be the same as the `stretch-cluster-alias`.
+Replicas are distributed across multiple Kubernetes clusters based on topology labels across the stretched Kafka cluster.
+Broker `ConfigMaps` will be updated to contain rack configuration as they would for a single Kubernetes cluster deployment.
 
 #### Disaster recovery; Handling central cluster failure
 
@@ -351,8 +351,7 @@ Existing Kafka cluster deployments will remain unaffected unless users explicitl
 This proposal only impacts the strimzi-kafka-operator project.
 
 ### Entity operator
-We recommend that all `KafkaTopic` and `KafkaUser` resources are managed from the central cluster: this is also where the entity operator should be deployed.
-This will maintain the central cluster as the single control plane for resource management.
+To maintain the central cluster as the single control plane, all `KafkaTopic` and `KafkaUser` resources must be managed from the central cluster; This is also where the entity operator will be deployed.
 The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
 
 ### Kafka Connect, Kafka Bridge and MirrorMaker2
