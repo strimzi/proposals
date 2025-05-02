@@ -58,15 +58,15 @@ It is up to the user to ensure that quorum and HA considerations are properly ev
 Stretch Kafka clusters should therefore be deployed in data centers or availability zones within a single region.
 Deployments across geographically distant regions, where high latency and limited bandwidth could impair performance, should be avoided.
 
-- **A Multicluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
-Manual configuration of a [Multicluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required (see [KEP-1645](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/1645-multi-cluster-services-api#readme)).
-Current Multicluster API implementations are listed on [this page](https://multicluster.sigs.k8s.io/guides).
+- **A Multi-Cluster Services API implementation**: To enable networking between Kubernetes clusters currently requires an additional technology stack.
+Manual configuration of a [Multi-Cluster Services API (MCS-API)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api) implementation is required (see [KEP-1645](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/1645-multi-cluster-services-api#readme)).
+Current Multi-Cluster API implementations are listed on [this page](https://multicluster.sigs.k8s.io/guides).
 It is the user’s responsibility to ensure that an appropriate configuration is in place for pod-to-pod communication across clusters.
 
 Adoption of MCS is developing across major Kubernetes infrastructure providers including [Google](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services) and [Amazon](https://aws.amazon.com/blogs/opensource/kubernetes-multi-cluster-service-discovery-using-open-source-aws-cloud-map-mcs-controller) as well as within major CNCF projects, such as [Istio](https://istio.io/latest/docs/releases/feature-stages/#istio-features).
 In choosing to align with this developing Kubernetes standard, Strimzi can continue to benefit as the list of implementations mature and grow.
 
-The actions taken by the Strimzi cluster operator can be consistent across any platform that implements the MCS API and this avoids the need for customisation or plugins based on the choice of network technology.
+The actions taken by the Strimzi cluster operator can be consistent across any platform that implements the MCS-API and this avoids the need for customisation or plugins based on the choice of network technology.
 
 It is not feasible to test stretch cluster functionality with every MCS implementation.
 Therefore, a single implementation will be selected for test purposes that is most closely aligned with Strimzi test infrastructure.
@@ -89,9 +89,18 @@ The operator on the central cluster is responsible for creating all necessary re
 
 The following sections will describe the key aspects of the proposal.
 
-#### Step 1: User configuration of the chosen MCS-API implementation
+#### Step 1: User configuration of the chosen MCS implementation
 
-When configuring Multicluster Services the user must specify a unique identifier for each Kubernetes cluster.
+When configuring Multi-Cluster Services, each participating Kubernetes cluster must be assigned a unique identifier (ClusterID) so that clusters can be determined as members of a given `ClusterSet`.
+
+[KEP-2149: ClusterID for ClusterSet identification](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/2149-clusterid) defines the `About API` with well-known properties:
+
+- cluster.clusterset.k8s.io (unique identifier for each cluster)
+- clusterset.k8s.io (identifier for the ClusterSet the cluster belongs to)
+
+These identifiers can be specified by creating a `ClusterProperty` resource. 
+This approach is used by the [AWS Cloud Map MCS controller](https://github.com/aws/aws-cloud-map-mcs-controller-for-k8s), while other implementations such as Submariner or Cilium might provide alternative configuration mechanisms to achieve the same outcome.
+It is the users responsibility to refer to the documentation for their chosen MCS implementation to learn how to define their `ClusterSet` and cluster identifiers.
 
 The Strimzi cluster operator will use this identifier in two ways:
 1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [Configuration of Kafka properties in a stretch cluster](#configuration-of-kafka-properties-in-a-stretch-cluster)).
@@ -232,28 +241,42 @@ This approach will allow a Kafka administrator to manage the definition of their
 
 ##### Configuration of Kafka properties in a stretch cluster
 
-In a non-stretch (single Kubernetes cluster) Kafka deployment, the `advertised.listener` of a broker pod typically resolves to the pod's internal DNS address:
+Network configuration for Kafka must be set by the cluster operator to allow peer-to-peer communication for Kafka processes across Kubernetes cluster boundaries.
+This allows controllers and brokers to discover and communicate with each other across the stretched Kafka cluster.
+
+In a non-stretch (single Kubernetes cluster) Kafka deployment, the `advertised.listeners` of a broker pod typically resolves to the pod's internal DNS address:
 
 ```yaml
-<broker-pod-name>.<broker-service-name>.<namespace>.svc.cluster.local
+<broker-pod-name>.<broker-service-name>(.<namespace>.svc.cluster.local)
 ```
 
-This DNS name resolves to the pod IP address within the same Kubernetes cluster. 
-Other pods in the cluster can easily reach this pod IP using Kubernetes' internal DNS and networking.
+The last section of the DNS name (in parentheses) is not required for discovery and communication within the same namespace and cluster and typically resolves to the pod IP via the headless service.
 
-However, in a stretched Kafka cluster, brokers are distributed across multiple Kubernetes clusters.
-In this case, a broker's `advertised.listener` must not only identify the broker pod but also indicate which Kubernetes cluster the pod is running in, so that cross-cluster pod-to-pod communication can happen correctly.
-To enable this, the operator modifies the broker's advertised listener by inserting the stretch cluster identifier (`<stretch-cluster-alias>`) into the DNS name:
+However, in a stretched Kafka cluster, brokers and controllers are distributed across multiple Kubernetes clusters.
+In this case, a broker’s `advertised.listeners` must not only identify the broker pod but also indicate the Kubernetes cluster the pod resides in, so that cross-cluster pod-to-pod communication can happen correctly.
+
+A Multi-Cluster Services (MCS) implementation provides a mechanism to export an existing headless service so that any pod can be discovered from any other Kubernetes cluster that is part of the same `ClusterSet`.
+
+![MCS components](./images/095-mcs.png)
+
+The components and methods for routing traffic across Kubernetes cluster boundaries are specific to the chosen MCS implementation.
+
+The cluster operator running in the central cluster will create the `ServiceExport` resource(s) required during reconciliation of the `Kafka` and `KafkaNodePool` resources.
+In response, the MCS controller will create the required `ServiceImport` resource(s) in each participating cluster.
+DNS configuration across all clusters in the `ClusterSet` is handled by the MCS implementation, resulting in new cross-cluster DNS records becoming available.
+The format for headless MCS DNS records is defined by [KEP-1645](https://github.com/kubernetes/enhancements/blob/master/keps/sig-multicluster/1645-multi-cluster-services-api/specification.md#24---records-for-a-multicluster-headless-service) to be `<hostname>.<clusterid>.<service>.<ns>.svc.<clusterset-zone>`.
+The cluster operator will set the `advertised.listeners` and `controller.quorum.voters` Kafka property values to the new exported service endpoints based on the specified format:
 
 ```yaml
 <broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local
 ```
 
+For this mechanism to work correctly, the cluster operator must be deployed in the same namespace in all Kubernetes clusters involved to satisfy the [namespace sameness](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/1645-multi-cluster-services-api#terminology) requirement.
+Additionally, the fully qualified DNS name must be used in this scenario.
+
 Here `<stretch-cluster-alias>` is a unique identifier for each participating Kubernetes cluster.
-This allows the DNS name to be resolvable across clusters using Multicluster networking technologies.
-The corresponding IP address resolves to the correct pod IP even if it resides in a different Kubernetes cluster.
 The `<stretch-cluster-alias>` is dynamically retrieved by the operator from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
-The `<stretch-cluster-alias>` corresponds to the identifier defined by the user when [configuring Multicluster Services](#step-1-user-configuration-of-the-chosen-mcs-api-implementation), ensuring that brokers are correctly registered in the stretch cluster without requiring manual configuration.
+The `<stretch-cluster-alias>` matches the identifier defined by the user when [configuring Multi-Cluster Services](#step-1-user-configuration-of-the-chosen-mcs-implementation).
 
 **Example of multi-cluster `advertised.listeners` and `controller.quorum.voters`**
 
@@ -265,7 +288,7 @@ PLAIN-9092://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9092,
 TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 ```
 
-In a stretch cluster deployment across multiple Kubernetes clusters, the operator modifies the format to include the `<stretch-cluster-alias>`:
+In a multi-cluster deployment, the operator modifies the format to include `<stretch-cluster-alias>`:
 
 ```yaml
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
@@ -278,8 +301,6 @@ Similarly, the `controller.quorum.voters` configuration is updated to reference 
 ```yaml
 controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
-
-These updates ensure brokers and controllers can be discovered and communicate across Kubernetes clusters without relying on traditional external access methods.
 
 ### Additional considerations and reference information
 
