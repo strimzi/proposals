@@ -148,12 +148,8 @@ data:
 
 When the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set, the Cluster Operator will recognize that it needs to deploy a stretch Kafka cluster. 
 
-The custom actions taken as a result of this environment variable include:
-1. The value of `STRIMZI_NETWORK_POLICY_GENERATION` is always treated as **`false`**, regardless of the value provided by the user or the default (true).
-This is to ensure that network traffic between Kubernetes clusters is not blocked due to network policies.
-The Cluster Operator will log a warning to inform the user that any value set for this variable is being ignored in stretch mode.
-2. The `StrimziPodSet` resources created in a remote cluster will include an annotation `strimzi.io/remote-podset: true`.
-This annotation will allow the remote cluster operator to reconcile the `StrimziPodSet` without a `Kafka` and `KafkaNodePool` CR being present in the same cluster.
+In this mode, any `StrimziPodSet` resources created in a remote cluster will include the annotation `strimzi.io/remote-podset: true`.
+This annotation allows the remote cluster’s Strimzi operator to reconcile the StrimziPodSet independently, without requiring the presence of the `Kafka` and `KafkaNodePool` custom resources in the same cluster.
 
 ##### Remote cluster operator configuration
 
