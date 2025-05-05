@@ -284,7 +284,7 @@ PLAIN-9092://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9092,
 TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 ```
 
-In a multi-cluster deployment, the operator modifies the format to include `<stretch-cluster-alias>`:
+In a multi-cluster deployment, the operator modifies the format to include `<stretch-cluster-alias>` and appends `.svc.clusterset.local` to enable cross-cluster DNS resolution:
 
 ```yaml
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
@@ -297,6 +297,14 @@ Similarly, the `controller.quorum.voters` configuration is updated to reference 
 ```yaml
 controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
+
+**Why `.svc.clusterset.local` is used**
+
+The `.clusterset.local` suffix is part of the Kubernetes Multi-Cluster Services standard and is specifically designed to enable DNS-based service discovery between Kubernetes clusters.
+Using the regular `.svc` suffix only works for resolving services *within the same cluster*, and would fail in cross-cluster scenarios.
+By using `.svc.clusterset.local`, the operator ensures that Kafka brokers and controllers can resolve and connect to each other across clusters using DNS, which is essential for stretch cluster functionality.
+
+This change is scoped specifically to stretch cluster mode, and single-cluster deployments will continue to use `.svc` as before.
 
 ### Additional considerations and reference information
 
