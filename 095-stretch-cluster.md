@@ -306,6 +306,47 @@ By using `.svc.clusterset.local`, the operator ensures that Kafka brokers and co
 
 This change is scoped specifically to stretch cluster mode, and single-cluster deployments will continue to use `.svc` as before.
 
+##### TLS Certificates and SANs for Cross-Cluster Communication
+
+In stretch cluster mode, Kafka brokers and controllers communicate across Kubernetes clusters over TLS.
+To ensure secure communication and successful hostname verification (`ssl.endpoint.identification.algorithm=HTTPS`), the operator generates certificates with appropriate Subject Alternative Name (`SAN`) entries.
+
+Each broker and controller pod certificate includes additional SANs for `.clusterset.local`-based DNS names to support cross-cluster resolution.
+These DNS names are essential for TLS clients (brokers and controllers) in remote clusters to verify the server identity of peers across the mesh.
+
+**Example: SANs in Stretch Mode**
+
+**Broker certificate (`my-cluster-broker-0.crt`) includes**
+
+```bash
+DNS:my-cluster-broker-0.cluster1.my-cluster-kafka-brokers.stretch.svc.clusterset.local #new entry
+DNS:my-cluster-broker-0.my-cluster-kafka-brokers.stretch.svc.cluster.local
+DNS:my-cluster-kafka-brokers.stretch.svc
+DNS:my-cluster-kafka-bootstrap.stretch.svc
+...
+```
+
+**Controller certificate (`my-cluster-controller-5.crt`) includes**
+
+```bash
+DNS:my-cluster-controller-5.cluster1.my-cluster-kafka-brokers.stretch.svc.clusterset.local #new entry
+DNS:my-cluster-controller-5.my-cluster-kafka-brokers.stretch.svc.cluster.local
+DNS:my-cluster-kafka-brokers.stretch.svc
+DNS:my-cluster-kafka-bootstrap.stretch.svc
+...
+```
+
+The key additional entry in stretch mode is
+
+```
+DNS:<pod-name>.<stretch-cluster-id>.<service-name>.<namespace>.svc.clusterset.local
+```
+
+This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOTE_KUBE_CONFIG` is configured).
+Regular single-cluster deployments do not include this entry, preserving the existing SAN generation logic.
+This ensures secure, DNS-verifiable TLS communication between Kafka nodes across clusters without compromising on hostname verification or requiring any changes to Kafka's default TLS configuration.
+
+
 ### Additional considerations and reference information
 
 #### Authentication and security considerations for multi-cluster access
