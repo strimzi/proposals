@@ -307,6 +307,8 @@ By using `.svc.clusterset.local`, the operator ensures that Kafka brokers and co
 
 This change is scoped specifically to stretch cluster mode, and single-cluster deployments will continue to use `.svc` as before.
 
+*Note that `.clusterset.local` is currently the only valid DNS suffix defined by the `MCS API` specification (`KEP-1645`), and is not configurable. While the spec may allow customization in the future, this implementation assumes the current standard. If configurability is introduced later, we can make this suffix configurable in the operator as a simple follow-up — but for now, `.clusterset.local` is a safe and compliant default.*
+
 ##### TLS Certificates and SANs for Cross-Cluster Communication
 
 In stretch cluster mode, Kafka brokers and controllers communicate across Kubernetes clusters over TLS.
