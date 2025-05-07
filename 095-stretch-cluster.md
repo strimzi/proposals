@@ -243,10 +243,11 @@ This allows controllers and brokers to discover and communicate with each other 
 In a non-stretch (single Kubernetes cluster) Kafka deployment, the `advertised.listeners` of a broker pod typically resolves to the pod's internal DNS address:
 
 ```yaml
-<broker-pod-name>.<broker-service-name>(.<namespace>.svc.cluster.local)
+<broker-pod-name>.<broker-service-name>(.<namespace>.svc):<port>
 ```
 
-The last section of the DNS name (in parentheses) is not required for discovery and communication within the same namespace and cluster and typically resolves to the pod IP via the headless service.
+While it is technically valid to append the full DNS suffix `.cluster.local`, Strimzi does not include it by default in `advertised.listeners`, and it is **not required** for intra-cluster communication.
+The `.svc` suffix is sufficient for DNS resolution within the Kubernetes cluster.
 
 However, in a stretched Kafka cluster, brokers and controllers are distributed across multiple Kubernetes clusters.
 In this case, a broker’s `advertised.listeners` must not only identify the broker pod but also indicate the Kubernetes cluster the pod resides in, so that cross-cluster pod-to-pod communication can happen correctly.
@@ -284,7 +285,7 @@ PLAIN-9092://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9092,
 TLS-9093://<broker-pod-name>.<broker-service-name>.<namespace>.svc:9093
 ```
 
-In a multi-cluster deployment, the operator modifies the format to include `<stretch-cluster-alias>` and appends `.svc.clusterset.local` to enable cross-cluster DNS resolution:
+In a multi-cluster deployment, the operator running in the Central cluster modifies the format to include `<stretch-cluster-alias>` and appends `.svc.clusterset.local` to enable cross-cluster DNS resolution:
 
 ```yaml
 advertised.listeners=REPLICATION-9091://<broker-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9091,
