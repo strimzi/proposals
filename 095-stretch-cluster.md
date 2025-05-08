@@ -406,6 +406,7 @@ In a stretch Kafka deployment, the central Kubernetes cluster manages Kafka reso
 The key challenge is restoring the administrative control plane while ensuring minimal downtime for Kafka clients.
 
 ###### Recovery approaches
+
 There are several possible recovery methods:
 
 **1. Manual recovery (baseline approach)**
