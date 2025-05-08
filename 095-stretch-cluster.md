@@ -445,6 +445,7 @@ These components will be deployed to the central cluster and will function as th
 Operators running in remote clusters will not manage KafkaBridge, KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
 
 ### Drain Cleaner
+
 This proposal does not affect Drain Cleaner.
 It will be deployed to all Kubernetes clusters involved in a stretch cluster and will function as normal within the scope of each cluster.
 
