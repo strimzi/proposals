@@ -434,6 +434,7 @@ Existing Kafka cluster deployments will remain unaffected unless users explicitl
 This proposal only impacts the strimzi-kafka-operator project.
 
 ### Entity operator
+
 To maintain the central cluster as the single control plane, all `KafkaTopic` and `KafkaUser` resources must be managed from the central cluster; This is also where the entity operator will be deployed.
 The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
 
