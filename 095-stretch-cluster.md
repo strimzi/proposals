@@ -252,9 +252,6 @@ The following table outlines the Kubernetes resources created by each Strimzi Cu
 
 In a Stretch Kafka deployment, the operator on the central cluster must ensure that all resources derived from the Kafka CR and KafkaNodePool CR are also replicated in the remote clusters, including Persistent Volume Claims (PVCs) for storage.
 
-In addition, the cluster operator normally creates network policies to restrict traffic from outside the namespace.
-To enable pod-to-pod communication across Kubernetes clusters, the cluster operator will not create any network policies when configured to deploy a stretch cluster.
-
 Furthermore, depending on the listener configuration, the Kafka CR may also create LoadBalancer, Ingress, NodePort, and Route services to expose Kafka externally.
 
 Operators deployed to remote clusters are only responsible for reconciling `StrimziPodSet` resources that are created remotely by the operator running in the central cluster.
