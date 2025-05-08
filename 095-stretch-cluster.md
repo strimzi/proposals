@@ -422,6 +422,7 @@ When a new central cluster is created, GitOps tools automatically reconcile the 
 This reduces manual effort but requires GitOps workflows to be set up in advance.
 
 #### Feature Enablement and Rollout Plan
+
 The Stretch Kafka Cluster support will be introduced as an optional feature behind a feature gate called `UseStretchCluster`.
 The maturity and rollout of this feature gate will follow the standard Strimzi process:
 - The feature gate will be disabled by default, allowing early adopters and community members to safely test the functionality without affecting production environments.
