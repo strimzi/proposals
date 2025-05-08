@@ -410,6 +410,7 @@ The key challenge is restoring the administrative control plane while ensuring m
 There are several possible recovery methods:
 
 **1. Manual recovery (baseline approach)**
+
 Users bring up a new Kubernetes cluster and manually apply the `Kafka` and `KafkaNodePool` CRs.
 Alternatively, an existing remote cluster can be promoted to central by applying these CRs and updating the cluster operator deployment.
 This approach is simple and reliable but requires user intervention.
