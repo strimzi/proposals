@@ -146,11 +146,6 @@ data:
   kubeconfig: <base64-encoded-kubeconfig>
 ```
 
-When the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set, the Cluster Operator will recognize that it needs to deploy a stretch Kafka cluster. 
-
-In this mode, any `StrimziPodSet` resources created in a remote cluster will include the annotation `strimzi.io/remote-podset: true`.
-This annotation allows the remote cluster’s Strimzi operator to reconcile the StrimziPodSet independently, without requiring the presence of the `Kafka` and `KafkaNodePool` custom resources in the same cluster.
-
 ##### Remote cluster operator configuration
 
 When deploying the operator to remote clusters, the operator must be configured to reconcile only StrimziPodSet resources by setting the existing environment variable:
@@ -173,11 +168,42 @@ The official Strimzi documentation should clearly state that it is necessary to 
 
 ##### Kafka CR
 
-There is no change required to the Kafka custom resource (Kafka CR).
-The Kafka resource remains exactly as defined in the existing Strimzi API, and users can continue to define their cluster configurations in the standard way.
-Remote cluster access credentials are configured through environment variables in the Cluster Operator deployment.
-This simplifies the Kafka CR and keeps global operational concerns decoupled from workload specifications.
-Cluster-specific configuration, such as the target remote cluster for each node pool, is specified in the KafkaNodePool CR via annotations.
+To enable stretch cluster functionality, users must explicitly opt in by adding the following annotation to the Kafka resource:
+
+```yaml
+metadata:
+  annotations:
+    strimzi.io/enable-stretch-cluster: "true"
+```
+
+This annotation signals the user's intent to deploy a stretch Kafka cluster.
+However, stretch mode is only activated if both of the following conditions are met:
+
+- The Kafka CR has the `strimzi.io/enable-stretch-cluster: "true"` annotation, and
+- The Cluster Operator has the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable set with access credentials for the remote clusters.
+
+If either condition is not satisfied, the deployment falls back to a standard single-cluster setup. In such cases, the operator will log a warning such as:
+
+```
+Stretch cluster requested via annotation, but STRIMZI_REMOTE_KUBE_CONFIG is not configured — defaulting to single-cluster deployment.
+```
+
+This design ensures:
+
+- No changes are required to the Kafka CRD.
+- Stretch and non-stretch Kafka deployments can co-exist under the same Cluster Operator instance.
+- Users receive clear feedback when configuration is incomplete or inconsistent.
+
+Additionally, when deploying a stretch cluster, the `StrimziPodSet` resources in the remote clusters (created by the Cluster Operator in the central cluster and reconciled by the Cluster Operator in the remote cluster)  will include the following annotation:
+
+
+```yaml
+metadata:
+  annotations:
+    strimzi.io/remote-podset: "true"
+```
+
+This annotation indicates to the remote Cluster Operator that the `StrimziPodSet` is part of a stretch cluster deployment and enables it to reconcile the resource independently, even though the `Kafka` and `KafkaNodePool` custom resources are not present in the remote cluster.
 
 ##### KafkaNodePool CR
 
@@ -345,7 +371,7 @@ The key additional entry in stretch mode is
 DNS:<pod-name>.<stretch-cluster-id>.<service-name>.<namespace>.svc.clusterset.local
 ```
 
-This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOTE_KUBE_CONFIG` is configured).
+This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set and the `Kafka` CR is annotated with `strimzi.io/enable-stretch-cluster: "true`).
 Regular single-cluster deployments do not include this entry, preserving the existing SAN generation logic.
 This ensures secure, DNS-verifiable TLS communication between Kafka nodes across clusters without compromising on hostname verification or requiring any changes to Kafka's default TLS configuration.
 
