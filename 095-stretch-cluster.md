@@ -439,6 +439,7 @@ To maintain the central cluster as the single control plane, all `KafkaTopic` an
 The expectation is that the entity operator will not be impacted any further by changes made to support a stretch cluster.
 
 ### Kafka Connect, Kafka Bridge and MirrorMaker2
+
 This proposal does not cover stretching Kafka Connect, Kafka MirrorMaker 2 or the Kafka Bridge.
 These components will be deployed to the central cluster and will function as they do today.
 Operators running in remote clusters will not manage KafkaBridge, KafkaConnect, KafkaConnector, or KafkaMirrorMaker2 resources.
