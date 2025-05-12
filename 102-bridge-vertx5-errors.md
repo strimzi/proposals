@@ -6,7 +6,7 @@ The change is prompted by updates introduced in Vert.x as part of the upcoming u
 ## Current situation
 
 The Strimzi HTTP bridge uses Vert.x 4.x, consistent with all Strimzi operators.
-By leveraging the `vertx-web-openapi` component, together with the underneath JSON schema validation dependency, the bridge can validate incoming HTTP requests against the OpenAPI v3 specification before processing them.
+By leveraging the `vertx-web-openapi` component, together with the underlying JSON schema validation dependency, the bridge can validate incoming HTTP requests against the OpenAPI v3 specification before processing them.
 When a schema validation error occurs, the HTTP response body returned to the client has the following format:
 
 ```json
@@ -34,7 +34,7 @@ The error message clearly indicates the issue in the request body, allowing user
 The Vert.x team is preparing to release Vert.x 5.x, which introduces several significant changes.
 One major change, particularly relevant for OpenAPI v3 support in the bridge, is the transition from the `vertx-web-openapi` component to the new `vertx-web-openapi-router` and `vertx-openapi` components.
 This shift also includes an update to the underlying JSON schema validation library.
-The new validation mechanism offers more comprehensive error reporting, though it also modifies the structure of the output provided to the bridge.
+The new validation mechanism offers more comprehensive error reporting, although it also changes the structure of the output.
 
 In Vert.x 5.x, the new `SchemaValidationException` class replaces the previous `ValidationException` used in Vert.x 4.x.
 While it still includes an error message field, the format and content have changed.
