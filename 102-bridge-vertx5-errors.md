@@ -49,6 +49,7 @@ For example, using the same scenario from the previous section, where an HTTP cl
     "error_code": 400,
     "message": "Validation error on: The value of the request body is invalid. Reason: Property \"enable.auto.commit\" does not match additional properties schema at #/enable.auto.commit"
 }
+```
 
 This message originates from the last entry in the list of validation errors, which actually looks like this:
 
