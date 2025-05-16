@@ -131,6 +131,20 @@ The values of the environment variables use the following format:
 The secrets referenced here must contain the kubeconfig for the Kubernetes cluster available at the provided URL as the value of secret key 'kubeconfig'.
 This allows the central Strimzi operator to authenticate with multiple Kubernetes clusters.
 
+```yaml
+- name: STRIMZI_CENTRAL_CLUSTER_ID
+  value: <central-cluster-id>
+```
+
+- `STRIMZI_CENTRAL_CLUSTER_ID` (Required)
+This environment variable defines the identifier (alias) of the central Kubernetes cluster, where the `Kafka` and `KafkaNodePool` CRs are created in a stretch Kafka deployment.
+This identifier must be unique and must not overlap with any of the cluster IDs defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable.
+This value is used to validate and match the `strimzi.io/stretch-cluster-alias` annotation in `KafkaNodePool` CR to determine whether the resources associated with a given node pool should be deployed in the central cluster.
+If a KafkaNodePool CR has a stretch cluster alias that matches the value of `STRIMZI_CENTRAL_CLUSTER_ID`, the operator will deploy the corresponding resources in the central cluster.
+
+Configuring the central cluster's identity explicitly avoids ambiguity and eliminates the risk of unintentionally deploying to the central cluster when a typo or misconfiguration occurs in the alias.
+This ensures that invalid cluster identifiers always result in a reconciliation failure, leading to a clearer user experience and safer operations.
+
 **Example Secret**
 
 Below is an example Kubernetes Secret containing a kubeconfig for a remote cluster
@@ -177,16 +191,18 @@ metadata:
 ```
 
 This annotation signals the user's intent to deploy a stretch Kafka cluster.
-However, stretch mode is only activated if both of the following conditions are met:
+However, stretch mode is only activated if all of the following conditions are met:
 
-- The Kafka CR has the `strimzi.io/enable-stretch-cluster: "true"` annotation, and
-- The Cluster Operator has the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable set with access credentials for the remote clusters.
+- The Kafka CR has the `strimzi.io/enable-stretch-cluster: "true"` annotation
+- The Cluster Operator is configured with the required environment variables:
+   - `STRIMZI_CENTRAL_CLUSTER_ID` — the unique alias of the central cluster (where the Kafka and KNP CRs is deployed),
+   - `STRIMZI_REMOTE_KUBE_CONFIG` — the mapping of remote cluster aliases to their API server URLs and associated secrets.
 
-If either condition is not satisfied, the deployment falls back to a standard single-cluster setup. In such cases, the operator will log a warning such as:
 
-```
-Stretch cluster requested via annotation, but STRIMZI_REMOTE_KUBE_CONFIG is not configured — defaulting to single-cluster deployment.
-```
+
+If any of these conditions are not satisfied, or if a `KafkaNodePool` references a stretch cluster alias that is not defined in either `STRIMZI_CENTRAL_CLUSTER_ID` or `STRIMZI_REMOTE_KUBE_CONFIG`, the reconciliation will fail with an appropriate error.
+
+This strict validation avoids accidental misconfiguration or unintended deployments in the central cluster due to missing or incorrect stretch cluster aliases.
 
 This design ensures:
 
@@ -221,7 +237,23 @@ metadata:
 
 The identifier used here is required and must match one of the values defined by the user in 'Step 1' and added to the environment variable map value in 'Step 2'.
 This annotation is used to construct critical Kafka configuration properties such as `controller.quorum.voters` and `advertised.listeners`.
-If the identifier does not match any of the values defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable, the operator will deploy the node pool to the central Kubernetes cluster.
+The stretch cluster alias (defined via the annotation `strimzi.io/stretch-cluster-alias`) in the `KafkaNodePool` CR must match exactly one of the following:
+- The value of the environment variable `STRIMZI_CENTRAL_CLUSTER_ID` (representing the central cluster where Kafka and KNP CRs will be created), or
+- One of the cluster IDs defined in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable.
+
+If the alias does not match either of these, the configuration is considered invalid, and reconciliation for the Kafka CR will fail with an error indicating that the target cluster is not recognized.
+
+
+#### Validation Matrix
+
+| Kafka Stretch Enabled | `strimzi.io/stretch-cluster-alias` Present in KNP | Valid Alias (matches `STRIMZI_CENTRAL_CLUSTER_ID` or `STRIMZI_REMOTE_KUBE_CONFIG`)         | Result                        |
+| :-------------------- | :------------------------------------------------ | :------------------------------------------------------------------------------------------| :---------------------------- |
+| false                 | no                                                | -                                                                                          | ✅ Central-only, valid        |
+| false                 | yes                                               | -                                                                                          | ❌ Invalid, mixed config      |
+| true                  | no                                                | -                                                                                          | ❌ Invalid, alias required    |
+| true                  | yes                                               | ❌ no match                                                                                | ❌ Invalid, unknown cluster alias |
+| true                  | yes                                               | ✅ matches `STRIMZI_CENTRAL_CLUSTER_ID`                                                     | ✅ Deploy to central cluster  |
+| true                  | yes                                               | ✅ matches a cluster in `STRIMZI_REMOTE_KUBE_CONFIG`                                        | ✅ Deploy to remote cluster   |
 
 #### Cluster operator behaviour
 
