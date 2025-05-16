@@ -81,7 +81,7 @@ These results reflect a more thorough validation process. Specifically:
 
 * The first error indicates that the property doesn’t match the expected schema.
 * The next error pinpoints the type mismatch (string vs. expected boolean).
-* the last error is about the validator detecting the property as a new one, because not within the schema (the type is different), and it's not allowed by the bridge OpenAPI specification, as per this [line](https://github.com/strimzi/strimzi-kafka-bridge/blob/main/src/main/resources/openapi.json#L1759) by having `"additionalProperties": false`.
+* The last error occurs because the provided value for `enable.auto.commit` does not match the expected type (boolean). Due to this mismatch, the schema treats it as invalid and, with [`"additionalProperties": false`](https://github.com/strimzi/strimzi-kafka-bridge/blob/main/src/main/resources/openapi.json#L1759) set, rejects it as not allowed.
 
 While this enhanced validation gives developers more insights, the downside is that only the last error is exposed through the `SchemaValidationException`, which may not be the most informative one, in this case, the type mismatch is arguably more useful.
 
@@ -92,7 +92,8 @@ Ultimately, this is a breaking change we’ll need to adapt to, adjusting our er
 ## Proposal
 
 This proposal suggests enhancing the HTTP error responses returned by Vert.x 5.x when an OpenAPI schema validation error occurs. Specifically, it introduces a new `validation_errors` field in the response body, providing clients with detailed insight into what caused the schema validation failure.
-The additional field would bring the error messages array coming from the validation.
+The additional `validation_errors` field would expose the list of error messages returned by the JSON schema validator.
+The entire JSON structure, containing the errors, is not included because it is too verbose and would require to be updated because of new changes within Vert.x in the future (see the rejected alternatives).
 The current `message` field would provide just a generic "Schema validation error" text instead.
 
 For example, still taking into account the same scenario, the outcome would be:
@@ -157,6 +158,7 @@ From the perspective of an HTTP client that relies on the `message` field for er
 With the new structure, the specific cause of a schema validation failure will no longer appear directly in the `message` field, which will now contain only a generic "Schema validation error" message.
 Instead, clients will need to inspect the new `validation_errors` array to obtain detailed information about the issue.
 For errors unrelated to schema validation, the behavior remains unchanged and the `message` field will continue to convey the appropriate error description.
+The code changes will be related to the error handling by catching the new `SchemaValidationException` and fill the errors list properly.
 
 ## Rejected alternatives
 
