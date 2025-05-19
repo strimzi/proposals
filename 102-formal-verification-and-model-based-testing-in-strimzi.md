@@ -8,24 +8,19 @@ To illustrate the approach, the **User Operator was selected as a proof of conce
 Its behavior was formally specified, and [test traces](#glossary) were automatically generated from the model and replayed against the real implementation. 
 This PoC demonstrates how MBT can validate [invariants](#glossary), and systematically explore a wide range of system behaviors.
 
-## Current situation
+## Motivation
 
-Strimzi currently relies on a combination of unit, integration, and end-to-end tests, all of which are manually written and maintained. 
-While this test suite effectively covers many expected use cases, it has inherent limitations when it comes to validating complex, stateful, and distributed behaviors.
+Strimzi currently uses a combination of unit, integration, and system tests to validate operator behavior. 
+These tests are manually written and typically cover happy paths, selected failure scenarios, and some regression cases. 
+While this approach is well-established, it has limitations when validating complex, stateful components that operate under concurrency, failover, and eventual consistency conditions.
 Specifically, the current approach does not adequately support:
 1. Exploration of nondeterministic interleaving
 2. Simulation of transient Kubernetes faults
 3. Exhaustive verification of safety (e.g., users never transition to invalid states.) and liveness (e.g., secrets are eventually created) properties
 4. Consistency across reconciliation cycles
 
-Moreover, there is currently no formal specification of the expected behavior for Strimzi components. 
+Moreover, there is currently no formal specification of the expected behavior for Strimzi components.
 This means that correctness properties such as invariants or [temporal properties](#glossary) are not explicitly defined, verified, or enforced — they are only implied through the existing implementation and test code.
-
-## Motivation
-
-Strimzi currently uses a combination of unit, integration, and system tests to validate operator behavior. 
-These tests are manually written and typically cover happy paths, selected failure scenarios, and some regression cases. 
-While this approach is well-established, it has limitations when validating complex, stateful components that operate under concurrency, failover, and eventual consistency conditions.
 
 This proposal introduces a new testing methodology based on formal specifications and model-based testing (MBT), which allows us to:
 1. Formally define expected system behavior using executable models
@@ -48,7 +43,7 @@ This proposal introduces formal specification and model-based testing (MBT) as a
 The central idea is to model the behavior of Strimzi components as executable specifications and use these models to automatically generate test traces that are then replayed against real operator implementations.
 
 The approach has already been validated through a working proof of concept for the `User Operator`. 
-This PoC includes a complete formal model in [Quint](https://github.com/informalsystems/quint) (for those who know TLA+, Quint is transpiler to TLA+ but with much more programming syntax).
+This PoC includes a complete formal model in [Quint](https://github.com/informalsystems/quint) (for those who know TLA+, Quint is transpiled to subset of TLA+ but with much more programming syntax).
 It includes a test harness for replaying model-generated traces and a suite of runtime invariant checks — a technique known as runtime verification in the formal methods domain.
 The proposal now aims to build on that foundation, integrating the methodology into the Strimzi test suite and expanding its use to additional components.
 
@@ -166,7 +161,6 @@ Additionally, MBT makes it easy to simulate high-throughput, real-world-like sce
 Thanks to the flexibility of the Quint modeling language, we can customize the number of traces, as well as bound the number of steps per trace, allowing precise control over test complexity and duration.
 These traces can then be replayed deterministically in Java, enabling repeatable simulations and debugging workflows under well-defined scenarios.
 
-
 ## Affected / Not Affected Projects
 
 Currently, the proof of concept (PoC) targets only the **User Operator**, so it is the only component directly affected at this stage.
@@ -178,11 +172,6 @@ This proposal introduces formal specification and model-based testing (MBT) pure
 There are **no changes to public APIs**, CRDs or any user-facing behaviour.
 Therefore, this enhancement is **fully backward-compatible**
 
-## Rejected alternatives
-
-1. Relying only on unit and integration tests 
-2. Manual specification in documentation
-
 ## Disadvantages and Maintainability
 
 While this proposal brings significant benefits, there are trade-offs to consider:
@@ -192,16 +181,16 @@ While the models are readable and well-documented, this still requires onboardin
 - **Not a full replacement**: 
 MBT does not eliminate the need for unit/integration tests. 
 Instead, it complements them. 
-Contributors will still need to write focused unit tests for logic not expressible in models.
+Contributors will still need to write focused unit tests for logic not expressible in models (e.g., specific exception handling, error propagation usually done by mocking)
 - **Model upkeep**:
-As the system evolves, models must be updated. 
-This proposal assumes the model will be maintained by contributors familiar with Quint (primarily by me, initially).
+As the system evolves, models must be updated.
+Initially, model upkeep will be handled by contributors familiar with Quint (primarily myself), but over time we aim to integrate model maintenance into the standard development and review process for the affected components.
 
 ## Future Work
 
 If this proposal proves successful  for the `User Operator`, follow-up efforts may include:
 - Modeling the **Topic Operator** to ensure correct topic reconciliation and eventual consistency.
-- Formalizing the **KafkaRoller** logic to prevent race conditions during rolling upgrades.
+- Formalizing the **KafkaRoller** logic to prevent race conditions during rolling updates.
 - and many parts within **Cluster Operator**
 
 # Conclusion
