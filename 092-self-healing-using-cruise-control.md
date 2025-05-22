@@ -1,35 +1,31 @@
 # Self Healing using Cruise Control
 
-This proposal is about enabling the self-healing properties of Cruise Control in the Strimzi operator.
-The self-healing feature of Cruise Control allows us to heal the anomalies detected in the cluster, automatically. 
+This proposal is about adding support for Cruise Control's self-healing capabilities in the Strimzi operator.
+When enabled, Cruise Control's self-healing feature automatically resolves issues detected by its Anomaly Detector Manager.
+This includes problems such as broker failures, goal violations, and disk failures, reducing the need for manual intervention.
 Anomalies are detected by Cruise Control using the anomaly detector manager.
 
 ## Current situation
 
-During normal operations it's common for Kafka clusters to become unbalanced (through partition key skew, uneven partition placement etc.) or for problems to occur with disks or other underlying hardware which makes the cluster unhealthy.
+Even under normal operation, it's common for Kafka clusters to encounter problems such as partition key skew leading to a uneven partition distribution, or hardware issues like as disk failures, which can degrade overall cluster health and performance.
 Currently, if we encounter any such scenario we need to fix these issues manually i.e. if there is some goal violation and the cluster is imbalanced then we might instruct Cruise Control to move the partition replicas across the brokers in order to fix the violated goal by using the `KafkaRebalance` custom resource.
-With smaller clusters, it is feasible to fix things manually. However, for larger ones it can be very time-consuming, or just not feasible, to fix all the anomalies on your own.
+
+Currently, users can enable anomaly detection and can also [set](https://strimzi.io/docs/operators/latest/full/deploying.html#setting_up_alerts_for_anomaly_detection) the notifier to one of those included with Cruise Control (SelfHealingNotifier, AlertaSelfHealingNotifier, SlackSelfHealingNotifier etc.).
+However, self-healing is currently disabled and disallowed in Strimzi.
+The `self-healing` properties were disabled since there was investigation missing around how self-healing would act if pods roll in middle of it/rebalance starts in or how the operator would know if self-healing is running or not.
 
 ## Motivation
 
-With the help of Cruise Control's self-healing feature we can resolve the anomalies causing unhealthy/imbalanced cluster automatically.
-The detection of anomalies is the responsibility of the anomaly detector mechanism.
-Notifiers in Cruise Control are used to send notification to user about the self-healing operations being performed in the cluster.
-Notifiers can be useful as they provide visibility to the user regarding the actions that are being performed by Cruise Control regarding self-healing for e.g. anomaly being detected, anomaly fix being started etc.
-Currently, users are [able to set](https://strimzi.io/docs/operators/latest/full/deploying.html#setting_up_alerts_for_anomaly_detection) the notifier to one of those included with Cruise Control (SelfHealingNotifier, AlertaSelfHealingNotifier, SlackSelfHealingNotifier etc.).
-However, self-healing is currently disabled and disallowed in Strimzi. 
-The `self-healing` properties were disabled since there was investigation missing around how self-healing would act if pods roll in middle of it/rebalance starts in  or how the operator would know if self-healing is running or not 
-Any anomaly that the user is notified about would need to be fixed manually by using the `KafkaRebalance` custom resource.
+Currently, any anomaly that the user is notified about would need to be fixed manually by using the `KafkaRebalance` custom resource.
+With smaller clusters, it is feasible to fix things manually. However, for larger ones it can be very time-consuming, or just not feasible, to fix all the anomalies on your own.
 It would be useful for users of Strimzi to be able to have these anomalies fixed automatically whenever they are detected.
 
-## Proposal
-
-### Introduction
+### Introduction to Self Healing
 
 ![self-healing flow diagram](./images/090-self-healing-flow.png)
 
 The above flow diagram depicts the self-healing process.
-The anomaly detector manger detects the anomaly (using the detector classes) and forwards it to the notifier.
+The anomaly detector manager detects an anomaly (using the detector classes) and forwards it to the notifier. 
 The notifier classes like `SelfHealingNotifier`, `AlertaSelfHealingNotifier`, `SlackSelfHealingNotifier` etc. provides alerts to the users about the detected anomaly and also returns the action that needs to be taken on the anomaly i.e. whether to fix it, ignore it or delay it.
  
 #### Anomaly Detector Manager
@@ -107,7 +103,7 @@ where:
 The anomaly status changes based on how the healing is progressing.
 The anomaly can transition to these possible states:
 * DETECTED - The anomaly is just detected and no action is yet taken on it 
-* IGNORED - Self healing is either disabled or the anomaly is unfixable
+* IGNORED - Self healing is either disabled, no notifier is set(NoopNotifier will be used) or the anomaly is unfixable.
 * FIX_STARTED - The anomaly fix has started
 * FIX_FAILED_TO_START - The proposal generation for the anomaly fix failed 
 * CHECK_WITH_DELAY - The anomaly fix is delayed 
@@ -139,17 +135,19 @@ Cruise control provides [self-healing related metrics](https://github.com/linked
 These metrics can also provide a way for the users to debug self-healing related issues.
 For example, the `number_of_self_healing_started` metric can provides users, the way to check when self-healing was started for an anomaly, and the number of self-healing actions that were performed in the cluster.
 This information can be useful to at what point of time the self-healing occurred and the shape/replica assignment of the cluster was changed due to self-healing.
-The user can also use the  metric like `number_of_self_healing_failed` to know if the self-healing failed to start to understand, and then they can check the reasons in the log for the failure. One example could be load monitor was ready at that point of time.
+The user can also use the  metric such as `number_of_self_healing_failed` to find out if the self-healing failed to start, so that they can check the reasons in the log for the failure. One example could be if load monitor was ready at that point of time.
 Cruise Control also have [metrics](https://github.com/linkedin/cruise-control/wiki/Sensors#executor-sensors) for tracking the inter/intra broker replica movement and also the ongoing replica movement rate/concurrency which can be useful to know if all the replicas movement was successful or if there were some replica movement which didn't complete.
 [Work](https://github.com/linkedin/cruise-control/pull/2268) is currently ongoing in the upstream Cruise Control project to have some metrics which can give us the self-healing start and end timestamp based upon the type of anomaly.
 To enable the metrics, the user can follow the Strimzi documentation on how we [expose the metrics](https://strimzi.io/docs/operators/latest/full/deploying.html#assembly-metrics-setup-str) through an HTTP endpoint.
 
-### Proposal for enabling self-healing in Strimzi
+### Proposal
 
-In order to activate self-healing, users will need to set the `self.healing.enabled` property to `true` and specifying a notifier that the self-healing mechanism is going to use in the `spec.cruiseControl.config` section of their `Kafka` resource.
-If the user forgets to set the notifier property then the `KubernetesEventNotifier`(custom notifier under Strimzi org) will be used by default and the user will also get a warning in the Kafka CR regarding missing `anomaly.notifier.class` property.
-We will support most anomaly fixes however there are some fixes which we don't want self-healing to fix automatically in a Kubernetes context.
-Broker failure or disk failure fix are disabled by default since we have better ways to fix them instead of moving the partition replicas across the brokers.
+#### Enabling self-healing in Strimzi
+
+In order to activate self-healing, users will need to set the `self.healing.enabled` property to `true` and specify a notifier that the self-healing mechanism is going to use in the `spec.cruiseControl.config` section of their `Kafka` resource.
+If the user forgets to set the notifier property then the `KubernetesEventNotifier`(custom notifier under Strimzi org) will be used by default.
+We will support the anomaly fixes for goal-violation anomaly, topic anomaly and metric anomalies.
+Broker failure or disk failure fix will be disabled since we have better ways to fix them instead of moving the partition replicas across the brokers.
 For example, brokers failures are generally due to lack of resources, so we can fix the issue at cluster level and in the same way failed disks can be easily replaced with a new one, so self-healing in these cases can be more resource consuming.
 
 Here is an example of what the configured `Kafka` custom resource could look:
@@ -171,8 +169,7 @@ spec:
       self.healing.disk.failure.enabled: false # disables self healing for disk failure
 ```
 
-The user can still enable self-healing for disk failures and broker failure if they want by setting the  `self.healing.broker.failure.enabled` for broker failure and `self.healing.disk.failure.enabled` for disk failure to `true`.
-In the same way user can enable and disable the self-healing for other anomalies.
+The user can still enable and disable the self-healing for other anomalies if they want by setting the  `self.healing.broker.failure.enabled` for broker failure and `self.healing.disk.failure.enabled` for disk failure to `true`. 
 
 #### Using Notifiers when using Self-healing
 
