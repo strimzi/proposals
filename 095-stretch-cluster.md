@@ -244,7 +244,7 @@ The stretch cluster alias (defined via the annotation `strimzi.io/stretch-cluste
 If the alias does not match either of these, the configuration is considered invalid, and reconciliation for the Kafka CR will fail with an error indicating that the target cluster is not recognized.
 
 
-#### Validation Matrix
+##### Validation Matrix
 
 | Kafka Stretch Enabled | `strimzi.io/stretch-cluster-alias` Present in KNP | Valid Alias (matches `STRIMZI_CENTRAL_CLUSTER_ID` or `STRIMZI_REMOTE_KUBE_CONFIG`)         | Result                        |
 | :-------------------- | :------------------------------------------------ | :------------------------------------------------------------------------------------------| :---------------------------- |
@@ -404,6 +404,34 @@ This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOT
 Regular single-cluster deployments do not include this entry, preserving the existing SAN generation logic.
 This ensures secure, DNS-verifiable TLS communication between Kafka nodes across clusters without compromising on hostname verification or requiring any changes to Kafka's default TLS configuration.
 
+##### `Kafka` and `KafkaNodePool` resource status
+
+The listeners section of the `Kafka` CR status set by the operator will adjust slightly to allow for additional bootstrap addresses for each Kubernetes cluster involved in the stretched Kafka cluster.
+
+Here is an example for a cluster stretched across three OpenShift clusters with an external `route` listener:
+```
+status:
+  ...
+  listeners:
+    - addresses:
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com
+          port: 443
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com
+          port: 443
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com
+          port: 443
+      bootstrapServers: 'my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com:443'
+      certificates:
+        - |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
+      name: extroute
+```
+
+The format of the KafkaNodePool CR status will remain unchanged.
+If the target Kubernetes cluster for the node pool becomes unavailable, this will be reflected by the phase and conditions of the `KafkaNodePool` CR status.
+Any error conditions for node pools will also be surfaced by placing the `Kafka` CR into a `Failed` state with an appropriate message indicating the affected node pool(s).
 
 ### Additional considerations and reference information
 
