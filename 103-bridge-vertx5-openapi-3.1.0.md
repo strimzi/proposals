@@ -13,7 +13,7 @@ In the existing OpenAPI specification, the HTTP bridge utilizes the `nullable` k
 * Allowing a record to be sent with a `null` value, which in Apache Kafka typically represents a "tombstone" message used in compacted topics.
 * Permitting the omission of partition count and replication factor parameters when creating a topic through the Admin Client API.
 
-Following the `RecordValue` [definition](https://github.com/strimzi/strimzi-kafka-bridge/blob/main/src/main/resources/openapi.json#L2215) which allows the `value` field o be either a JSON object or null:
+Following the `RecordValue` [definition](https://github.com/strimzi/strimzi-kafka-bridge/blob/main/src/main/resources/openapi.json#L2215) which allows the `value` field to be either a JSON object or null:
 
 ```json
 "RecordValue": {
@@ -51,7 +51,7 @@ In contrast, the `nullable` keyword used in OpenAPI 3.0.0 is not part of the JSO
 It is specific to OpenAPI and has no effect when using JSON Schema-compliant validators.
 
 Due to Vert.x 5.x adhering to the JSON Schema standard, the `nullable` flag, used in the current HTTP bridge OpenAPI specification, is no longer supported.
-This change causes schema validation to fail when an HTTP client sends a record with a `null` value, even if such input was previously valid.
+This change causes schema validation to fail when an HTTP client sends a record with a `null` value, even if such input was considered valid in the previous version.
 Below is an example of the validation error returned when attempting to send a record with `value: null`:
 
 ```json
@@ -163,7 +163,7 @@ For example, the updated `RecordValue` schema would look like this:
 
 A similar change would also be required for the `NewTopic` schema definition to ensure compatibility with the updated JSON Schema validation in Vert.x 5.x.
 
-Of course, the OpenAPI version would also be updated within the specification itself, as shown below:
+The OpenAPI version would also be updated within the specification itself, as shown below:
 
 ```json
 "openapi": "3.1.0"
