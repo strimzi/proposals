@@ -149,7 +149,7 @@ For example, the updated `RecordValue` schema would look like this:
       "items": {}
     },
     {
-      "type": ["object", "null"]
+      "type": "object"
     },
     {
       "type": "string"
