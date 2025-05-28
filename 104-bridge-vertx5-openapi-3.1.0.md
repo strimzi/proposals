@@ -1,5 +1,6 @@
-# Move HTTP bridge to OpenAPI 3.1.0 with Vert.x 5
+# Migrate HTTP bridge to OpenAPI 3.1.0 with Vert.x 5
 
+The HTTP bridge uses OpenAPI as the standard for describing the RESTful APIs using a JSON or YAML format.
 This proposal recommends updating the HTTP bridge in the Strimzi project to adopt OpenAPI 3.1.0, the latest minor release in the 3.x specification series.
 The change is prompted by updates introduced in Vert.x as part of the upcoming upgrade from version 4.x to 5.x.
 
@@ -45,7 +46,7 @@ One major change, particularly relevant for OpenAPI v3 support in the bridge, is
 This shift also includes an update to the underlying JSON schema validation library.
 
 This new validation library has been refactored to align more closely with the [JSON Schema](https://json-schema.org/) specification.
-Such specification defines a way for a JSON object to be null, by using the `type: null` [declaration](https://json-schema.org/understanding-json-schema/reference/null).
+This specification defines how to represent a null JSON value, by using the `type: null` [declaration](https://json-schema.org/understanding-json-schema/reference/null).
 
 In contrast, the `nullable` keyword used in OpenAPI 3.0.0 is not part of the JSON Schema specification.
 It is specific to OpenAPI and has no effect when using JSON Schema-compliant validators.
@@ -177,7 +178,7 @@ The only affected project is the Strimzi HTTP bridge.
 
 From the perspective of an HTTP client sending a record with `value: null` or creating a new topic without specifying the partition count and replication factor, this change introduces no behavioral differences.
 
-For the HTTP bridge itself, aside from replacing the `nullable` flag with the JSON Schema-compliant `type: null` declaration, the rest of the OpenAPI specification remains largely compatible.
+For the HTTP bridge itself, aside from replacing the `nullable` flag with the JSON Schema-compliant `type: null` declaration, the rest of the OpenAPI specification remains compatible.
 
 The main caveat with this upgrade is that, to address the compatibility issue, the project cannot follow the usual deprecation path where the existing OpenAPI 3.0.0 specification is supported alongside the new version for a transitional period before removal, as was done previously when migrating from OpenAPI 2.0.0 to 3.0.0.
 
@@ -186,4 +187,5 @@ Apart from the removal of `nullable`, the OpenAPI 3.1.0 specification appears to
 
 ## Rejected alternatives
 
-N/A
+Staying on Vert.x 4 was not a viable option, as it would no longer support sending records with `null` values.
+These records are crucial in Apache Kafka, particularly for their use as "tombstones" in compacted topics.
