@@ -102,7 +102,7 @@ These identifiers can be specified by creating a `ClusterProperty` resource.
 This approach is used by the [AWS Cloud Map MCS controller](https://github.com/aws/aws-cloud-map-mcs-controller-for-k8s), while other implementations such as Submariner or Cilium might provide alternative configuration mechanisms to achieve the same outcome.
 It is the users responsibility to refer to the documentation for their chosen MCS implementation to learn how to define their `ClusterSet` and cluster identifiers.
 
-The Strimzi cluster operator will use this identifier in two ways:
+The Strimzi cluster operator will use the cluster identifier in two ways:
 1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [Configuration of Kafka properties in a stretch cluster](#configuration-of-kafka-properties-in-a-stretch-cluster)).
 2. Determining the target Kubernetes cluster for node pool resources.
 
@@ -187,7 +187,7 @@ To enable stretch cluster functionality, users must explicitly opt in by adding 
 ```yaml
 metadata:
   annotations:
-    strimzi.io/enable-stretch-cluster: "true"
+    strimzi.io/stretch-cluster: "true"
 ```
 
 This annotation signals the user's intent to deploy a stretch Kafka cluster.
@@ -260,6 +260,35 @@ If the alias does not match either of these, the configuration is considered inv
 The following sections outline actions taken by the cluster operator.
 These steps are consistent for any Kubernetes network configuration.
 
+##### `Kafka` and `KafkaNodePool` resource status
+
+The listeners section of the `Kafka` CR status set by the operator will adjust slightly to allow for additional bootstrap addresses for each Kubernetes cluster involved in the stretched Kafka cluster.
+
+Here is an example for a cluster stretched across three OpenShift clusters with an external `route` listener:
+```
+status:
+  ...
+  listeners:
+    - addresses:
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com
+          port: 443
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com
+          port: 443
+        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com
+          port: 443
+      bootstrapServers: 'my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com:443'
+      certificates:
+        - |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
+      name: extroute
+```
+
+The format of the KafkaNodePool CR status will remain unchanged.
+If the target Kubernetes cluster for the node pool becomes unavailable, this will be reflected by the phase and conditions of the `KafkaNodePool` CR status.
+Any error conditions for node pools will also be surfaced by placing the `Kafka` CR into a `Failed` state with an appropriate message indicating the affected node pool(s).
+
 ##### Remote cluster resources created by the central operator in a stretch cluster
 
 In a stretch cluster, the Kafka and KafkaNodePool CRs are created only in the central cluster.
@@ -327,8 +356,8 @@ For this mechanism to work correctly, the cluster operator must be deployed in t
 Additionally, the fully qualified DNS name must be used in this scenario.
 
 Here `<stretch-cluster-alias>` is a unique identifier for each participating Kubernetes cluster.
-The `<stretch-cluster-alias>` is dynamically retrieved by the operator from an [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
-The `<stretch-cluster-alias>` matches the identifier defined by the user when [configuring Multi-Cluster Services](#step-1-user-configuration-of-the-chosen-mcs-implementation).
+This value is dynamically retrieved by the operator from the `strimzi.io/stretch-cluster-alias` [annotation](#kafkanodepool-cr) on the `KafkaNodePool` resource.
+The value must match the cluster identifier defined by the user when [configuring Multi-Cluster Services](#step-1-user-configuration-of-the-chosen-mcs-implementation).
 
 **Example of multi-cluster `advertised.listeners` and `controller.quorum.voters`**
 
@@ -354,11 +383,11 @@ Similarly, the `controller.quorum.voters` configuration is updated to reference 
 controller.quorum.voters=<controller-id>@<controller-pod-name>.<stretch-cluster-alias>.<broker-service-name>.<namespace>.svc.clusterset.local:9090, ...
 ```
 
-**Why `.svc.clusterset.local` is used**
+**Why `.clusterset.local` is used**
 
 The `.clusterset.local` suffix is part of the Kubernetes Multi-Cluster Services standard and is specifically designed to enable DNS-based service discovery between Kubernetes clusters.
 Using the regular `.svc` suffix only works for resolving services *within the same cluster*, and would fail in cross-cluster scenarios.
-By using `.svc.clusterset.local`, the operator ensures that Kafka brokers and controllers can resolve and connect to each other across clusters using DNS, which is essential for stretch cluster functionality.
+By using `.clusterset.local`, the operator ensures that Kafka brokers and controllers can resolve and connect to each other across clusters using DNS, which is essential for stretch cluster functionality.
 
 This change is scoped specifically to stretch cluster mode, and single-cluster deployments will continue to use `.svc` as before.
 
@@ -369,7 +398,7 @@ This change is scoped specifically to stretch cluster mode, and single-cluster d
 In stretch cluster mode, Kafka brokers and controllers communicate across Kubernetes clusters over TLS.
 To ensure secure communication and successful hostname verification (`ssl.endpoint.identification.algorithm=HTTPS`), the operator generates certificates with appropriate Subject Alternative Name (`SAN`) entries.
 
-Each broker and controller pod certificate includes additional SANs for `.clusterset.local`-based DNS names to support cross-cluster resolution.
+Each broker and controller pod certificate includes additional SANs for `.clusterset.local` based DNS names to support cross-cluster resolution.
 These DNS names are essential for TLS clients (brokers and controllers) in remote clusters to verify the server identity of peers across the mesh.
 
 **Example: SANs in Stretch Mode**
@@ -404,35 +433,6 @@ This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOT
 Regular single-cluster deployments do not include this entry, preserving the existing SAN generation logic.
 This ensures secure, DNS-verifiable TLS communication between Kafka nodes across clusters without compromising on hostname verification or requiring any changes to Kafka's default TLS configuration.
 
-##### `Kafka` and `KafkaNodePool` resource status
-
-The listeners section of the `Kafka` CR status set by the operator will adjust slightly to allow for additional bootstrap addresses for each Kubernetes cluster involved in the stretched Kafka cluster.
-
-Here is an example for a cluster stretched across three OpenShift clusters with an external `route` listener:
-```
-status:
-  ...
-  listeners:
-    - addresses:
-        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com
-          port: 443
-        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com
-          port: 443
-        - host: my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com
-          port: 443
-      bootstrapServers: 'my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp1-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp2-domain.org-domain.com:443,my-cluster-kafka-extroute-bootstrap-strimzi.apps.ocp3-domain.org-domain.com:443'
-      certificates:
-        - |
-          -----BEGIN CERTIFICATE-----
-          ...
-          -----END CERTIFICATE-----
-      name: extroute
-```
-
-The format of the KafkaNodePool CR status will remain unchanged.
-If the target Kubernetes cluster for the node pool becomes unavailable, this will be reflected by the phase and conditions of the `KafkaNodePool` CR status.
-Any error conditions for node pools will also be surfaced by placing the `Kafka` CR into a `Failed` state with an appropriate message indicating the affected node pool(s).
-
 ### Additional considerations and reference information
 
 #### Authentication and security considerations for multi-cluster access
@@ -445,8 +445,9 @@ Each method provides different levels of security and flexibility, allowing user
 
 #### External access
 
-When external listeners are configured, they will be set up across all participating clusters, along with their corresponding bootstrap addresses.
 External access mechanisms, such as Routes, Ingress, or LoadBalancer services, will be deployed in each cluster, allowing clients to seamlessly connect to the stretch cluster.
+Each cluster will have a unique bootstrap address as described by [`Kafka` and `KafkaNodePool` resource status](#kafka-and-kafkanodepool-resource-status).
+Clients must configure `bootstrap.servers` as a comma separated list of bootstrap addresses.
 
 #### Resource cleanup on remote Kubernetes clusters
 
