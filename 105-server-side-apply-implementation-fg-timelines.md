@@ -1,13 +1,13 @@
 # Server Side Apply - Implementation Split, Feature Gates, and Timelines
 
 Additional information to the original [Server Side Apply proposal](052-k8s-server-side-apply.md) - describing
-split of the implementation, how it will be gated behind feature gates, and what are the planned timelines.
+the split of the implementation, how it will be gated behind feature gates, and what are the planned timelines.
 
 ## Current situation
 
 When the original proposal was merged and PR with the implementation was opened,
-we discovered that there are complications in matter of the implementation itself and
-that the scope is too wide to fit one pull request and one feature gate.
+we discovered that there are complications in the matter of the implementation itself and
+that the scope is too large to fit a single pull request and feature gate.
 Due to inactivity on the pull request, we decided to close it - so the Server Side Apply
 feature wasn't implemented yet.
 
@@ -17,7 +17,7 @@ From time to time, we get question, discussion or issue opened on the operators 
 that mention difficulties when using various technologies together with Strimzi and when
 the particular technology (other operator) is trying to update Custom Resources or Kubernetes 
 resources with annotations managed by Strimzi - which is the most common case. 
-This update is reverted back by Strimzi, but in a while the resource is updated by the other operator again,
+Strimzi reverts this update, but in a while the resource is updated by the other operator again,
 creating an endless loop of updates.
 
 The Server Side Apply would fix these issues, as it was mentioned in the [original proposal](052-k8s-server-side-apply.md).
@@ -46,7 +46,7 @@ by the feature gate.
 | `UseServerSideApplyOCP`     | `Route`, `BuildConfig`, `ImageStream`                                        | CO                 | 0.48.0                      | 0.50.0                    | 0.52.0 |
 | `UseServerSideApplyStrimzi` | All Strimzi custom resources - `Kafka`, `KafkaConnect`, `StrimziPodSet` etc. | CO, UO, TO         | 0.49.0                      | 0.51.0                    | 0.53.0 |
 
-We start with the resources that seems to be the most problematic for users - as they are frequently updated by other operators - 
+We start with the resources that seem to be the most problematic for users - as they are frequently updated by other operators - 
 `Service`, `ServiceAccount`, `ConfigMap`, `PVC`.
 Then we will move to RBAC, Openshift-only resources and rest of the Kubernetes resources.
 Finally, we will implement it for Strimzi Custom Resources.
@@ -55,7 +55,7 @@ Most of the feature gates will be usable only by the Cluster Operator,
 but `UseServerSideApplyKube` will be available for User Operator (because of the `Secret`), 
 and `UseServerSideApplyStrimzi` will be available for all the operators.
 
-The release versions when the particular feature gate will graduate can differ - based on the release of Strimzi version 1.0.0.
+The release versions when the particular feature gate will graduate can differ - depending on the release of Strimzi version 1.0.0.
 But it should be 2 minor releases before graduating the feature gate further.
 
 ## Affected/not affected projects
