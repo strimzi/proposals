@@ -1,6 +1,20 @@
 # Server Side Apply - Implementation Split, Feature Gates, and Timelines
 
-Additional information to the original [Server Side Apply proposal](052-k8s-server-side-apply.md) - describing the split of the implementation, how it will be gated behind feature gates, and what are the planned timelines.
+This proposal builds on the original [Server Side Apply proposal](052-k8s-server-side-apply.md), which outlines the technical specification and behavior of Kubernetes Server Side Apply (SSA).
+
+Server Side Apply enables declarative updates to Kubernetes resources by tracking ownership of individual fields through the `.metadata.managedFields` property. 
+This allows multiple controllers (such as Strimzi and other operators like Kyverno) to safely modify different parts of the same resource without overwriting each other’s changes.
+
+With Server Side Apply:
+- Strimzi will explicitly claim ownership only of the fields it manages.
+- Other tools can safely annotate or patch resources without triggering reconciliation loops.
+- Reconciliation is simplified because Strimzi no longer needs to diff the entire resource or filter changes manually.
+
+Strimzi will adopt the **reconstructive controller pattern** recommended by Kubernetes, meaning each resource will be fully rebuilt from desired state and applied via Server Side Apply in every reconciliation loop. 
+This eliminates the need for manual diffs, `GET` calls, or the `ResourceDiff` logic currently used.
+
+To reduce the risk of conflict, Server Side Apply operations will initially use `force = false`, retrying with `force = true` only when necessary. 
+This ensures Strimzi does not unintentionally take ownership of fields managed by other controllers unless explicitly intended.
 
 ## Current situation
 
@@ -24,23 +38,16 @@ Finally, each of the feature gate will be also available in the operator that wi
 
 ### Proposed Feature Gates and Timelines
 
-We will begin by enabling Server Side Apply for the resources that have historically caused the most user issues — particularly those that are frequently updated by other operators — namely: `Service`, `ServiceAccount`, `ConfigMap`, and `PersistentVolumeClaim`.
+We will begin by enabling Server Side Apply for the resources that have historically caused the most user issues — particularly those that are frequently updated by other operators — namely: `Service`, `ServiceAccount`, `ConfigMap`, `PersistentVolumeClaim`, and `Ingress`.
 
 This initial implementation will be gated under a single feature flag:
 
-| Feature Gate             | Resources Covered                               | Affected Operators | Alpha (opt-in) | Beta (default-on) | GA     |
-|--------------------------|-------------------------------------------------|--------------------|----------------|-------------------|--------|
-| `UseServerSideApplyCore` | `Service`, `ServiceAccount`, `ConfigMap`, `PVC` | CO                 | 0.48.0         | 0.51.0            | 0.54.0 |
+| Feature Gate             | Resources Covered                                          | Affected Operators | Alpha (opt-in) | Beta (default-on) | GA     |
+|--------------------------|------------------------------------------------------------|--------------------|----------------|-------------------|--------|
+| `UseServerSideApplyCore` | `Service`, `ServiceAccount`, `ConfigMap`, `PVC`, `Ingress` | CO                 | 0.48.0         | 0.51.0            | 0.54.0 |
 
-Once this feature gate has been in use for some time, and based on the feedback and stability of the implementation, we plan to extend Server Side Apply support to additional resource types. 
-These will be introduced under separate feature gates:
-
-| Feature Gate                   | Resources Covered                                                             | Affected Operators |
-|--------------------------------|-------------------------------------------------------------------------------|--------------------|
-| `UseServerSideApplyKubeAndOCP` | `ClusterRole`, `Role`, `Secret`, `Route`, and other Kube/OCP types            | CO, UO             |
-| `UseServerSideApplyStrimzi`    | All Strimzi custom resources (`Kafka`, `KafkaConnect`, `StrimziPodSet`, etc.) | CO, UO, TO         |
-
-The exact timelines for these additional feature gates will be defined after evaluating the rollout of the initial `UseServerSideApplyCore` gate and assessing user interest and implementation complexity.
+Once this feature gate has been in use for some time, and based on the feedback and stability of the implementation, we plan to extend Server Side Apply support to additional resource types.
+The introduction of further feature gates and the handling of additional resources will be addressed separately in future proposals.
 
 **Note:** The release milestones above may change depending on the scheduling of Strimzi 1.0.0. 
 However, each feature gate is expected to spend approximately three minor releases in each maturity phase before advancing.
