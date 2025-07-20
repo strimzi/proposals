@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 105 | [Add namespace filtering support to Strimzi Drain Cleaner](./105-strimzi-drain-cleaner-namespace-filtering-proposal.md) |
 | 104 | [Move HTTP bridge to OpenAPI 3.1.0 with Vert.x 5](./104-bridge-vertx5-openapi-3.1.0.md) |
 | 103 | [Additional OpenAPI schema validation error details with Vert.x 5](./103-bridge-vertx5-errors.md) |
 | 102 | [Using `ImageVolumes` to improve extensibility of Strimzi operands](./102-using-image-volumes-to-improve-extensibility-of-Strimzi-operands.md) |
