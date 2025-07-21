@@ -1,14 +1,8 @@
 # Add namespace filtering support to Strimzi Drain Cleaner
 
-**Authors:** Roman Melnyk (@aywengo)  
-**Status:** Draft  
-**Type:** Enhancement  
-**Created:** 2025-07-19  
-**Strimzi Version:** 0.48.0+  
-
 ## Summary
 
-This proposal introduces namespace filtering capability to the Strimzi Drain Cleaner through a new `STRIMZI_DRAIN_WATCH_NAMESPACES` environment variable. This feature enables the drain cleaner to only process eviction requests for pods in specified namespaces, addressing security and operational challenges in multi-tenant enterprise Kubernetes environments.
+This proposal introduces namespace filtering capability to the Strimzi Drain Cleaner through a new `STRIMZI_DRAIN_NAMESPACES` environment variable. This feature enables the drain cleaner to only process eviction requests for pods in specified namespaces, addressing security and operational challenges in multi-tenant enterprise Kubernetes environments.
 
 ## Motivation
 
@@ -35,6 +29,19 @@ This issue affects enterprise environments where:
 - Compliance requirements mandate namespace-level access controls
 - One drain cleaner instance must serve the entire cluster while respecting security boundaries
 
+### Potential Negative Impacts
+
+**Risk of Multiple Drain Cleaner Deployments**: With namespace filtering, users might be tempted to deploy multiple drain cleaner instances per cluster, which could lead to:
+- Conflicting ValidatingWebhookConfigurations
+- Duplicate webhook processing and potential race conditions
+- Increased operational complexity and resource usage
+- Certificate management challenges
+
+**Mitigation**: Clear documentation must emphasize that:
+- Only ONE drain cleaner instance should be deployed per cluster
+- Namespace filtering is for security compliance, not for multi-tenancy
+- Multiple instances will cause operational issues and are not supported
+
 ## Goals
 
 - **Primary Goal**: Enable namespace-level filtering to allow drain cleaner deployment in restrictive RBAC environments
@@ -53,21 +60,21 @@ This issue affects enterprise environments where:
 
 ### Overview
 
-Introduce a new environment variable `STRIMZI_DRAIN_WATCH_NAMESPACES` that accepts a comma-separated list of namespace names. When configured, the drain cleaner will:
+Introduce a new environment variable `STRIMZI_DRAIN_NAMESPACES` that accepts a comma-separated list of namespace names. When configured, the drain cleaner will:
 
 1. Continue receiving all eviction webhook requests (required for webhook functionality)
 2. Filter requests at the application level before attempting pod access
-3. For unwatched namespaces: immediately allow eviction without pod API calls
+3. For unwatched namespaces: immediately allow eviction without pod API calls (logged at DEBUG level)
 4. For watched namespaces: process normally with full drain cleaner logic
 
 ### Configuration
 
-**Environment Variable**: `STRIMZI_DRAIN_WATCH_NAMESPACES`
-- **Format**: Comma-separated namespace list (e.g., `"kafka-prod,kafka-dev,messaging"`)
-- **Default**: Empty string (watches all namespaces - current behavior)
+**Environment Variable**: `STRIMZI_DRAIN_NAMESPACES`
+- **Format**: Comma-separated namespace list (e.g., `"kafka-prod,kafka-dev,messaging"`) or `"*"` for all namespaces
+- **Default**: `"*"` (process all namespaces - current behavior)
 - **Behavior**:
-  - Empty/unset: Process all namespaces (backward compatible)
-  - Non-empty: Only process eviction requests from specified namespaces
+  - `"*"` or unset: Process all namespaces (backward compatible)
+  - Specific namespace list: Only process eviction requests from specified namespaces
 
 ### Application-Level Filtering
 
@@ -75,15 +82,15 @@ The filtering occurs in the `ValidatingWebhook.webhook()` method:
 
 ```java
 private boolean isNamespaceWatched(String namespace) {
-    if (watchNamespaces == null || watchNamespaces.trim().isEmpty()) {
-        return true; // Watch all namespaces (current behavior)
+    if (drainNamespaces == null || drainNamespaces.trim().isEmpty() || drainNamespaces.trim().equals("*")) {
+        return true; // Process all namespaces (current behavior)
     }
     
-    List<String> watchedNamespaceList = Arrays.asList(watchNamespaces.split(","));
-    return watchedNamespaceList.stream()
+    List<String> drainNamespaceList = Arrays.asList(drainNamespaces.split(","));
+    return drainNamespaceList.stream()
             .map(String::trim)
             .filter(ns -> !ns.isEmpty())
-            .anyMatch(watchedNs -> watchedNs.equals(namespace));
+            .anyMatch(drainNs -> drainNs.equals(namespace));
 }
 ```
 
@@ -110,26 +117,29 @@ private boolean isNamespaceWatched(String namespace) {
 ### Code Changes
 
 **Core Logic** (`src/main/java/io/strimzi/ValidatingWebhook.java`):
-- Add `@ConfigProperty` for `strimzi.drain.watch.namespaces`
+- Add `@ConfigProperty` for `strimzi.drain.namespaces`
 - Implement `isNamespaceWatched()` method
 - Add namespace check before pod retrieval
 
 **Configuration** (`src/main/resources/application.properties`):
 ```properties
-# Comma-separated list of namespaces to watch for eviction events. Empty means all namespaces.
-strimzi.drain.watch.namespaces=
+# Comma-separated list of namespaces to process for eviction events. "*" or empty means all namespaces.
+strimzi.drain.namespaces=*
 ```
 
-**Deployment Templates** (in `packaging/` directory only):
-- `packaging/install/*/060-Deployment.yaml`
-- `packaging/helm-charts/helm3/strimzi-drain-cleaner/values.yaml`
+**Deployment and Documentation**:
+- This feature will be **documentation-only** and not included in the default installation files
+- Users will need to manually configure the environment variable when needed
+- RBAC permissions must remain cluster-wide for webhook functionality
+- The Helm Chart will not be modified to avoid confusion about RBAC scope
+- Clear documentation will guide users on proper configuration
 
 ### Behavior Examples
 
 **Example 1: Watched Namespace**
 ```yaml
 env:
-  - name: STRIMZI_DRAIN_WATCH_NAMESPACES
+  - name: STRIMZI_DRAIN_NAMESPACES
     value: "kafka-prod,kafka-dev"
 ```
 - Eviction request for pod in `kafka-prod` → Full drain cleaner processing
@@ -143,11 +153,12 @@ env:
 **Example 3: Default Behavior**
 ```yaml
 env:
-  - name: STRIMZI_DRAIN_WATCH_NAMESPACES
-    value: ""
+  - name: STRIMZI_DRAIN_NAMESPACES
+    value: "*"
 ```
 - All namespaces processed (current behavior)
 - Full backward compatibility maintained
+- Can also be left unset for same behavior
 
 ### Security Considerations
 
@@ -167,11 +178,13 @@ env:
 
 ### 2. Multiple Drain Cleaner Instances
 **Approach**: Deploy separate drain cleaners per namespace
-**Rejected Because**:
+**Why This Doesn't Work**:
 - Requires multiple ValidatingWebhookConfigurations
 - Potential conflicts and performance issues
 - Goes against "one per cluster" design principle
 - Complex certificate and configuration management
+
+**Important Note**: While this proposal's namespace filtering might suggest multiple instances could work, this remains unsupported. Users must understand that attempting multiple deployments will cause operational issues. This must be clearly documented.
 
 ### 3. Webhook Namespace Selectors
 **Approach**: Use ValidatingWebhookConfiguration `namespaceSelector`
@@ -182,11 +195,12 @@ env:
 - Harder to update without webhook re-registration
 
 ### 4. Admission Controller Scope Changes
-**Approach**: Modify webhook registration scope
+**Approach**: Attempted to make webhooks namespace-scoped instead of cluster-scoped
 **Rejected Because**:
-- Changes fundamental architecture
-- Reduces drain cleaner effectiveness
-- Complex migration path for existing deployments
+- ValidatingWebhookConfigurations cannot be namespace-scoped (Kubernetes limitation)
+- Webhooks must be cluster-wide to intercept all eviction requests
+- Would require fundamental redesign of Kubernetes admission control
+- Not technically feasible within current Kubernetes architecture
 
 ## Test Plan
 
@@ -202,50 +216,33 @@ env:
 - Confirm no API calls made to unwatched namespaces
 - Validate log output and behavior
 
-### Backward Compatibility Tests
-- Verify existing deployments continue working without configuration changes
-- Test upgrade scenarios from previous versions
-- Confirm default behavior matches current implementation
+### Backward Compatibility
+- Existing tests will verify backward compatibility automatically
+- Default behavior (`STRIMZI_DRAIN_NAMESPACES="*"` or unset) maintains current functionality
+- No special upgrade testing needed as Drain Cleaner is a stateless application
 
-## Graduation/Rollout Plan
+## Implementation Plan
 
-### Phase 1: Implementation and Testing
-- Implement core functionality in drain cleaner
-- Add comprehensive test coverage
-- Update packaging configurations
-- Documentation updates
+This feature will be included in the next Drain Cleaner release (likely version 1.5.0). Since the Drain Cleaner follows independent release cycles from the main Strimzi operator:
 
-### Phase 2: Beta Release
-- Include in next minor Strimzi release (0.48.0+)
-- Mark as beta feature in release notes
-- Gather community feedback
-- Monitor for issues in test environments
-
-### Phase 3: General Availability
-- Promote to stable feature status
-- Include in documentation as recommended pattern for multi-tenant environments
-- Consider for inclusion in Helm chart best practices
+- Implement core functionality with comprehensive test coverage
+- Update README.md with configuration instructions
+- Include in the Strimzi Operator Deploying guide
+- Release as a standard feature (no beta phase or feature gates needed)
 
 ## Documentation Updates
 
-- **Configuration Reference**: Add `STRIMZI_DRAIN_WATCH_NAMESPACES` to environment variables documentation
-- **Multi-Tenant Guide**: Create section on namespace filtering for enterprise deployments
-- **Security Guide**: Document RBAC considerations and filtering benefits
-- **Troubleshooting**: Add guidance for configuration and debugging
-- **Migration Guide**: Document upgrade considerations for existing deployments
+The following documentation will be updated:
 
-## Metrics and Monitoring
+1. **Drain Cleaner README.md**: 
+   - Add `STRIMZI_DRAIN_NAMESPACES` environment variable description
+   - Include configuration examples
+   - Add warning about not deploying multiple instances
 
-### Success Metrics
-- Reduction in permission error log entries
-- Decreased API server load from drain cleaner
-- Community adoption in multi-tenant environments
-- User feedback on deployment simplification
-
-### Monitoring Considerations
-- Log volume reduction in restricted environments
-- API call patterns to Kubernetes API server
-- Webhook response times and success rates
+2. **Strimzi Operator Deploying Guide**:
+   - Update the Drain Cleaner installation section
+   - Document namespace filtering for multi-tenant environments
+   - Include RBAC considerations and security benefits
 
 ## Future Enhancements
 
@@ -256,14 +253,4 @@ While not part of this proposal, future work could include:
 3. **Enhanced Logging**: Structured logging with namespace filtering statistics
 4. **Metrics Exposure**: Prometheus metrics for namespace filtering behavior
 
-## References
-
-- [Strimzi Drain Cleaner Documentation](https://strimzi.io/docs/operators/latest/deploying.html#drain-cleaner)
-- [Multi-Tenant Kubernetes Best Practices](https://kubernetes.io/docs/concepts/policy/pod-security-policy/)
-- [Kubernetes Admission Controllers](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/)
-- [Related Pull Request: #164](https://github.com/strimzi/drain-cleaner/pull/164)
-
----
-
-**Proposal Author**: Roman Melnyk (aywengo@gmail.com)  
-**Implementation Reference**: [Drain Cleaner PR #164](https://github.com/strimzi/drain-cleaner/pull/164) 
+ 
