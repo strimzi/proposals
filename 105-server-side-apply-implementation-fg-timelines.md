@@ -3,15 +3,15 @@
 This proposal builds on the original [Server Side Apply proposal](052-k8s-server-side-apply.md), which outlines the technical specification and behavior of Kubernetes Server Side Apply (SSA).
 
 Server Side Apply enables declarative updates to Kubernetes resources by tracking ownership of individual fields through the `.metadata.managedFields` property. 
-This allows multiple controllers (such as Strimzi and other operators like Kyverno) to safely modify different parts of the same resource without overwriting each other’s changes.
+This allows multiple controllers to safely modify different parts of the same resource without overwriting each other’s changes.
 
 With Server Side Apply:
 - Strimzi will explicitly claim ownership only of the fields it manages.
 - Other tools can safely annotate or patch resources without triggering reconciliation loops.
 - Reconciliation is simplified because Strimzi no longer needs to diff the entire resource or filter changes manually.
 
-Strimzi will adopt the **reconstructive controller pattern** recommended by Kubernetes, meaning each resource will be fully rebuilt from desired state and applied via Server Side Apply in every reconciliation loop. 
-This eliminates the need for manual diffs, `GET` calls, or the `ResourceDiff` logic currently used.
+Strimzi will apply the full desired state of each resource during reconciliation and apply it using Server Side Apply, allowing the Kubernetes API server to handle merging and field ownership.
+This eliminates the need for comparing actual and desired states, as well as related `GET` calls or the current `ResourceDiff` logic.
 
 To reduce the risk of conflict, Server Side Apply operations will initially use `force = false`, retrying with `force = true` only when necessary. 
 This ensures Strimzi does not unintentionally take ownership of fields managed by other controllers unless explicitly intended.
