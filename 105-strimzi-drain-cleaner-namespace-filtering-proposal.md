@@ -99,7 +99,7 @@ private boolean isNamespaceWatched(String namespace) {
 2. Extract namespace from eviction metadata
 3. Check if namespace is watched using `isNamespaceWatched()`
 4. If unwatched: Log debug message and allow eviction immediately
-5. If watched: Continue with existing drain cleaner logic
+5. If watched: Continue with existing Drain Cleaner logic
 
 ## Affected projects
 
