@@ -143,7 +143,7 @@ env:
     value: "kafka-prod,kafka-dev"
 ```
 - Eviction request for pod in `kafka-prod` namespace → Full Drain Cleaner processing
-- Result: Normal Strimzi drain cleaner behavior
+- Result: Normal Strimzi Drain Cleaner behavior
 
 **Example 2: Unwatched Namespace**
 - Eviction request for pod in `app-namespace` → Immediate allow
