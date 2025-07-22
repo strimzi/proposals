@@ -39,7 +39,7 @@ This issue affects enterprise environments where:
 
 **Mitigation**: Clear documentation must emphasize that:
 - Only ONE drain cleaner instance should be deployed per cluster
-- Namespace filtering is for security compliance, not for multi-tenancy
+- Namespace filtering is for security compliance, not to support multi-tenancy
 - Multiple instances will cause operational issues and are not supported
 
 ## Goals
