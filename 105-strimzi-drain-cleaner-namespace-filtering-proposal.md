@@ -2,7 +2,7 @@
 
 ## Summary
 
-This proposal introduces namespace filtering capability to the Strimzi Drain Cleaner through a new `STRIMZI_DRAIN_NAMESPACES` environment variable. This feature enables the drain cleaner to only process eviction requests for pods in specified namespaces, addressing security and operational challenges in multi-tenant enterprise Kubernetes environments.
+This proposal introduces support for namespace filtering in the Strimzi Drain Cleaner using a new `STRIMZI_DRAIN_NAMESPACES` environment variable. This feature enables the drain cleaner to only process eviction requests for pods in specified namespaces, addressing security and operational challenges in multi-tenant enterprise Kubernetes environments.
 
 ## Motivation
 
