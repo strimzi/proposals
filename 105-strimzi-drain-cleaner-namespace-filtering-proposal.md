@@ -146,7 +146,7 @@ env:
 - Result: Normal Strimzi Drain Cleaner behavior
 
 **Example 2: Unwatched Namespace**
-- Eviction request for pod in `app-namespace` → Immediate allow
+- Eviction request for a pod in a namespace not listed in `STRIMZI_DRAIN_NAMESPACES`, such as `app-namespace` → Immediate allow
 - Log: `DEBUG: Ignoring eviction request for Pod some-pod in namespace app-namespace - namespace not in watch list`
 - Result: Eviction proceeds normally, no API calls made
 
