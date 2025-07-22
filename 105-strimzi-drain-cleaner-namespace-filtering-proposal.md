@@ -101,16 +101,10 @@ private boolean isNamespaceWatched(String namespace) {
 4. If unwatched: Log debug message and allow eviction immediately
 5. If watched: Continue with existing drain cleaner logic
 
-## Affected/not affected projects
+## Affected projects
 
 **Affected Projects:**
 - **strimzi-drain-cleaner**: Core implementation of namespace filtering functionality, including packaging and deployment templates
-
-**Not Affected Projects:**
-- **strimzi-operator**: No changes required to main operator logic
-- **strimzi-bridge**: No impact on bridge functionality
-- **strimzi-canary**: Independent component, no changes needed
-- **test-container**: No changes to testing infrastructure
 
 ## Implementation Details
 
@@ -236,13 +230,17 @@ The following documentation will be updated:
 
 1. **Drain Cleaner README.md**: 
    - Add `STRIMZI_DRAIN_NAMESPACES` environment variable description
-   - Include configuration examples
+   - Include configuration examples with default behavior (`"*"` or unset = process all namespaces)
+   - Document DEBUG level logging for filtered namespaces
+   - Clarify that webhooks remain cluster-scoped regardless of namespace filtering
    - Add warning about not deploying multiple instances
 
 2. **Strimzi Operator Deploying Guide**:
    - Update the Drain Cleaner installation section
    - Document procedure for namespace filtering of multi-tenant environments
+   - Explain default behavior and backward compatibility
    - Include RBAC considerations and security benefits
+   - Clarify that application-level filtering doesn't change webhook scope
 
 ## Future Enhancements
 
