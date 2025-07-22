@@ -32,7 +32,7 @@ This issue affects enterprise environments where:
 ### Potential Negative Impacts
 
 **Risk of Multiple Drain Cleaner Deployments**: With namespace filtering, users might be tempted to deploy multiple drain cleaner instances per cluster, which could lead to:
-- Conflicting ValidatingWebhookConfigurations
+- Conflicting `ValidatingWebhookConfigurations`
 - Duplicate webhook processing and potential race conditions
 - Increased operational complexity and resource usage
 - Certificate management challenges
