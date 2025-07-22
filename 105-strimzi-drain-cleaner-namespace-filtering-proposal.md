@@ -241,7 +241,7 @@ The following documentation will be updated:
 
 2. **Strimzi Operator Deploying Guide**:
    - Update the Drain Cleaner installation section
-   - Document namespace filtering for multi-tenant environments
+   - Document procedure for namespace filtering of multi-tenant environments
    - Include RBAC considerations and security benefits
 
 ## Future Enhancements
