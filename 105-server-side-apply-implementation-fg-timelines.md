@@ -3,7 +3,7 @@
 This proposal builds on the original [Server Side Apply proposal](052-k8s-server-side-apply.md), which outlines the technical specification and behavior of Kubernetes Server Side Apply (SSA).
 
 Server Side Apply enables declarative updates to Kubernetes resources by tracking ownership of individual fields through the `.metadata.managedFields` property. 
-This allows multiple controllers to safely modify different parts of the same resource without overwriting each other’s changes.
+This mechanism allows multiple controllers to safely modify different parts of the same resource without overwriting each other’s changes.
 
 With Server Side Apply:
 - Strimzi will explicitly claim ownership only of the fields it manages.
@@ -18,27 +18,37 @@ This ensures Strimzi does not unintentionally take ownership of fields managed b
 
 ## Current situation
 
-When the original proposal was merged and PR with the implementation was opened, we discovered that there are complications in the matter of the implementation itself and that the scope is too large to fit a single pull request and feature gate.
-Due to inactivity on the pull request, we decided to close it - so the Server Side Apply feature wasn't implemented yet.
+When the original proposal was merged and a PR was opened with the implementation, we encountered complications in the implementation. We also discovered that the scope is too large to fit a single pull request and feature gate.
+Due to inactivity on the pull request, we decided to close it - so the Server Side Apply feature has not yet been implemented.
 
 ## Motivation
 
-From time to time, we get question, discussion or issue opened on the operators repository, that mention difficulties when using various technologies together with Strimzi and when the particular technology (other operator) is trying to update Custom Resources or Kubernetes resources with annotations managed by Strimzi - which is the most common case. 
-Strimzi reverts this update, but in a while the resource is updated by the other operator again, creating an endless loop of updates.
+Often, we receive issues in the operator repository concerning conflicts between Strimzi and other technologies. Typically, these conflicts arise when another operator attempts to update annotations on Custom Resources or Kubernetes resources that are managed by Strimzi.
+Strimzi reverts the changes, but the other operator re-applies them, resulting in an endless loop of conflicting updates.
 
-The Server Side Apply would fix these issues, as it was mentioned in the [original proposal](052-k8s-server-side-apply.md).
-Also, based on the comments from the community, it seems this is desired feature that should be implemented in Strimzi.
+The Server Side Apply would resolve these issues, as described in the [original proposal](052-k8s-server-side-apply.md).
+Based on community feedback, there is strong demand for Strimzi to implement Server-Side Apply.
 
 ## Proposal
 
-In order to implement Server Side Apply in Strimzi, we decided to split the implementation into few parts - or phases.
-Each phase will be gated by its own feature gate and will have its own graduation timeline.
-This will make the implementation easier, community users would be able to provide early feedback on the implementation and issues they might encounter, and it will allow users to use this feature gradually for each group of resources - without need of enabling it for all at once.
-Finally, each of the feature gate will be also available in the operator that will manage such resource covered by the feature gate.
+In order to implement Server Side Apply in Strimzi, we propose splitting the implementation of SSA support into phases.
+Each phase will:
+
+- Be controlled by its own feature gate
+- Follow an independent graduation timeline
+- Allow gradual adoption for specific resource types
+- Enable users to test and provide feedback early
+- Be scoped to the operator managing the affected resource
 
 ### Proposed Feature Gates and Timelines
 
-We will begin by enabling Server Side Apply for the resources that have historically caused the most user issues — particularly those that are frequently updated by other operators — namely: `Service`, `ServiceAccount`, `ConfigMap`, `PersistentVolumeClaim`, and `Ingress`.
+We will begin by enabling Server Side Apply for the resources that most frequently cause user issues, especially those updated by other operators:
+
+- `Service`
+- `ServiceAccount`
+- `ConfigMap`
+- `PersistentVolumeClaim`
+- `Ingress`
 
 This initial implementation will be gated under a single feature flag:
 
@@ -54,7 +64,7 @@ However, each feature gate is expected to spend approximately three minor releas
 
 ## Affected/not affected projects
 
-The only affected project is Strimzi operators repository. 
+The only affected project is the Strimzi operator repository. 
 
 ## Compatibility
 
