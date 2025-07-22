@@ -44,7 +44,7 @@ This issue affects enterprise environments where:
 
 ## Goals
 
-- **Primary Goal**: Enable namespace-level filtering to allow drain cleaner deployment in restrictive RBAC environments
+- **Primary Goal**: Enable namespace-level filtering to allow Drain Cleaner deployment in restrictive RBAC environments
 - **Security Goal**: Reduce actual pod API calls to only configured namespaces while maintaining webhook functionality
 - **Operational Goal**: Eliminate log noise from permission errors in unmanaged namespaces
 - **Compatibility Goal**: Maintain full backward compatibility with existing deployments
