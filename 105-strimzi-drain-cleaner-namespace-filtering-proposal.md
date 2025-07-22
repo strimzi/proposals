@@ -1,4 +1,4 @@
-# Add namespace filtering support to Strimzi Drain Cleaner
+# Add support for namespace filtering in Strimzi Drain Cleaner
 
 ## Summary
 
