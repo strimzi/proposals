@@ -60,7 +60,7 @@ This issue affects enterprise environments where:
 
 ### Overview
 
-Introduce a new environment variable `STRIMZI_DRAIN_NAMESPACES` that accepts a comma-separated list of namespace names. When configured, the drain cleaner will:
+Introduce a new environment variable `STRIMZI_DRAIN_NAMESPACES` that accepts a comma-separated list of namespace names. When configured, the Drain Cleaner will:
 
 1. Continue receiving all eviction webhook requests (required for webhook functionality)
 2. Filter requests at the application level before attempting pod access
