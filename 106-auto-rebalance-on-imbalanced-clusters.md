@@ -1,8 +1,8 @@
-# Auto-rebalancing on imbalanced cluster
+# Auto-rebalance on imbalanced clusters
 
 This proposal is about adding support for auto-rebalancing the Kafka cluster in case it gets imbalanced due to some issues like unevenly distributed replicas or overloaded brokers e.t.c.
 When enabled, the Strimzi operator should automatically resolve these issues detected by the Anomaly Detector Manager by running KafkaRebalance via Cruise Control using the KafkaRebalance resource.
-Anomalies are detected by Cruise Control using the anomaly detector manager (see section [ Anomaly Detector Manager](./106-self-healing-feature-in-operator.md#anomaly-detector-manager) below for a detailed description).
+Anomalies are detected by Cruise Control using the anomaly detector manager (see section [ Anomaly Detector Manager](./106-auto-rebalance-on-imbalanced-clusters.md#anomaly-detector-manager) below for a detailed description).
 
 ## Motivation
 
@@ -12,7 +12,7 @@ It would be useful for users of Strimzi to be able to have these anomalies fixed
 
 ### Introduction to Self Healing
 
-![self-healing flow diagram](images/105-self-healing-flow.png)
+![self-healing flow diagram](images/106-self-healing-flow.png)
 
 The above flow diagram depicts the self-healing process in Cruise Control.
 The anomaly detector manager detects an anomaly (using the detector classes) and forwards it to the notifier.
@@ -81,7 +81,7 @@ This proposal allows the users to have their cluster balanced automatically when
 With self-healing ability of Cruise Control, the rebalances are triggered automatically in the cluster which means that the operator wouldn't have the information about when a rebalance is happening.
 To resolve this issue, we will only make use of the ability of Cruise Control to detect the anomalies and based on the detection, we will then notify the operator to run the rebalance using an approach based on the existing auto-rebalance for scaling feature.
 We will be using the goal violation anomaly detection related classes in Cruise Control to detect imbalanced cluster.
-Doing this will provide us with following merits:
+Doing this will provide us with the following advantages:
 * we will ensure that the operator knows what is going on in the Kafka cluster.
 * using the existing `KafkaRebalance` CR system make it easier for users to see what is happening and when, which aids in debugging.
 * ensures the operators is in charge of rebalances.
@@ -103,7 +103,7 @@ They can configure auto-rebalance to enable only for their specific case i.e. se
 Once the auto-rebalance with `skew` mode is enabled, the operator will be ready to trigger auto-rebalance whenever the cluster becomes imbalanced.
 To trigger the auto-rebalance, the operator must know that the cluster is imbalanced due to some goal violation anomaly. 
 We will create our own custom notifier named `AnomalyDetectorNotifier` to do the same.
-This notifier's job will be to update the operator regarding the goal violations so that the operator can trigger a rebalance(see section [AnomalyDetectorNotifier](./106-self-healing-feature-in-operator.md#anomalydetectornotifier))
+This notifier's job will be to update the operator regarding the goal violations so that the operator can trigger a rebalance(see section [AnomalyDetectorNotifier](./106-auto-rebalance-on-imbalanced-clusters.md#anomalydetectornotifier))
 With this proposal, we are only going to support auto-rebalance on imbalanced cluster.
 We also plan to implement the same for topic and metrics related issues, but it will be part of future work since their implementation require different approach.
 For example, when dealing with topic related issues, it will require a coordination with topic operator and metrics issues will require coordination with the Kafka apis.
@@ -226,7 +226,7 @@ data:
 
 The operator will then check if any configmap with prefix `goal-violation` is created or not, if it finds one created then operator will trigger the rebalance.
 Separate configmaps would be created for every goal violation such that on completion of the rebalance we can remove the particular configmap.
-The merits of using a separate configmap are:
+The advantages of using a separate configmap for every anomaly are:
 1. Every anomaly would have a separate place to put their data in.
 2. Better readability.  
 3. Improves scope for future improvement when dealing with different violation, for example topic or metrics related violations.
