@@ -401,7 +401,7 @@ flowchart TB
   C -- queued scale Down --> D[RebalanceOnScaleDown]
   C -- queued scale up --> E[RebalanceOnScaleUp]
   C -- queued rebalance --> F[RebalanceOnAnomalyDetection]
-  B --> G[`PendingProposal`, `ProposalReady` or `Rebalancing`]
+  B --> G[PendingProposal, ProposalReady or Rebalancing]
   G --> H{{rebalancing is running}}
   B --> I[NotReady]
   I --> J{{Transition to Idle state and delete rebalance resource and configmap}}
@@ -465,3 +465,7 @@ Pros:
 
 Cons:
 * Operator wouldn't play any role in the process
+
+## Future Scope
+In the future, we plan to introduce auto-rebalance for topic and metrics related imbalances.
+AS this feature evolves we can even think of having ways to fix issue like disk failure and broker failures automatically since the fix would be driven by the operator.
