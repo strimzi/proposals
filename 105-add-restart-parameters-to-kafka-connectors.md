@@ -50,7 +50,7 @@ private Future<List<Condition>> maybeRestartConnector(Reconciliation reconciliat
     if (hasRestartAnnotation(resource, connectorName)) {
         boolean restartIncludeTasks = hasRestartIncludeTasksAnnotation(resource, connectorName);
         boolean restartOnlyFailedTasks = hasRestartOnlyFailedTasksAnnotation(resource, connectorName);
-        LOGGER.debugCr(reconciliation, "Restarting connector {}", connectorName);
+        LOGGER.debugCr(reconciliation, "Restarting connector {}, IncludeTasks {}, OnlyFailedTasks {}", connectorName, restartIncludeTasks, restartOnlyFailedTasks);
         return VertxUtil.completableFutureToVertxFuture(apiClient.restart(host, port, connectorName, restartIncludeTasks, restartOnlyFailedTasks))
                 .compose(ignored -> removeRestartAnnotation(reconciliation, resource)
                     .compose(v -> Future.succeededFuture(conditions)),
@@ -80,5 +80,12 @@ As an example set `strimzi.io/restart-include-tasks` to false and `strimzi.io/re
 We will keep default value as false for both variables, keeping backward compatibility for users not using the new annotations.
 
 ## Rejected alternatives
+There are other alternatives considered and the reason why not chosen is as follows:
 
-Nothing to add here.
+1. Adding new parameters to the existing `strimzi.io/restart` annotation.
+   - This was rejected because it would complicate the annotation's semantics and could lead to confusion about how to use it correctly. 
+   - Instead, introducing separate annotations for clarity is preferred.
+2. Remove new annotations after connector restarted.
+    - Removing all annotations after restart the connector would require to use always pass new arguments in one single command, it means: 3 annotations in one-shot. What could
+    lead to confusion and mistakes.
+
