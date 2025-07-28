@@ -38,8 +38,8 @@ The same way we check if there is a restart annotation, we will check if there i
 something like this:
 
 ```java
-boolean restartIncludeTasks = hasRestartInlcudeTastksAnnotation(resource, connectorName);
-boolean restartOnlyFailedTasks = hasRestartOnlyFailedTastksAnnotation(resource, connectorName);
+boolean restartIncludeTasks = hasRestartIncludeTasksAnnotation(resource, connectorName);
+boolean restartOnlyFailedTasks = hasRestartOnlyFailedTasksAnnotation(resource, connectorName);
 ```
 
 The final method should look like this:
