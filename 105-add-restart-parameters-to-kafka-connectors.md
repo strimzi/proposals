@@ -48,8 +48,8 @@ The final method should look like this:
 @SuppressWarnings({ "rawtypes" })
 private Future<List<Condition>> maybeRestartConnector(Reconciliation reconciliation, String host, KafkaConnectApi apiClient, String connectorName, CustomResource resource, List<Condition> conditions) {
     if (hasRestartAnnotation(resource, connectorName)) {
-        boolean restartIncludeTasks = hasRestartInlcudeTastksAnnotation(resource, connectorName);
-        boolean restartOnlyFailedTasks = hasRestartOnlyFailedTastksAnnotation(resource, connectorName);
+        boolean restartIncludeTasks = hasRestartIncludeTasksAnnotation(resource, connectorName);
+        boolean restartOnlyFailedTasks = hasRestartOnlyFailedTasksAnnotation(resource, connectorName);
         LOGGER.debugCr(reconciliation, "Restarting connector {}", connectorName);
         return VertxUtil.completableFutureToVertxFuture(apiClient.restart(host, port, connectorName, restartIncludeTasks, restartOnlyFailedTasks))
                 .compose(ignored -> removeRestartAnnotation(reconciliation, resource)
