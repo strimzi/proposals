@@ -1,6 +1,6 @@
 # Add restart parameters to Kafka connectors
 
-In order to support [Kafka KIP-745](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=181308623) we need to accept two more parameters on restart kafka connectors: `includeTasks` and `onlyFailed`.
+In order to support [Kafka KIP-745](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=181308623) we need to accept two more parameters on restart Kafka connectors: `includeTasks` and `onlyFailed`.
 
 ## Current situation
 
