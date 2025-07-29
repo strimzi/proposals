@@ -26,7 +26,7 @@ And unlike ACL rules created for regular users, the User Operator would just ign
 
 To further increase the risk, this mechanism is documented only briefly in a single paragraph in our documentation.
 That makes it easy to miss, and most Strimzi users probably don't know about this _feature_.
-And while the User Operator logs an INFO level message when it is ignoring any ACL rules, the log message can be easily missed.
+And while the User Operator logs an INFO level message when it is ignoring any ACL rules, the log message can also be easily missed.
 
 This proposal suggests making the list of ignored users configurable with an empty default value (i.e., no users will be ignored by default).
 For most users, this should have zero impact.
@@ -34,7 +34,7 @@ And users who need the `ANONYMOUS` or `*` users to be ignored can configure them
 The explicit configuration will ensure that they are aware that the ACL rules for these users would be ignored even without carefully reading every single documentation page, because they had to configure it.
 
 In addition to the main motivation - security - this proposal should deliver some additional benefits.
-It proposes extending the ignore list to the whole User Operator and using it even for quotas and SCRAM-SHA-512 credentials.
+It proposes extending the ignore list to all User Operator-managed resources, including ACLs, quotas, and SCRAM-SHA-512 credentials.
 It also proposes using a regular expression pattern instead of a list of users to allow more flexibility in how the ignored users are defined.
 This would give our users more flexibility when using the User Operator in standalone mode.
 They would be able to use the User Operator with existing Kafka clusters that already have some other users defined by configuring the ignore pattern to ignore the internal users and not interfere with them while managing other users through the User Operator and `KafkaUser` resources.
@@ -44,7 +44,7 @@ They would be able to use the User Operator with existing Kafka clusters that al
 A new configuration option will be introduced in the User Operator.
 It will be named `STRIMZI_IGNORED_USERS_PATTERN`.
 Its default value will be `null`.
-Users will be allowed to set it to the regular expression pattern to define which users should be ignored.
+Users will be allowed to set it to a regular expression pattern to define which users should be ignored.
 
 There will be no new field to configure this option in the `Kafka` CR.
 Users will be able to configure it as a custom environment variable in the `.spec.entityOperator.template` section.
@@ -71,13 +71,13 @@ However, it might be unpredictable what happens when such a `KafkaUser` resource
 When the User Operator catches the deletion event and reconciles it, it will delete the user completely.
 But if the user is deleted while the User Operator is not running or is otherwise busy (full event queue, ongoing reconciliation for given user, etc.), the deletion of the user will be just ignored, and all ACLs, quotas, and credentials will remain in place.
 
-The situation when the user has `KafkaUser` resources with names matching the ignored users pattern is considered a _user configuration error_, and the unpredictable results are considered acceptable behavior.
+If a `KafkaUser` resource name matches the ignored users pattern, it is considered a _user configuration error_, and the unpredictable results are considered acceptable behavior.
 
 ## Performance impact
 
 For most users, no performance impact is expected as they would not be using this feature at all.
-For users who will use this feature in the _legacy_ mode to ignore the `ANONYMOUS` and `*` usernames, no major impact is expected either.
-For users who decide to use this feature with standalone User Operator and existing Kafka cluster not managed by Strimzi, the performance impact will depend on the complexity of the ignore pattern and the number of ACLs / quotas / credentials that will be ignored.
+For users who enable this feature to ignore `ANONYMOUS` and `*` usernames (as with the legacy approach), no major impact is expected either.
+For users who enable this feature with the standalone User Operator and an existing Kafka cluster not managed by Strimzi, the performance impact will depend on the complexity of the ignore pattern and the number of ACLs, quotas, and credentials that will be ignored.
 But in this case, this can be considered as a corresponding cost for this feature.
 And given we in general don't expect the User Operator to manage thousands of users, it should not make this feature unusable.
 
