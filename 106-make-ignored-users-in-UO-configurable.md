@@ -43,7 +43,7 @@ They would be able to use the User Operator with existing Kafka clusters that al
 
 A new configuration option will be introduced in the User Operator.
 It will be named `STRIMZI_IGNORED_USERS_PATTERN`.
-Its default value will be `null`.
+Its default value will be `null`, meaning that no users will be ignored and all will be taken into account.
 Users will be allowed to set it to a regular expression pattern to define which users should be ignored.
 
 There will be no new field to configure this option in the `Kafka` CR.
@@ -81,9 +81,13 @@ For users who enable this feature with the standalone User Operator and an exist
 But in this case, this can be considered as a corresponding cost for this feature.
 And given we in general don't expect the User Operator to manage thousands of users, it should not make this feature unusable.
 
+## Migration path
+
+Users who want to keep the existing functionality will be provided with the YAML example how to set the `STRIMZI_IGNORED_USERS_PATTERN` option in the `Kafka` CR or in the standalone User Operator deployment including the exact value to continue ignoring the `ANONYMOUS` and `*` users.
+
 ## Documentation changes
 
-When implementing the proposal, the release notes will contain a warning about this change including the way to _reenable_ the original feature by configuring the `STRIMZI_IGNORED_USERS_PATTERN` option.
+When implementing the proposal, the release notes will contain a warning about this change and describe the migration path.
 It is also recommended to mention this change in the _What's new_ video or blog post we usually do for new releases.
 This should help ensure that users are aware of this change.
 The regular documentation will be updated to describe the new feature as well.
