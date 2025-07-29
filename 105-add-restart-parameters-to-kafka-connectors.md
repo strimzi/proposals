@@ -4,7 +4,7 @@ In order to support [Kafka KIP-745](https://cwiki.apache.org/confluence/pages/vi
 
 ## Current situation
 
-Currently when adding annotation restart these two new parameters are always false when calling the Kafka connect API.
+Currently when adding annotation restart these two new parameters are always false when calling the Kafka Connect API.
 
 ## Motivation
 
