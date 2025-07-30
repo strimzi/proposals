@@ -1,0 +1,92 @@
+# Use Kafka Admin API to list registered nodes and manage their unregistration
+
+This proposal suggests leveraging [KIP-1073](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1073:+Return+fenced+brokers+in+DescribeCluster+response) to use the Kafka Admin API for listing all registered nodes in an Apache Kafka cluster (including the fenced ones) and and using that information for managing nodes unregistration.
+It replaces the current mechanism that tracks registered nodes in the `Kafka` custom resource status.
+
+## Current situation
+
+Currently, the Strimzi operator tracks the list of registered KRaft nodes (both brokers and controllers) in the `Kafka` custom resource status via the `registeredNodeIds` field, as shown in the example below:
+
+```yaml
+status:
+    clusterId: bXz0umhlQ0WLSobuC-Irdg
+    #....
+    registeredNodeIds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+```
+
+When the Kafka cluster is scaled down, the operator compares the current running node IDs against the stored `registeredNodeIds` to determine which nodes should be unregistered via the Kafka Admin API, because they were removed.
+This logic was introduced as part of the [Strimzi proposal 081](https://github.com/strimzi/proposals/blob/main/081-unregistration-of-KRaft-nodes.md), which implemented a workaround for the limited node unregistration support in Kafka at that time. There was no reliable way to list registered nodes (especially fenced ones), so Strimzi maintained this state internally.
+
+However, this approach has limitations.
+For example, when brokers are initially deployed as mixed-mode nodes (controller + broker) and later have their broker role removed, they remain registered.
+Although these nodes become fenced and controller-only, they may still receive partition assignments for new topics.
+The current implementation does not detect or handle this scenario, leading to missing unregistration.
+This issue has been reported by the community in [GitHub issue #11477](https://github.com/strimzi/strimzi-kafka-operator/issues/11477).
+
+## Motivation
+
+With the introduction of [KIP-1073](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1073%3A+Return+fenced+brokers+in+DescribeCluster+response) in Apache Kafka 4.0.0, the Kafka Admin API now provides the ability to list all registered brokers, including fenced ones.
+This makes it possible to manage unregistration entirely through standard Kafka APIs.
+
+This removes the need for Strimzi to track nodes registration status manually and enables proper handling of edge cases like mixed-node role changes.
+As a result, it also allows for a proper resolution of issue [#11477](https://github.com/strimzi/strimzi-kafka-operator/issues/11477).
+
+## Proposal
+
+This proposal suggests removing the custom registration tracking and instead relying on Apache Kafka's built-in registration tracking available via the Admin API.
+
+### Key changes
+
+The key changes are:
+
+* remove the `status.registeredNodeIds` field from the `Kafka` custom resource. The operator will no longer maintain its own list of registered nodes.
+* use the Kafka Admin client's `describeCluster()` method (with the option of including the fenced nodes) to retrieve the list of currently registered nodes. This call is done within a newly added `KafkaNodeUnregistration.listRegisteredNodes` method.
+* compare the list of registered brokers to the current set of active nodes and determine which ones need to be unregistered.
+* unregister nodes using the existing `KafkaNodeUnregistration.unregisterNodes()` method.
+
+### Reconciliation flow
+
+During a reconciliation, the operator goes through the following steps:
+
+* get current nodes IDs (both brokers and controllers) from the `KafkaCluster.nodes()` as is done today. It also extracts which ones are controller only nodes (not in mixed mode).
+* call `KafkaNodeUnregistration.listRegisteredNodes` method using the Admin client connected to the brokers' bootstrap service to retrieve all registered brokers.
+* build a `nodeIdsToUnregister` list with the nodes IDs to be unregistered.
+* unregister the nodes via the `KafkaNodeUnregistration.unregisterNodes` method as is done today.
+
+The `nodeIdsToUnregister` list is created in the following way: 
+
+* define `previousNodeIds` as the set of all registered brokers returned by Kafka.
+* define `fencedControllerOnlyNodeIds` as the subset of fenced nodes that are now controller-only (i.e., no longer brokers from being mixed-node).
+* finally create `nodeIdsToUnregister` by:
+    * initializing it with the `previousNodeIds`.
+    * removing current running node IDs from it (to detect scale-down).
+    * adding `fencedControllerOnlyNodeIds` (to unregister removed brokers in role change scenarios).
+
+### Error handling
+
+Any error encountered while listing registered nodes is logged as a warning.
+The reconciliation does not fail and the operation is retried during the next reconciliation loop.
+This behavior is consistent with the current handling of errors during the node unregistration process.
+
+## Affected/not affected projects
+
+The only project to be affected is the Strimzi cluster operator.
+The `KafkaNodeUnregistration` class will implement a new method `listRegisteredNodes()` using the Kafka Admin client.
+The `KafkaReconciler` will stop using `status.registeredNodeIds` and instead rely on `listRegisteredNodes()` for determining node unregistration.
+
+## Compatibility
+
+This feature will come in the next Strimzi release with the support for Apache Kafka 4.x versions only (with KIP-1073 implementation available).
+When the operator is upgraded, it removes the `status.registeredNodeIds` field from the custom resource for existing clusters.
+This may impact users relying on that field for GitOps or monitoring.
+However, [Strimzi proposal 081](https://github.com/strimzi/proposals/blob/main/081-unregistration-of-KRaft-nodes.md) clearly stated that the field was temporary and subject to removal once Kafka provided native support.
+
+## Rejected alternatives
+
+N/A
