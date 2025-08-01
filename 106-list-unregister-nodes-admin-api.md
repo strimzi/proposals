@@ -45,7 +45,7 @@ This proposal suggests removing the custom registration tracking and instead rel
 
 The key changes are:
 
-* deprecate the `status.registeredNodeIds` field from the `Kafka` custom resource. The operator will still maintain such list of registered nodes but not using it for unregistration purposes.
+* deprecate the `status.registeredNodeIds` field from the `Kafka` custom resource. The field will remain the CRD but the operator won't set it in the `Kafka` status.
 * use the Kafka Admin client's `describeCluster()` method (with the option of including the fenced nodes) to retrieve the list of currently registered nodes. This call is done within a newly added `KafkaNodeUnregistration.listRegisteredNodes` method.
 * compare the list of registered brokers to the current set of active nodes and determine which ones need to be unregistered.
 * unregister nodes using the existing `KafkaNodeUnregistration.unregisterNodes()` method.
@@ -68,7 +68,7 @@ The `nodeIdsToUnregister` list is created in the following way:
     * removing current running node IDs from it (to detect scale-down).
     * adding `fencedControllerOnlyNodeIds` (to unregister removed brokers in role change scenarios).
 
-The operator still fills the `status.registeredNodeIds` field in the `Kafka` custom resource for backward compatibility even if such field is now deprecated.
+The operator doesn't fill the `status.registeredNodeIds` field in the `Kafka` custom resource anymore.
 
 ### Error handling
 
@@ -85,7 +85,7 @@ The `KafkaReconciler` will stop using `status.registeredNodeIds` and instead rel
 ## Compatibility
 
 This feature will come in the next Strimzi release with the support for Apache Kafka 4.x versions only (with KIP-1073 implementation available).
-When the operator is upgraded, it won't use the `status.registeredNodeIds` field anymore but still filling it with the registered nodes.
+When the operator is upgraded, it won't use the `status.registeredNodeIds` field anymore so users should deal with it if they are using such a field for any operational purpose.
 However, [Strimzi proposal 081](https://github.com/strimzi/proposals/blob/main/081-unregistration-of-KRaft-nodes.md) clearly stated that the field was temporary and subject to be deprecated once Kafka provided native support and then removed in the future as part of the `v1` CRD API.
 
 ## Rejected alternatives
