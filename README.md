@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 107 | [Make _ignored_ users in the User Operator configurable](./107-make-ignored-users-in-UO-configurable.md) |
 | 106 | [Add namespace filtering support to Strimzi Drain Cleaner](./106-strimzi-drain-cleaner-namespace-filtering-proposal.md) |
 | 105 | [Server Side Apply - Implementation Split, Feature Gates, and Timelines](./105-server-side-apply-implementation-fg-timelines.md) |
 | 104 | [Move HTTP bridge to OpenAPI 3.1.0 with Vert.x 5](./104-bridge-vertx5-openapi-3.1.0.md) |
