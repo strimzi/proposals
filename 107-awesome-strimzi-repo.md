@@ -1,7 +1,7 @@
 # Add `awesome-strimzi` repository with Strimzi community-created resources
 
 This proposal recommends creating a new GitHub repository, `awesome-strimzi`, under the Strimzi organization.
-Its purpose is to maintain a curated list of community-created resources related to Strimzi, such as blog posts, articles, libraries, frameworks, tools, and other useful materials that are not produced by official Strimzi contributors.
+Its purpose is to maintain a list of community-created resources related to Strimzi, such as blog posts, articles, libraries, frameworks, tools, and other useful materials that are not produced by official Strimzi contributors.
 
 Examples include:
 
@@ -19,7 +19,7 @@ This makes it harder for new and existing users to discover the broader ecosyste
 ## Motivation
 
 Strimzi benefits from a vibrant community whose work extends far beyond the official project deliverables.
-Having a central, community-curated list will:
+Having a central list will:
 
 * showcase the breadth of the Strimzi ecosystem.
 * help users discover useful external resources.
@@ -37,15 +37,15 @@ Create a new GitHub repository named `awesome-strimzi` within the Strimzi organi
 This repository will:
 
 * follow the popular awesome list format used across other projects.
-* contain curated, categorized links to external Strimzi-related resources.
-* be maintained by Strimzi contributors, ensuring the content is relevant, appropriate, and of good quality.
+* contain categorized links to external Strimzi-related resources.
+* be maintained by Strimzi contributors, ensuring the content is relevant, appropriate, and not being a "sales pitch", spam or similar.
 
 Similar initiatives, but not official, are [awesome-amqp](https://github.com/xinchen10/awesome-amqp) and [awesome-kafka](https://github.com/semantalytics/awesome-kafka).
 Unlike unofficial community lists, this will be an official Strimzi-hosted list to give added visibility and credibility to community contributions.
 
 The repository will contain two main files:
 
-* README.md with the main curated list of resources.
+* README.md with the main list of resources.
 * CONTRIBUTING.md with guidelines for contributing to the list.
 
 The main content, within the README.md file, will be structured the following way:
@@ -73,7 +73,7 @@ The CONTRIBUTING.md would include clear instructions about:
 
 * how to open a PR.
 * submission format (title, short description, link).
-* guidelines for quality and relevance.
+* guidelines about what should be considered as an appropiate contribution.
 
 ## Affected/not affected projects
 
