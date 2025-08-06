@@ -1,6 +1,6 @@
-Declarative Management of Kafka Preview Features in Strimzi
+## Declarative Management of Kafka Preview Features in Strimzi
 
-Current Situation:
+## Current Situation:
 
 Kafka preview features (such as kafka.shared.consumer) need to be manually enabled using the kafka-features.sh or the Kafka Admin API.
 This works in static clusters but presents issues in dynamic, testing or GitOps-managed environments.
@@ -37,7 +37,7 @@ However, these tools require manual execution after cluster creation, which is i
 This proposal introduces a way to declare desired preview features via the Kafka CR, allowing the Strimzi operator to apply and reconcile the correct state automatically.
 
 
-Motivation:
+## Motivation:
 These features are disabled by default and must be explicitly enabled on each broker in the cluster.
 In environments where clusters are frequently recreated, such as CI/CD pipelines or testing setups, manually enabling these features is both error-prone and hard to maintain.
 
@@ -97,16 +97,16 @@ Limitations
 
 - More error-prone due to lack of CR validation.
 
-Affected Projects:
+## Affected Projects:
 - strimzi-kafka-operator — Kafka CRD schema and reconciliation logic.
 
 - strimzi-images — Potential updates to include Admin API handling for preview features.
 
-Compatibility:
+## Compatibility:
 
 The previewFeatures field will be optional, and clusters without it will behave as they do today.
 
-Rejected alternatives:
+## Rejected alternatives:
 External Script or Init Container
 - A user-managed init container or script could run kafka-features.sh at broker startup.
 - This would be configured via a ConfigMap, environment variables, or a mounted script.
