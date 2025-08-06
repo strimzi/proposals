@@ -89,13 +89,7 @@ Considerations
 
 - Validation rules needed to ensure correct feature name, version, and enabled state.
 
-Benefits:
-
-- No changes to Strimzi codebase.
-
-- Useful for quick prototypes or special environments.
-
-Limitations:
+Limitations
 
 - Not declarative through the Kafka CR.
 
