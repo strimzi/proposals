@@ -40,8 +40,7 @@ This repository will:
 * contain categorized links to external Strimzi-related resources.
 * be maintained by Strimzi contributors, ensuring the content is relevant, appropriate, and not being a "sales pitch", spam or similar.
 
-Similar initiatives, but not official, are [awesome-amqp](https://github.com/xinchen10/awesome-amqp) and [awesome-kafka](https://github.com/semantalytics/awesome-kafka).
-Unlike unofficial community lists, this will be an official Strimzi-hosted list to give added visibility and credibility to community contributions.
+Similar initiatives, though unofficial, include [awesome-amqp](https://github.com/xinchen10/awesome-amqp) and [awesome-kafka](https://github.com/semantalytics/awesome-kafka), whereas this will be an official Strimzi‑hosted list to give added visibility and credibility to community contributions.
 
 The repository will contain two main files:
 
