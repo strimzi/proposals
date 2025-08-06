@@ -1,6 +1,6 @@
 # Use Kafka Admin API to list registered nodes and manage their unregistration
 
-This proposal suggests leveraging [KIP-1073](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1073:+Return+fenced+brokers+in+DescribeCluster+response) to use the Kafka Admin API for listing all registered nodes in an Apache Kafka cluster (including the fenced ones) and and using that information for managing nodes unregistration.
+This proposal suggests leveraging [KIP-1073](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1073:+Return+fenced+brokers+in+DescribeCluster+response) to use the Kafka Admin API for listing all registered nodes in an Apache Kafka cluster (including the fenced ones) and using that information for managing nodes unregistration.
 It replaces the current mechanism that tracks registered nodes in the `Kafka` custom resource status.
 
 ## Current situation
@@ -45,7 +45,7 @@ This proposal suggests removing the custom registration tracking and instead rel
 
 The key changes are:
 
-* deprecate the `status.registeredNodeIds` field from the `Kafka` custom resource. The field will remain the CRD but the operator won't set it in the `Kafka` status.
+* deprecate the `status.registeredNodeIds` field from the `Kafka` custom resource. The field will remain in the CRD but the operator won't set it in the `Kafka` status.
 * use the Kafka Admin client's `describeCluster()` method (with the option of including the fenced nodes) to retrieve the list of currently registered nodes. This call is done within a newly added `KafkaNodeUnregistration.listRegisteredNodes` method.
 * compare the list of registered brokers to the current set of active nodes and determine which ones need to be unregistered.
 * unregister nodes using the existing `KafkaNodeUnregistration.unregisterNodes()` method.
