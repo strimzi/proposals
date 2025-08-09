@@ -21,10 +21,8 @@ The feature state includes:
 *  Enabled/disabled flag
 
 Currently, these features are enabled via:
-
-The kafka-features.sh  tool
-
-The Kafka Admin API (Feature API)
+* The `kafka-features.sh` tool
+* The Kafka Admin API (Feature API)
 
 However, these tools require manual execution after cluster creation, which is incompatible with automated GitOps workflows or testing environments.
 
