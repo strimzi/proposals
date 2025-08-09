@@ -66,9 +66,7 @@ spec:
 
 ### Benefits
 - Declarative and GitOps-friendly.
-
 - Drift protection through automatic reconciliation.
-
 - Consistent environments across deployments.
 
 ### Considerations
