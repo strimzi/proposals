@@ -62,9 +62,7 @@ spec:
 
 ### Operator Behaviour
 1) On reconciliation, Strimzi queries the current preview feature state using the Kafka Admin API.
-
-2) If a mismatch is detected, the Operator applies the desired state using the Admin API or kafka-features.sh.
-
+2) If a mismatch is detected, the Operator applies the desired state using the Admin API or `kafka-features.sh`.
 3) Changes are reconciled continuously to prevent drift.
 
 Benefits
