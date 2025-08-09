@@ -55,7 +55,7 @@ spec:
   kafka:
     version: 3.7.0
     previewFeatures:
-      - name: kafka.shared.consumer
+      - name: share.version
         enabled: true
         version: 1
 
