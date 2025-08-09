@@ -74,7 +74,7 @@ Benefits
 
 - Consistent environments across deployments.
 
-Considerations
+### Considerations
 - Requires changes to the Kafka CRD schema.
 
 - Operator logic must be extended to handle feature state reconciliation.
