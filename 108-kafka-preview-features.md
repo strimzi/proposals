@@ -2,7 +2,7 @@
 
 ## Current Situation:
 
-Kafka preview features (such as kafka.shared.consumer) need to be manually enabled using the kafka-features.sh or the Kafka Admin API.
+Kafka preview features (such as `kafka.shared.consumer`) need to be manually enabled using the ¨kafka-features.sh` or the Kafka Admin API.
 This works in static clusters but presents issues in dynamic, testing or GitOps-managed environments.
 There is currently no way to express these features declaratively within the Kafka custom resource.
 Without declarative support, the following issues arise:
