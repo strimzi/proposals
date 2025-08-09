@@ -40,9 +40,8 @@ In environments where clusters are frequently recreated, such as CI/CD pipelines
 In GitOps workflows, lack of declarative configuration breaks the principle of having the full desired cluster state stored in version control.
 As a result:
 
-- Teams cannot easily maintain consistent environments across dev/staging/prod.
-
-- Manual intervention is needed after each deployment or cluster recreation.
+* Teams cannot easily maintain consistent environments across dev/staging/prod.
+* Manual intervention is needed after each deployment or cluster recreation.
 
 By supporting preview features through the Kafka CR, Strimzi can offer a seamless, GitOps-compatible, and maintainable experience for all cluster types.
 
