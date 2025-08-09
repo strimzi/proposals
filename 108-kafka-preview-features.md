@@ -65,7 +65,7 @@ spec:
 2) If a mismatch is detected, the Operator applies the desired state using the Admin API or `kafka-features.sh`.
 3) Changes are reconciled continuously to prevent drift.
 
-Benefits
+### Benefits
 - Declarative and GitOps-friendly.
 
 - Drift protection through automatic reconciliation.
