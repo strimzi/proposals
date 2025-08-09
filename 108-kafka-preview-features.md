@@ -16,12 +16,9 @@ These features are disabled by default and must be explicitly enabled on each br
 
 Kafka stores the state of these features in the metadata quorum (ZooKeeper or KRaft, depending on the deployment).
 The feature state includes:
-
-- Feature name (e.g., kafka.shared.consumer)
-
-- Version 
-
-- Enabled/disabled flag
+* Feature name (e.g., kafka.shared.consumer)
+* Version 
+*  Enabled/disabled flag
 
 Currently, these features are enabled via:
 
