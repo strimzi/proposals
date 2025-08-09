@@ -12,7 +12,7 @@ Without declarative support, the following issues arise:
 
 Kafka Preview Features Explained
 Kafka preview features are opt-in capabilities introduced in newer Kafka versions to allow early access to experimental or upcoming functionality.
-These features are disabled by default and must be explicitly enabled on each broker to become usable.
+Early access or Preview features that are not production-ready yet, are disabled by default and must be explicitly enabled on each broker to become usable.
 
 Kafka stores the state of these features in the metadata quorum (ZooKeeper or KRaft, depending on the deployment).
 The feature state includes:
