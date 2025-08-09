@@ -20,7 +20,7 @@ The feature state includes:
 * Version 
 *  Enabled/disabled flag
 
-Currently, these features are enabled via:
+Currently, this kind of features are enabled via:
 * The `kafka-features.sh` tool
 * The Kafka Admin API (Feature API)
 
