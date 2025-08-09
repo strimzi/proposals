@@ -6,12 +6,9 @@ Kafka preview features (such as kafka.shared.consumer) need to be manually enabl
 This works in static clusters but presents issues in dynamic, testing or GitOps-managed environments.
 There is currently no way to express these features declaratively within the Kafka custom resource.
 Without declarative support, the following issues arise:
-
-- Feature drift from manual changes.
-
-- Loss of settings in ephemeral environments.
-
-- Inability to track changes through Git.
+* Feature drift from manual changes.
+* Loss of settings in ephemeral environments.
+* Inability to track changes through Git.
 
 Kafka Preview Features Explained
 Kafka preview features are opt-in capabilities introduced in newer Kafka versions to allow early access to experimental or upcoming functionality.
