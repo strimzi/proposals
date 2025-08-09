@@ -30,7 +30,7 @@ This proposal introduces a way to declare desired preview features via the Kafka
 
 ## Motivation:
 
-These features are disabled by default and must be explicitly enabled on each broker in the cluster.
+Preview features are disabled by default and must be explicitly enabled on each broker in the cluster.
 In environments where clusters are frequently recreated, such as CI/CD pipelines or testing setups, manually enabling these features is both error-prone and hard to maintain.
 
 - In Kafka, preview features are managed per-broker and stored in ZooKeeper or KRaft metadata.
