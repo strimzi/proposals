@@ -28,8 +28,8 @@ However, these tools require manual execution after cluster creation, which is i
 
 This proposal introduces a way to declare desired preview features via the Kafka CR, allowing the Strimzi operator to apply and reconcile the correct state automatically.
 
-
 ## Motivation:
+
 These features are disabled by default and must be explicitly enabled on each broker in the cluster.
 In environments where clusters are frequently recreated, such as CI/CD pipelines or testing setups, manually enabling these features is both error-prone and hard to maintain.
 
