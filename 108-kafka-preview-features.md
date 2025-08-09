@@ -10,7 +10,7 @@ Without declarative support, the following issues arise:
 * Loss of settings in ephemeral environments.
 * Inability to track changes through Git.
 
-Kafka Preview Features Explained
+### Kafka Preview Features Explained
 Kafka preview features are opt-in capabilities introduced in newer Kafka versions to allow early access to experimental or upcoming functionality.
 Early access or Preview features that are not production-ready yet, are disabled by default and must be explicitly enabled on each broker to become usable.
 
