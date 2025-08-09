@@ -45,7 +45,7 @@ As a result:
 
 By supporting preview features through the Kafka CR, Strimzi can offer a seamless, GitOps-compatible, and maintainable experience for all cluster types.
 
-Proposal:
+## Proposal
 I propose to add native declarative support for preview features in the Kafka CR.
 
 CRD Changes
