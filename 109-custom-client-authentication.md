@@ -59,12 +59,14 @@ The `config` field will allow configuration of the fields starting with the foll
 * `ssl.keystore.`
 * `sasl.`
 
+Any other options will be filtered out with a warning and not used.
+
 These options are not permissible with other types of authentication and cannot be set in the regular _configuration_ sections (i.e. in `.spec.config` or `.spec.clusters.config`).
 Other options which might be needed by the custom authentication mechanisms can be configured in the regular _configuration_ sections.
 That way, we make sure that users are able to configure the custom mechanisms, but cannot use it to override the other configuration options blocked by Strimzi (e.g. the REST API configuration for Connect) by mistake or intention.
 
 Use of TLS and the configuration of trusted certificates will continue to be done through the corresponding `tls` sections.
-It will not be configurable through the custom authentication mechanism.
+It will not be configurable through the custom authentication mechanism (as only options with `ssl.keystore.` and `sasl.` prefixes will be allowed).
 
 ### Examples
 
@@ -105,7 +107,7 @@ The following examples show how the new `custom` type authentication might be us
 
 Strimzi will not include any custom authentication plugins in its container images.
 Users will be responsible for adding them on their own.
-They can extend the Strimzi container images or use some of the more advanced features such as [Image Volumes](https://github.com/strimzi/proposals/blob/main/102-using-image-volumes-to-improve-extensibility-of-Strimzi-operands.md).
+They can extend the Strimzi container images or use some of the more advanced features such as [Image Volumes](https://github.com/strimzi/proposals/blob/main/102-using-image-volumes-to-improve-extensibility-of-Strimzi-operands.md) as documented in our [docs](https://strimzi.io/docs/operators/latest/full/configuring.html#con-common-configuration-volumes-reference).
 
 ### Implementation details
 
