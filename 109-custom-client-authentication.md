@@ -30,12 +30,9 @@ For example, Microsoft Event Hubs supports SASL PLAIN-based authentication as an
 However, even when such an alternative mechanism is available, it is often not as secure as the custom authentication mechanism, and does not integrate so well with the native identity and access management services of a given provider.
 
 Strimzi users typically integrate with these services in two different situations:
-* Some Strimzi users use only some parts of the Strimzi project.
-  They use managed Apache Kafka services to run the Kafka cluster (brokers, controllers, ...).
-  And they combine it with a Kafka Connect cluster or Strimzi HTTP Bridge running in a self-managed way using Strimzi.
-* Other Strimzi users use Mirror Maker 2 to integrate between different Apache Kafka managed services or between a Strimzi-based Apache Kafka cluster and another managed Kafka cluster.
-  This can be part of a one-off migration project.
-  But it can also be part of a long-term hybrid cloud setup that combines different cloud providers and on-premise services.
+* Users run a managed Apache Kafka service for their Kafka cluster (brokers and controllers) but use Strimzi to self-manage other components like Kafka Connect or the HTTP Bridge.
+* Users employ MirrorMaker 2 to synchronize data between different managed Kafka services or between a Strimzi-based cluster and a managed one.
+  This can be for a one-off migration or a long-term hybrid cloud architecture.
 
 Adding support for custom client-side authentication would give these users a way to use the custom authentication mechanisms.
 It would allow them to improve their security (by using better mechanisms and better integration with other services).
@@ -46,22 +43,23 @@ And it should also make it easier to configure their operands as it should be mo
 A new `type: custom` authentication type will be added to all places where we use client-side authentication today:
 * Kafka Connect
 * Strimzi HTTP Bridge
-* Kafka Mirror Maker 2
+* Kafka MirrorMaker 2
 
 The API for the new `custom` type client-side authentication would follow the existing server-side API.
+For more information, see [`KafkaListenerAuthenticationCustom` schema reference](https://strimzi.io/docs/operators/in-development/configuring#type-KafkaListenerAuthenticationCustom-reference)
 It will have a flag indicating whether the authentication mechanism uses SASL.
 And it will have a `config` section for adding additional configuration options such as `sasl.mechanism` or JAAS configuration.
 
 The `secrets` field that is present in the server-side `custom` authentication but is already deprecated will not be used in the client-side API.
 Users can use the _additional volumes_ feature to add custom secrets required by the authentication mechanism.
 
-Users can use configuration providers for values such as passwords to load them from files or environment variables without having them hardcoded and visible in the Strimzi custom resources.
+Users can also use configuration providers for values such as passwords to load them from files or environment variables without having them hardcoded and visible in the Strimzi custom resources.
 
 The `config` field will allow configuration of the fields starting with the following prefixes:
 * `ssl.keystore.`
 * `sasl.`
 
-These options are otherwise forbidden and cannot be set in the regular _configuration_ sections (i.e. in `.spec.config` or `.spec.clusters.config`).
+These options are not permissible with other types of authentication and cannot be set in the regular _configuration_ sections (i.e. in `.spec.config` or `.spec.clusters.config`).
 Other options which might be needed by the custom authentication mechanisms can be configured in the regular _configuration_ sections.
 That way, we make sure that users are able to configure the custom mechanisms, but cannot use it to override the other configuration options blocked by Strimzi (e.g. the REST API configuration for Connect) by mistake or intention.
 
@@ -92,7 +90,7 @@ The following examples show how the new `custom` type authentication might be us
       sasl.jaas.config: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;
       sasl.login.callback.handler.class: CustomAuthenticateCallbackHandler
   ```
-* Custom mTLS authentication (useful for example when the key is injected by some custom mechanism instead of being loaded from a Kubernetes Secret):
+* Custom mTLS authentication (when the key is injected by an external mechanism rather than loaded from a Kubernetes `Secret`):
   ```yaml
   authentication:
     type: custom
@@ -142,8 +140,8 @@ As such, it is fully backwards-compatible.
 
 We should consider replacing the existing `type: oauth` authentication with `type: custom` in the future (both on server and client side).
 The `type: oauth` authentication has a large number of different options and configuration types which allow many different configurations.
-They introduce unnecessary interdependencies between our OAuth library and the Strimzi cluster operator.
-Using the `type: custom` authentication instead would:
+They introduce unnecessary interdependencies between our OAuth library and the Strimzi Cluster Operator.
+Using `type: custom` for OAuth authentication would provide the following advantages:
 * Give users more flexibility to configure OAuth according to their needs
 * Provide better decoupling between the OAuth library and Strimzi Cluster Operator (updating the OAuth library bundled in Strimzi will not require any more changes to the Strimzi API and Strimzi Cluster Operator)
 * Simplify testing of the different OAuth configurations (Strimzi Cluster Operator will no longer have the responsibility for the different configuration combinations of the OAuth library and would not need to explicitly test them. They will need to be tested in the OAuth library itself only.)
