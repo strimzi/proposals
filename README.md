@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 109 | [Add `awesome-strimzi` repository with Strimzi community-created resources](./109-awesome-strimzi-repo.md) |
 | 108 | [Use Kafka Admin API to list registered brokers and manage their unregistration](./108-list-unregister-nodes-admin-api.md) |
 | 107 | [Make _ignored_ users in the User Operator configurable](./107-make-ignored-users-in-UO-configurable.md) |
 | 106 | [Add namespace filtering support to Strimzi Drain Cleaner](./106-strimzi-drain-cleaner-namespace-filtering-proposal.md) |
