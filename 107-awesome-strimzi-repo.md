@@ -28,9 +28,9 @@ Having a central list will:
 
 ## Proposal
 
-This proposal is about creating a new `awesome-strimzi` repository on GitHub under the Strimzi organization where several external resources related to Strimzi could be published.
+This proposal is about creating a new `awesome-strimzi` repository on GitHub under the Strimzi organization where external resources related to Strimzi could be listed and referenced.
 This approach seems to be commonly used for several subjects across the Internet, taking as examples the [awesome-amqp](https://github.com/xinchen10/awesome-amqp) and [awesome-kafka](https://github.com/semantalytics/awesome-kafka).
-They are not official ones while we would like to have an official one within the Strimzi project to make it clear that such resources are all "approved" by the Strimzi contributors.
+These are not official, whereas we would like to have an official one within the Strimzi project to make it clear that such resources are all "approved" by the Strimzi contributors.
 
 Create a new GitHub repository named `awesome-strimzi` within the Strimzi organization.
 
@@ -38,13 +38,13 @@ This repository will:
 
 * follow the popular awesome list format used across other projects.
 * contain categorized links to external Strimzi-related resources.
-* be maintained by Strimzi contributors, ensuring the content is relevant, appropriate, and not being a "sales pitch", spam or similar.
+* be maintained by Strimzi contributors, ensuring the content is relevant, appropriate, and not used as a "sales pitch" with spam or similar.
 
-Similar initiatives, though unofficial, include [awesome-amqp](https://github.com/xinchen10/awesome-amqp) and [awesome-kafka](https://github.com/semantalytics/awesome-kafka), whereas this will be an official Strimzi‑hosted list to give added visibility and credibility to community contributions.
+An official Strimzi‑hosted list would give added visibility and credibility to community contributions.
 
 The repository will contain two main files:
 
-* README.md with the main list of resources.
+* README.md with an introduction to the purpose of `awesome-strimzi` and a list of resources.
 * CONTRIBUTING.md with guidelines for contributing to the list.
 
 The main content, within the README.md file, will be structured the following way:
