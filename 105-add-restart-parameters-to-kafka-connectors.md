@@ -12,12 +12,17 @@ We should be able to support customizing this parameters then user can choose be
 
 ## Proposal
 
-If you take a look on other very famous products like nginx, they allow most of configs using [annotations](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/). Then my proposal is to do the same here, and we should have the following:
+The ideia is to allow users to use combination of arguments, like these: 
 
-strimzi.io/restart # already exist
-strimzi.io/restart-include-tasks # new, with boolean value
-strimzi.io/restart-only-failed # new, with boolean value
-strimzi.io/restart-task # already exist.
+```yaml
+strimzi.io/restart=includeTasks,onlyFailed          # restart with args: includeTasks=true and onlyFailed=true
+strimzi.io/restart=includeTasks                     # restart with args: includeTasks=true and onlyFailed=false
+strimzi.io/restart=onlyFailed                       # restart with args: includeTasks=false and onlyFailed=true
+strimzi.io/restart=true                             # restart with args: includeTasks=false and onlyFailed=false
+strimzi.io/restart=false,includeTasks,onlyFailed    # do not restart
+strimzi.io/restart=true,includeTasks,onlyFailed     # restart with args: includeTasks=true and onlyFailed=true
+```
+
 
 Today when calling the restart in Kafka Connect API we already set these parameters, right here:
 
@@ -34,12 +39,11 @@ So, we won't change this behavior, instead we will set the values of `includeTas
 return VertxUtil.completableFutureToVertxFuture(apiClient.restart(host, port, connectorName, false, false))
 ```
 
-The same way we check if there is a restart annotation, we will check if there is a `strimzi.io/restart-include-tasks` and `strimzi.io/restart-only-failed` annotations, and set the values accordingly, 
-something like this:
+The first change will be on the method `hasRestartAnnotation`, so it can return true or false according with mixed cases showed previously. Next step will be create methods to check if `includeTasks` and `failedTasks` are set, suggestion:
 
 ```java
-boolean restartIncludeTasks = hasRestartIncludeTasksAnnotation(resource, connectorName);
-boolean restartOnlyFailedTasks = hasRestartOnlyFailedTasksAnnotation(resource, connectorName);
+boolean restartIncludeTasks = restartAnnotationHasIncludeTasksArg(resource, connectorName);
+boolean restartOnlyFailedTasks = restartAnnotationHasOnlyFailedTasksArg(resource, connectorName);
 ```
 
 The final method should look like this:
@@ -48,8 +52,8 @@ The final method should look like this:
 @SuppressWarnings({ "rawtypes" })
 private Future<List<Condition>> maybeRestartConnector(Reconciliation reconciliation, String host, KafkaConnectApi apiClient, String connectorName, CustomResource resource, List<Condition> conditions) {
     if (hasRestartAnnotation(resource, connectorName)) {
-        boolean restartIncludeTasks = hasRestartIncludeTasksAnnotation(resource, connectorName);
-        boolean restartOnlyFailedTasks = hasRestartOnlyFailedTasksAnnotation(resource, connectorName);
+        boolean restartIncludeTasks = restartAnnotationHasIncludeTasksArg(resource, connectorName);
+        boolean restartOnlyFailedTasks = restartAnnotationHasOnlyFailedTasksArg(resource, connectorName);
         LOGGER.debugCr(reconciliation, "Restarting connector {}, IncludeTasks {}, OnlyFailedTasks {}", connectorName, restartIncludeTasks, restartOnlyFailedTasks);
         return VertxUtil.completableFutureToVertxFuture(apiClient.restart(host, port, connectorName, restartIncludeTasks, restartOnlyFailedTasks))
                 .compose(ignored -> removeRestartAnnotation(reconciliation, resource)
@@ -67,10 +71,6 @@ private Future<List<Condition>> maybeRestartConnector(Reconciliation reconciliat
 }
 ```
 
-As you can see on code above, `strimzi.io/restart` is required in order to process the restart. We accept any sort of combinations between these two new annotations, 
-but you should take a look on the [KIP-745](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=181308623#KIP745:ConnectAPItorestartconnectorandtasks-RestartMethod) to understand how these parameters work together. 
-As an example set `strimzi.io/restart-include-tasks` to false and `strimzi.io/restart-only-failed` to true will have no effect. 
-
 ## Affected/not affected projects
 
 - http://github.com/strimzi/strimzi-kafka-operator/. 
@@ -82,10 +82,8 @@ We will keep default value as false for both variables, keeping backward compati
 ## Rejected alternatives
 There are other alternatives considered and the reason why not chosen is as follows:
 
-1. Adding new parameters to the existing `strimzi.io/restart` annotation.
-   - This was rejected because it would complicate the annotation's semantics and could lead to confusion about how to use it correctly. 
-   - Instead, introducing separate annotations for clarity is preferred.
-2. Remove new annotations after connector restarted.
-    - Removing all annotations after restart the connector would require to use always pass new arguments in one single command, it means: 3 annotations in one-shot. What could
-    lead to confusion and mistakes.
+1. Remove new annotations after connector restarted.
+    - Removing all annotations after restart the connector would require to use always pass new arguments in one single command, it means: 3 annotations in one-shot. What could lead to confusion and mistakes.
+2. Create one different annotation for each new argument. Can cause confusion because user should care about order, it means always set restart current annotation after the argument annotation, which could cause unexpected behaviors.
+3. JSON format inside restart annotation. Hard to user legibility and more chance to typo errors. 
 
