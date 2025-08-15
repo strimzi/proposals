@@ -47,7 +47,8 @@ A new `type: custom` authentication type will be added to all places where we us
 
 The API for the new `custom` type client-side authentication would follow the existing server-side API.
 For more information, see [`KafkaListenerAuthenticationCustom` schema reference](https://strimzi.io/docs/operators/in-development/configuring#type-KafkaListenerAuthenticationCustom-reference)
-It will have a flag indicating whether the authentication mechanism uses SASL.
+It will have a boolean flag named `sasl` indicating whether the authentication mechanism uses SASL.
+The `sasl` flag will be optional and when not set, will default to false.
 And it will have a `config` section for adding additional configuration options such as `sasl.mechanism` or JAAS configuration.
 
 The `secrets` field that is present in the server-side `custom` authentication but is already deprecated will not be used in the client-side API.
