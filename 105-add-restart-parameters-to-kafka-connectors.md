@@ -1,6 +1,7 @@
 # Add restart parameters to Kafka connectors
 
-In order to support [Kafka KIP-745](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=181308623) we need to accept two more parameters on restart Kafka connectors: `includeTasks` and `onlyFailed`.
+In order to support [Kafka KIP-745](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=181308623) we need to accept two more parameters on restart Kafka connectors: `includeTasks` and `onlyFailed`. 
+This includes MirrorMaker 2 connectors as well.
 
 ## Current situation
 
@@ -24,17 +25,17 @@ strimzi.io/restart=true,includeTasks,onlyFailed     # do not restart, fail and l
 strimzi.io/restart=includeTasks,wrongArg            # do not restart, fail and log error because wrongArg is not supported
 ```
 
+If you are using MirrorMaker 2, you can use the same arguments, but the annotation is a bit different:
 
-Today when calling the restart in Kafka Connect API we already set these parameters, right here:
-
-```java
-@Override
-public CompletableFuture<Map<String, Object>> restart(String host, int port, String connectorName, boolean includeTasks, boolean onlyFailed) {
-    return restartConnectorOrTask(host, port, "/connectors/" + connectorName + "/restart?includeTasks=" + includeTasks + "&onlyFailed=" + onlyFailed);
-}
+```yaml
+strimzi.io/restart-connector=<mirrormaker_connector_name>:includeTasks,onlyFailed # restart with args: includeTasks=true and onlyFailed=true
+strimzi.io/restart-connector=<mirrormaker_connector_name>:includeTasks # restart with args: includeTasks=true and onlyFailed=false
+strimzi.io/restart-connector=<mirrormaker_connector_name>:onlyFailed # restart with args: includeTasks=false and onlyFailed=true
+strimzi.io/restart-connector=<mirrormaker_connector_name> # restart with args: includeTasks=false and onlyFailed=false
+strimzi.io/restart-connector=includeTasks,onlyFailed # do not restart, fail and log error because connector name is required
 ```
 
-So, we won't change this behavior, instead we will set the values of `includeTasks` and `onlyFailed` based on the user expectations, since today we always set them to false:
+Today when calling the restart in Kafka Connect API we already set these parameters, we won't change this behavior, instead we will set the values of `includeTasks` and `onlyFailed` based on the user expectations, since today we always set them to false:
 
 ```java
 return VertxUtil.completableFutureToVertxFuture(apiClient.restart(host, port, connectorName, false, false))
