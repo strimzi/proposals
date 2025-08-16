@@ -12,7 +12,7 @@ We should be able to support customizing this parameters then user can choose be
 
 ## Proposal
 
-The ideia is to allow users to use combination of arguments, like these: 
+The idea is to allow users to use combination of arguments, like these: 
 
 ```yaml
 strimzi.io/restart=includeTasks,onlyFailed          # restart with args: includeTasks=true and onlyFailed=true
