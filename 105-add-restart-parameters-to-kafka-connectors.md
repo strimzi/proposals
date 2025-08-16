@@ -19,8 +19,9 @@ strimzi.io/restart=includeTasks,onlyFailed          # restart with args: include
 strimzi.io/restart=includeTasks                     # restart with args: includeTasks=true and onlyFailed=false
 strimzi.io/restart=onlyFailed                       # restart with args: includeTasks=false and onlyFailed=true
 strimzi.io/restart=true                             # restart with args: includeTasks=false and onlyFailed=false
-strimzi.io/restart=false,includeTasks,onlyFailed    # do not restart
-strimzi.io/restart=true,includeTasks,onlyFailed     # restart with args: includeTasks=true and onlyFailed=true
+strimzi.io/restart=false,includeTasks,onlyFailed    # do not restart, fail and log error because you can't set args and boolean value together
+strimzi.io/restart=true,includeTasks,onlyFailed     # do not restart, fail and log error because you can't set args and boolean value together
+strimzi.io/restart=includeTasks,wrongArg            # do not restart, fail and log error because wrongArg is not supported
 ```
 
 
@@ -82,8 +83,6 @@ We will keep default value as false for both variables, keeping backward compati
 ## Rejected alternatives
 There are other alternatives considered and the reason why not chosen is as follows:
 
-1. Remove new annotations after connector restarted.
-    - Removing all annotations after restart the connector would require to use always pass new arguments in one single command, it means: 3 annotations in one-shot. What could lead to confusion and mistakes.
-2. Create one different annotation for each new argument. Can cause confusion because user should care about order, it means always set restart current annotation after the argument annotation, which could cause unexpected behaviors.
-3. JSON format inside restart annotation. Hard to user legibility and more chance to typo errors. 
+1. Create one different annotation for each new argument. Can cause confusion because user should care about order, it means always set restart current annotation after the argument annotation, which could cause unexpected behaviors.
+2. JSON format inside restart annotation. Hard to user legibility and more chance to typo errors. 
 
