@@ -61,12 +61,8 @@ During a reconciliation, the operator goes through the following steps:
 
 The `brokersIdsToUnregister` list is created in the following way: 
 
-* define `previousBrokersIds` as the set of all registered brokers returned by Kafka.
-* define `fencedControllerOnlyNodeIds` as the subset of fenced nodes that are now controller-only (i.e., no longer brokers from being mixed-node).
-* finally create `brokersIdsToUnregister` by:
-    * initializing it with the `previousBrokersIds`.
-    * removing current running node IDs from it (to detect scale-down).
-    * adding `fencedControllerOnlyNodeIds` (to unregister removed brokers in role change scenarios).
+* it is initialized with the `registeredBrokersIds` containing only IDs of the brokers collection returned by the `KafkaNodeUnregistration.listRegisteredBrokerNodes` call.
+* removing the `currentBrokerIds` list which contains the IDs of the current brokers within the cluster.
 
 The operator doesn't fill the `status.registeredNodeIds` field in the `Kafka` custom resource anymore.
 
