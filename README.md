@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 111 | [Add restart parameters to Kafka connectors](./111-add-restart-parameters-to-kafka-connectors.md) |
 | 110 | [Support for `type: custom` client authentication](./110-custom-client-authentication.md) |
 | 109 | [Add `awesome-strimzi` repository with Strimzi community-created resources](./109-awesome-strimzi-repo.md) |
 | 108 | [Use Kafka Admin API to list registered brokers and manage their unregistration](./108-list-unregister-nodes-admin-api.md) |
