@@ -17,10 +17,8 @@ This proposal adds new configurations to enable SSL server and specify locations
 - http.ssl.port
 - http.ssl.keystore.location
 - http.ssl.keystore.key.location
-- http.ssl.protocol
 - http.ssl.enabled.protocols
-- http.ssl.add.cipher.suite
-- http.ssl.remove.cipher.suite
+- http.ssl.enabled.cipher.suites
 
 When `http.ssl.enable` is set to true, HTTP Bridge server will be started with SSL enabled and the key and certificate loaded from the locations defined by `http.ssl.keystore.location` and `http.ssl.keystore.key.location` configurations. If `http.ssl.port` configuration is not set, the server port will be set to `8443` by default. This will allow users to make TLS encrypted connections from their clients for all the HTTP Bridge endpoints for client operations. However, connections to the following endpoints for monitoring will stay unencrypted:
 - `/healthy`
@@ -33,9 +31,9 @@ When `http.ssl.enable` is set to true, HTTP Bridge server will be started with S
 
 When `http.ssl.enable` is set, these endpoints will have a separate listener, that is always PLAINTEXT. It will use the port defined by the existing `http.port` that is set to `8080` by default. The purpose of these endpoints is to be exposed only internally for the health checks, getting OpenAPI specification and metrics collection. In the future, we are likely to implement authentication and authorization for HTTP Bridge. By having separate listeners, these monitoring endpoints will not be affected by such changes.
 
-If `http.ssl.protocol` is configured, the protocol will be added to the current or default list of enabled protocols. If `http.ssl.enabled.protocols` is configured with a comma separated list, it will replace the default list of enabled secure transport protocols that Vertx sets.
+`http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set, the server will use the [default list](https://vertx.io/docs/apidocs/io/vertx/core/net/SSLOptions.html#DEFAULT_ENABLED_SECURE_TRANSPORT_PROTOCOLS) Vertx sets. 
 
-Vertx uses the default cipher suites provided by the underlying JDK SSL/TLS engine and allows users to append a cipher suite to the ordered suites or remove one from it. HTTP Bridge users can use the new configurations `http.ssl.add.cipher.suite` and `http.ssl.remove.cipher.suite` to add or remove a cipher suite from the default list of enabled cipher suites.
+`http.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that server will support. If not set, Vertx uses the default cipher suites provided by the underlying JDK SSL/TLS engine.
 
 ### HTTP Bridge managed by Strimzi operator
 
