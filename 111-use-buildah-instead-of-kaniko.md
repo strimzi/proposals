@@ -26,6 +26,8 @@ But it seems that it is similar to what Kaniko does as well.
 We will use the official Buildah images on Quay.io - currently `quay.io/buildah/stable:v1.40.1` - and similarly to Kaniko executor image - we will pull the official image, tag it with the version and push it to the Strimzi repository on Quay.
 That's useful because of our versioning and we will have the image ready even if someone on Buildah side decides to remove it from their Quay repository.
 Users then can specify their own Buildah image using `STRIMZI_DEFAULT_BUILDAH_IMAGE` (similarly to what is possible today with Kaniko).
+In case that users will use Kaniko, the Buildah environment variable will be ignored, and vice versa.
+The users will be responsible for changing these environment variables based on the mode in which they run the Connect build - in case that they have customized Deployment files.
 
 The usage of Buildah will be gated behind feature gate called `UseConnectBuildWithBuildah` that will have following schedule:
 
@@ -94,9 +96,57 @@ As for the Kaniko additional options, if the user-specified Buildah options will
 
 If Buildah is enabled through the feature gate and the user provides Kaniko-specific options, those options will be ignored, and a warning will be reported in the `.status` section of the `KafkaConnect` CR.
 Once the feature gate will be moved to beta, the additional Kaniko options field will be deprecated.
+Additionally, we change the environment variable from `STRIMZI_DEFAULT_KANIKO_EXECUTOR_IMAGE` to `STRIMZI_DEFAULT_BUILDAH_IMAGE` in our deployment files.
+When the feature gate will be moved to GA and Kaniko implementation will be removed, the environment variable for Kaniko will be removed from the code as well (and ignored in case that user sets it).
 
 Finally, this feature will be available on Kubernetes only - it will not be available on OpenShift, which is mentioned as one of the rejected alternative.
 So the implementation and usage of OpenShift Build API will be kept.
+
+### YAML example of configuring Connect Build with Buildah options
+
+The following YAML example shows how the `KafkaConnect` CR with build configuration (and Buildah additional options) will look like:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: my-connect-cluster
+  annotations:
+    strimzi.io/use-connector-resources: "true"
+spec:
+  version: 4.1.0
+  replicas: 1
+  bootstrapServers: my-cluster-kafka-bootstrap:9093
+  tls:
+    trustedCertificates:
+      - secretName: my-cluster-cluster-ca-cert
+        pattern: "*.crt"
+  config:
+    group.id: connect-cluster
+    offset.storage.topic: connect-cluster-offsets
+    config.storage.topic: connect-cluster-configs
+    status.storage.topic: connect-cluster-status
+    config.storage.replication.factor: -1
+    offset.storage.replication.factor: -1
+    status.storage.replication.factor: -1
+  build:
+    output:
+      type: docker
+      image: my-internal-registry:5000/repository/image:latest
+      additionalBuildahBuildOptions:
+        - "--tls-verify=false"
+        - "--retry=4"
+      additionalBuildahPushOptions:
+        - "--tls-verify=false"
+        - "--quiet"
+    plugins:
+      - name: kafka-connect-file
+        artifacts:
+          - type: maven
+            group: org.apache.kafka
+            artifact: connect-file
+            version: 4.1.0
+```
 
 ### Running Buildah in restricted environment
 
