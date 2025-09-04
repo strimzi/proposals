@@ -92,7 +92,7 @@ Those new fields will be:
 
 As for the Kaniko additional options, if the user-specified Buildah options will contain forbidden options (or not known), user will be notified by message inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
 
-If Buildah is enabled through the feature gate and the user provides Kaniko-specific options, those options will be ignored, and a warning will be reported in the .status section of the KafkaConnect CR.
+If Buildah is enabled through the feature gate and the user provides Kaniko-specific options, those options will be ignored, and a warning will be reported in the `.status` section of the `KafkaConnect` CR.
 Once the feature gate will be moved to beta, the additional Kaniko options field will be deprecated.
 
 Finally, this feature will be available on Kubernetes only - it will not be available on OpenShift, which is mentioned as one of the rejected alternative.
