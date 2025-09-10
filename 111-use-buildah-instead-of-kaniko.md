@@ -21,10 +21,15 @@ It also appears that OpenShift’s Build API relies on Buildah, which makes Buil
 Other than that, Buildah doesn't need any workaround in order to run it on Kubernetes rootlessly - the only thing that is needed during the build and push stages is to specify `--storage-driver=vfs` option.
 VFS (Virtual File System) driver ensures user-space implementation, it stores each layer as a full copy of the files, but without need of root permissions.
 The only trade-off is the build time (it's slower) and consumption of disk space.
-But it seems that it is similar to what Kaniko does as well.
+
+Even though we will run Buildah with these options, which should make it rootless, it still needs some capabilities to run without issues during the build phase.
+That means we cannot run the build Pod with restricted Pod Security profile, as these capabilities are dropped in these profiles.
+This is more described in the [Running Buildah in restricted environment](#running-buildah-in-restricted-environment) section of this proposal.
 
 We will use the official Buildah images on Quay.io - currently `quay.io/buildah/stable:v1.40.1` - and similarly to Kaniko executor image - we will pull the official image, tag it with the version and push it to the Strimzi repository on Quay.
 That's useful because of our versioning and we will have the image ready even if someone on Buildah side decides to remove it from their Quay repository.
+The full name of our Buildah image will be `quay.io/strimzi/buildah:OPERATOR_VERSION` - for `main` branch it will use the `latest` tag, otherwise it will be tagged by the operator version for the particular release.
+
 Users then can specify their own Buildah image using `STRIMZI_DEFAULT_BUILDAH_IMAGE` (similarly to what is possible today with Kaniko).
 In case that users will use Kaniko, the Buildah environment variable will be ignored, and vice versa.
 The users will be responsible for changing these environment variables based on the mode in which they run the Connect build - in case that they have customized Deployment files.
@@ -51,48 +56,47 @@ It will just output the SHA, not the full image, so we need to build it from the
 We will use following commands:
 
 ```shell
-buildah build --file=/dockerfile/Dockerfile --tag=<IMAGE> --storage-driver=vfs <ADDITIONAL_BUILD_OPTS>
-buildah push --storage-driver=vfs --digestfile=/tmp/digest <ADDITIONAL_PUSH_OPTS> <IMAGE>
+buildah build --file=/dockerfile/Dockerfile --tag=<IMAGE> --storage-driver=vfs
+buildah push --storage-driver=vfs --digestfile=/tmp/digest <ADDITIONAL_OPTS> <IMAGE>
 buildah images --digests --filter=digest=sha256:$(cat /tmp/digest) --format='{{.Name}}@{{.Digest}}' > /dev/termination-log
 ```
 - `<IMAGE>` is placeholder for user desired name of the image (with registry, repository, and possibly tag)
-- `<ADDITIONAL_BUILD_OPTS>` is placeholder for user desired additional build options
-- `<ADDITIONAL_PUSH_OPTS>` is placeholder for user desired additional push options
+- `<ADDITIONAL_OPTS>` is placeholder for user desired additional options for the `buildah push` command
 
 We need to take these three steps in order to get the SHA of the image together with correct repository.
 This will work in all scenarios, including when the user does not specify a tag and the default (`latest`) is used.
 
-We need to add two new fields to `DockerOutput` model in order to support additional options for both build and push options.
-Those new fields will be:
-- `additionalBuildahBuildOptions` - for additional options to the `build` command.
-  - Allowed options will be: 
-    - `--annotation` - adds possibility to specify annotation that will then appear to image metadata.
-    - `--authfile` - path to the authentication file (usually created using the `buildah login`).
-    - `--cert-dir` - path to directory with certificates that should be used.
-    - `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
-    - `--decryption-key` - the `[key[:passphrase]]` to be used for decryption of images.
-    - `--env` - add env with value to the image.
-    - `--label` - add an image label to the image metadata.
-    - `--logfile` - log output which would be sent to standard output and standard error to the specified file instead of to standard output and standard error.
-    - `--manifest` - name of the manifest list to which the built image will be added.
-    - `--retry` - number of times to retry in case of failure during image pull (the base one).
-    - `--retry-delay` - duration between retry attempts.
-    - `--timestamp` - sets the "created" timestamp to the image configuration and manifest. When set, the "created" timestamp is always set to time specified, not generating new SHA.
-    - `--tls-verify` - skip TLS verification for insecure registries.
-- `additionalBuildahPushOptions` - for additional options to the `push` command. 
-  - Allowed options will be: 
-    - `--authfile` - path to the authentication file (usually created using the `buildah login`).
-    - `--cert-dir` - path to directory with certificates that should be used for connecting to registries.
-    - `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
-    - `--format` - control the format for the built image's manifest and configuration data. `oci` or `docker`.
-    - `--quiet` - when writing the output image, suppress progress output.
-    - `--remove-signatures` - don't copy signatures when pushing images.
-    - `--retry` - number of times to retry in case of failure during image pull (the base one).
-    - `--retry-delay` - duration between retry attempts.
-    - `--sign-by` - sign the pushed image using the GPG key that matches the specified fingerprint.
-    - `--tls-verify` - skip TLS verification for insecure registries.
+Together with this feature, and upcoming v1 API, we will do following changes inside the `DockerOutput` model:
 
-As for the Kaniko additional options, if the user-specified Buildah options will contain forbidden options (or not known), user will be notified by message inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
+1. we will deprecate `additionalKanikoOptions` field as the name of it is connected directly to Kaniko and more generic name can be used (this field will be removed as part of the v1 API).
+2. we will add `additionalOptions` field which will be used from now on and will cover additional options for both Kaniko and Buildah.
+
+The `additionalKanikoOptions` will still be used until the Buildah feature gate is moved to Beta stage, but warning about deprecation will be added inside the `.status` section of the `KafkaConnect` CR.
+Additionally, if both of the fields will be filled with values, `additionalOptions` takes precedence.
+Once the `UseConnectBuildWithBuildah` feature gate is moved to Beta, the `additionalKanikoOptions` will be completely ignored, the warning about deprecation will slightly change to "is deprecated and ignored" in case that it will be used.
+For Buildah, we will check only the `additionalOptions` field.
+In case that user will specify `additionalKanikoOptions` with Buildah enabled feature gate, warning about deprecation and about ignored field will be added to the `.status` section again.
+
+Following table shows what was described above and how these two fields will be checked and handled:
+
+| `additionalKanikoOptions` used | `additionalOptions` used | `UseConnectBuildWithBuildah` in Beta | Buildah used | Warning about deprecation | Warning about ignored field | Used field                |
+|--------------------------------|--------------------------|--------------------------------------|--------------|---------------------------|-----------------------------|---------------------------|
+| ☑️                             | ❌                        | ❌                                    | ❌            | ☑️                        | ❌                           | `additionalKanikoOptions` |
+| ☑️                             | ❌                        | ☑️                                   | ❌            | ☑️                        | ☑️                          | none                      |
+| ☑️                             | ❌                        | ❌️                                   | ☑️           | ☑️                        | ☑️                          | none                      |
+| ☑️                             | ❌                        | ☑️                                   | ☑️           | ☑️                        | ☑️                          | none                      |
+| ☑️                             | ☑️                       | ❌                                    | ❌            | ☑️                        | ☑️                          | `additionalOptions`       |
+| ☑️                             | ☑️                       | ☑️                                   | ❌            | ☑️                        | ☑️                          | `additionalOptions`       |
+
+As in case of Kaniko, Buildah will have also some allowed options that can be specified during the `push` phase:
+- `--authfile` - path to the authentication file (usually created using the `buildah login`).
+- `--cert-dir` - path to directory with certificates that should be used for connecting to registries.
+- `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
+- `--retry` - number of times to retry in case of failure during image pull (the base one).
+- `--retry-delay` - duration between retry attempts.
+- `--tls-verify` - skip TLS verification for insecure registries.
+
+If the user-specified Buildah options will contain forbidden options (or not known), user will be notified by message inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
 
 If Buildah is enabled through the feature gate and the user provides Kaniko-specific options, those options will be ignored, and a warning will be reported in the `.status` section of the `KafkaConnect` CR.
 Once the feature gate will be moved to beta, the additional Kaniko options field will be deprecated.
@@ -150,10 +154,11 @@ spec:
 
 ### Running Buildah in restricted environment
 
-The Buildah, similarly to Kaniko, has issues running in restricted environment.
-To run the build and push commands, it needs some capabilities like - `cap_kill`, `cap_setgid`, and `cap_setuid`.
-So in case that user will have restricted environment - similarly to the default OpenShift restrictions - it's highly possible that it will not work.
-That's also reason why we will skip implementation of Buildah on OpenShift - described as one of the rejected alternative.
+To successfully run Buildah in container on Kubernetes, the Pod needs to have some capabilities.
+The capabilities are `cap_kill`, `cap_setgid`, and `cap_setuid`, which are used in the `build` phase.
+In case that user will use restricted Pod Security profile, Buildah will not work - as these capabilities are dropped in this profile.
+That is similar to Kaniko - which is not able to run in this restricted profile as well.
+Additionally, that is a reason why we will not implement Buildah for OpenShift - and it's described as [one of the rejected alternatives](#only-one-implementation-of-connect-build---buildah-on-both-kubernetes-and-openshift).
 
 ## Affected/not affected projects
 
