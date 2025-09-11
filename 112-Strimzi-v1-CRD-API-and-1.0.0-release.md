@@ -19,19 +19,22 @@ As ZooKeeper has now been removed from Strimzi, we can now proceed with introduc
 The migration from `v1beta2` will happen as a two-step process:
 * The first step will be done in Strimzi 0.49.
     * It will introduce the `v1` API into the Strimzi CRDs
-    * It will deprecate the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`)
+    * It will deprecate the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
+      The deprecation warning messages will point to the section of our documentation about the `v1` API and its migration.
+      This message will be showed by tools such as `kubectl` when using the old APIs.
     * And it will transition the Topic and User Operators to use the `v1` API.
     * Users will need to make sure their `KafkaUser` resources do not use the deprecated/removed `operation` field.
 * The second step will be done 3 releases later in Strimzi 0.52/1.0.0
     * This version will remove the `v1beta2` API (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
     * It will also transition the Cluster Operator to use the `v1` API as well.
     * Before upgrading to this version, users will need to convert all their custom resources and the CRDs.
+      The conversion could be done using the conversion tool (described in more detail in one of the later sections) or manually.
 
 This might correspond to the following release dates:
-* 0.49.0 in early November
-* 0.50.0 early January
-* 0.51.0 late February
-* 0.52.0 / 1.0.0 in April
+* 0.49.0 in early November 2025
+* 0.50.0 early January 2026
+* 0.51.0 late February 2026
+* 0.52.0 / 1.0.0 in April 2026
 
 *The dates are subject to change.*
 
@@ -214,7 +217,7 @@ The following changes will be done to the `KafkaConnect` API in the `v1` version
   During the CRD conversion, it will be set to `3` when not set (the original default value).
 * The `type: oauth` authentication will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate proposal that needs to be approved and implemented in the same release as the `v1` is delivered.
+  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaConnect` resource, the `.spec` section is not marked as required.
   The `v1` API will mark it as required.
 
@@ -231,7 +234,7 @@ The following changes will be done to the `KafkaMirrorMaker2` API in the `v1` ve
   During the CRD conversion, it will be set to `3` when not set (the original default value).
 * The `type: oauth` authentication will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate proposal that needs to be approved and implemented in the same release as the `v1` is delivered.
+  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaMirrorMaker2` resource, the `.spec` section is not marked as required.
   The `v1` API will mark it as required.
 
@@ -251,7 +254,7 @@ The following changes will be done to the `KafkaBridge` API in the `v1` version:
   During the CRD conversion, it will be set to `1` when not set (the original default value).
 * The `type: oauth` authentication will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate proposal that needs to be approved and implemented in the same release as the `v1` is delivered.
+  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaBridge` resource, the `.spec` section is not marked as required.
   The `v1` API will mark it as required.
 
@@ -309,7 +312,7 @@ The following changes will be done to the `Kafka` API in the `v1` version:
       It is replaced by the `reconciliationIntervalMs` field.
     * The `zookeeperSessionTimeoutSeconds` field in `.spec.entityoperator.userOperator` is deprecated and will be removed in `v1` version without replacement.
 
-* In the `.spec.kafka` section (or its subsections before moving to `.spec` directly)
+* In the `.spec.kafka` section:
     * The `enableECDSA` field in the OAuth authentication is deprecated and will be removed in `v1` without replacement.
     * `secrets` section in `type: custom` authentication is deprecated and will be removed in `v1`.
       It is replaced by mounting secrets through the additional volumes feature in the `template` section.
@@ -318,15 +321,17 @@ The following changes will be done to the `Kafka` API in the `v1` version:
       It is replaced by `type: custom` authorization.
     * The `type: oauth` authentication will be removed in the `v1` version.
       Users can use the `type: custom` authentication instead.
-      Deprecation of the `type: oauth` authentication is subject of a separate proposal that needs to be approved and implemented in the same release as the `v1` is delivered.
+      Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
     * The `type: keycloak` authorization will be removed in the `v1` version.
       Users can use the `type: custom` authorization instead.
-      Deprecation of the `type: keycloak` authorization is subject of a separate proposal that needs to be approved and implemented in the same release as the `v1` is delivered.
+      Deprecation of the `type: keycloak` authorization is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 
 ##### Rejected changes
 
 The following changes were considered and rejected:
 * Moving the remaining options from `.spec.kafka` directly to `.spec` was considered but rejected.
+  The main reason was that it would be a major change for our users with very little added value and that the `.spec.kafka` section still corresponds to how Strimzi deploys the Apache Kafka cluster.
+  The full discussion can be found in the [recording from the Strimzi `v1` CRD API triage call](https://youtu.be/mQZ7dLYCN1I).
 
 ### Conversion tool
 
@@ -391,8 +396,9 @@ The following points are still open and might result in future changes in the `v
 * [Enforcing internal topic names and `group.id` in Kafka Connect](https://github.com/strimzi/strimzi-kafka-operator/issues/10075)
 * [Redesign of the `KafkaMirrorMaker2` CR/CRD](https://github.com/strimzi/strimzi-kafka-operator/issues/11842)
 
-If needed, these open points can be clarified in separate issues or proposals (up to until the first release that includes the `v1` API).
+These open points will be clarified in separate issues or proposals.
 They should not be blockers for this proposal.
+However, they need to be done before we release the 0.49.0 version with the `v1` API, as we cannot remove anything from the `v1` API once it is released.
 
 ## Rejected alternatives
 
@@ -418,4 +424,12 @@ I rejected this alternative because:
 A conversion webhook can be used to help with the conversion of the custom resources.
 This could for example help with the initial update of the `KafkaUser` resource (the deprecated `operation` field).
 However, the installation and use of the conversion webhook is complicated as it has to run once per Kubernetes cluster and is configured directly in the CRD.
+Some users might also not have the access rights needed to install the cluster-wide webhook.
+
 Therefore it seems that relying on the webhook would cause more work and effort compared to what value it actually delivers.
+And we might need to deliver the conversion tool together with it anyway.
+
+### Rejected API changes
+
+There were many different changes to the Strimzi `v1` CRD API that were discussed and eventually rejected.
+They are documented in the `Changes to individual custom resources` section under the different custom resources.
