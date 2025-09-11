@@ -1,26 +1,26 @@
 # Deprecate and remove `type: oauth` authentication and `type: keycloak` authorization
 
 Strimzi has its own library for using [OAuth authentication](https://github.com/strimzi/strimzi-kafka-oauth) in Apache Kafka brokers and clients.
-It also provides custom authorizer based on OAuth authentication and Keycloak Authorization Services.
-This library (both authentication and authorization) is bundled with Strimzi and our custom resources have extensive API to allow configuring it.
+It also provides a custom authorizer based on OAuth authentication and Keycloak Authorization Services.
+This library (both authentication and authorization) is bundled with Strimzi and our custom resources have an extensive API for configuring it.
 
-This proposal suggests deprecating the `type: oauth` authentication and `type: keycloak` authorization from the Strimzi API and its removal in the [Strimzi `v1` CRD API](https://github.com/strimzi/proposals/pull/174).
+This proposal suggests deprecating the `type: oauth` authentication and `type: keycloak` authorization from the Strimzi API and removing them from the [Strimzi `v1` CRD API](https://github.com/strimzi/proposals/pull/174).
 The APIs will be replaced by `type: custom` authentication and authorization.
-This proposal does not propose deprecating the Strimzi OAuth library subproject or not bundling it with the Strimzi container images.
+This proposal does not include deprecating the Strimzi OAuth library subproject or removing it from the Strimzi container images.
 
 ## Motivation
 
-The `type: oauth` authentication and `type: keycloak` authorization have very extensive API with lot of different options.
+The `type: oauth` authentication and `type: keycloak` authorization have a very extensive API with lots of different options.
 These options have various interdependencies, where different fields should or should not be used with other fields.
-However, thy have only very weak validation.
+However, they have only very weak validation.
 So we typically just receive these options through the CRD API and pass them to the configuration in the various Kafka components.
 
 These options need to be also processed in our source code, certificates, and Secrets need to be processed.
-Given the large amount of various options, this constitutes a sizable amount of code.
-We also need to test all of these options - and that they are correctly processed - in our unit, integration and system tests.
-And we of course need to also document all the API options and their use in our documentation.
+Given the large number of options, this constitutes a sizable amount of code.
+We also need to test all of these options — and that they are correctly processed — in our unit, integration, and system tests.
+We must also document all the API options and their use in our documentation.
 
-The documentation and tests are to large extent duplicated between the OAuth library itself and the Strimzi Operators.
+The documentation and tests are to a large extent duplicated between the OAuth library itself and the Strimzi Operators.
 This is because the OAuth library is intended as a separate project.
 So it has its own documentation and tests.
 
@@ -31,20 +31,20 @@ We already did the same to the Open Policy Agent authorization which was depreca
 
 ## Proposal
 
-This proposal suggests to deprecate the `type: oauth` authentication and `type: keycloak` authorization.
-It is expected to be deprecated in Strimzi 0.49, but remain supported while the `v1beta2` API is in use.
-It will not be present anymore in the `v1` CRD API.
-And the code will be removed from the Cluster Operator will be removed after we drop support for `v1beta2` API.
+This proposal recommends deprecating `type: oauth` authentication and `type: keycloak` authorization.
+Deprecation is targeted for Strimzi 0.49, with support remaining while the `v1beta2` API is in use.
+These APIs will not be present in the `v1` CRD API.
+And the code will be removed from the Cluster Operator after we drop support for `v1beta2` API.
 
-As a replacement, users can migrate to and use the `type: custom` authentication and authorization.
+As a replacement, users can migrate to using `type: custom` authentication and authorization for OAuth configuration.
 The `type: custom` API is supported for:
 * Apache Kafka brokers server-authentication
 * Apache Kafka brokers authorization
 * Client-authentication in client based components such as Connect, MirrorMaker2, or Bridge
 
-The custom authentication and authorization allows users to configure any authentication and authorization plugins.
-Strimzi in this case does not have detailed knowledge about the plugin being configured.
-Therefore configuration is typically not provided in many different fields from which the operator constructs the Kafka configuration.
+Custom authentication and authorization allow users to configure any authentication and authorization plugins.
+In this case, Strimzi does not have detailed knowledge of the plugin being configured.
+Therefore, configuration is not spread across multiple fields from which the operator constructs the Kafka configuration.
 Instead, users configure the `sasl.jaas.config` directly in the Strimzi custom resources.
 There is no detailed validation of the configuration.
 But as mentioned in the motivation section, that is similar to what we already have today with the existing APIs.
@@ -55,7 +55,7 @@ To configure sensitive options, such as TLS certificates, OAuth secrets, passwor
 
 The OAuth library already supports using PEM files directly or reference certificates inline to make it easier to use the data from the Secrets directly without the need for some preprocessing done by the Strimzi operator (such as converting PEM certificate to PKCS12 file).
 
-The OAuth library will remain to be bundled with Strimzi container images even after the dedicated APIs are removed.
+The OAuth library will remain bundled with Strimzi container images even after the dedicated APIs are removed.
 That way, users do not need to add the library manually by building new container images etc.
 
 ### Configuration examples
@@ -97,11 +97,11 @@ spec:
       kafkaContainer:
         volumeMounts:
           - name: keycloak-certs
-            mounthPath: /mnt/keycloak-certs
+            mountPath: /mnt/keycloak-certs
   # ...
 ```
 
-#### Keycloak authentication in Apache Kafka brokers
+#### Keycloak authorization in Apache Kafka brokers
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -136,11 +136,11 @@ spec:
       kafkaContainer:
         volumeMounts:
           - name: keycloak-certs
-            mounthPath: /mnt/keycloak-certs
+            mountPath: /mnt/keycloak-certs
   # ...
 ```
 
-#### Client authentication in client based components
+#### Client authentication in client-based components
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -185,7 +185,7 @@ But already while it is deprecated, we should make sure these tests are also cov
 
 ## Backwards compatibility
 
-This proposal breaks backwards compatibility and forces users to change their custom resources latest when migrating to the `v1` CRD API version.
+This proposal breaks backwards compatibility and forces users to change their custom resources at the latest when migrating to the `v1` CRD API version.
 
 ## Rejected alternatives
 
