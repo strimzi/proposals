@@ -6,7 +6,9 @@ This library (both authentication and authorization) is bundled with Strimzi and
 
 This proposal suggests deprecating the `type: oauth` authentication and `type: keycloak` authorization from the Strimzi API and removing them from the [Strimzi `v1` CRD API](https://github.com/strimzi/proposals/pull/174).
 The APIs will be replaced by `type: custom` authentication and authorization.
+
 This proposal does not include deprecating the Strimzi OAuth library subproject or removing it from the Strimzi container images.
+Its development and maintenance will continue as before.
 
 ## Motivation
 
@@ -15,7 +17,8 @@ These options have various interdependencies, where different fields should or s
 However, they have only very weak validation.
 So we typically just receive these options through the CRD API and pass them to the configuration in the various Kafka components.
 
-These options need to be also processed in our source code, certificates, and Secrets need to be processed.
+These options need to be also processed in our source code.
+We also need to prepare the certificates and Secrets.
 Given the large number of options, this constitutes a sizable amount of code.
 We also need to test all of these options — and that they are correctly processed — in our unit, integration, and system tests.
 We must also document all the API options and their use in our documentation.
@@ -46,7 +49,7 @@ Custom authentication and authorization allow users to configure any authenticat
 In this case, Strimzi does not have detailed knowledge of the plugin being configured.
 Therefore, configuration is not spread across multiple fields from which the operator constructs the Kafka configuration.
 Instead, users configure the `sasl.jaas.config` directly in the Strimzi custom resources.
-There is no detailed validation of the configuration.
+There is no validation of the configuration.
 But as mentioned in the motivation section, that is similar to what we already have today with the existing APIs.
 
 To configure sensitive options, such as TLS certificates, OAuth secrets, password, etc., users can use the existing template feature:
@@ -84,20 +87,20 @@ spec:
             sasl.enabled.mechanisms: OAUTHBEARER
             oauthbearer.sasl.server.callback.handler.class: io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
             oauthbearer.sasl.jaas.config: | 
-                org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required unsecuredLoginStringClaim_sub="thePrincipalName" oauth.valid.issuer.uri="http://valid-issuer" oauth.jwks.endpoint.uri="http://jwks" oauth.jwks.expiry.seconds="500" oauth.jwks.refresh.seconds="400" oauth.username.claim="preferred_username" oauth.enable.metrics="true" oauth.ssl.truststore.location="/mnt/keycloak-certs/tls.crt" oauth.ssl.truststore.type="PEM";
+                org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required unsecuredLoginStringClaim_sub="thePrincipalName" oauth.valid.issuer.uri="http://valid-issuer" oauth.jwks.endpoint.uri="http://jwks" oauth.jwks.expiry.seconds="500" oauth.jwks.refresh.seconds="400" oauth.username.claim="preferred_username" oauth.enable.metrics="true" oauth.ssl.truststore.location="/mnt/oauth-certs/tls.crt" oauth.ssl.truststore.type="PEM";
             principal.builder.class: io.strimzi.kafka.oauth.server.OAuthKafkaPrincipalBuilder
     config:
       # ...
     template:
       pod:
         volumes:
-          - name: keycloak-certs
+          - name: oauth-certs
             secret:
-              name: keycloak-secret
+              name: oauth-secret
       kafkaContainer:
         volumeMounts:
-          - name: keycloak-certs
-            mountPath: /mnt/keycloak-certs
+          - name: oauth-certs
+            mountPath: /mnt/oauth-certs
   # ...
 ```
 
@@ -171,7 +174,8 @@ spec:
 ### Documentation
 
 The examples of using the `type: custom` configuration will be added to the documentation.
-The existing documentation using the OAuth APIs should be removed while ensuring the things it covers are well documented in the OAuth library documentation/README.
+The existing documentation using the OAuth APIs should be removed after its deprecation, while ensuring the things it covers are well documented in the OAuth library documentation/README.
+We will also include basic instructions for how to migrate to the `type: custom` APIs, which will link to the Strimzi OAuth library docs for details about the different options.
 
 ### Examples
 
@@ -180,8 +184,8 @@ Existing OAuth examples in the Strimzi Operators repo will be updated to use the
 ### System tests
 
 Basic tests of OAuth tests using the `type: custom` authorization should be added to the Strimzi Operators system tests.
-The existing system tests using the dedicated OAuth API will remain there while the OAuth API remains supported.
-But already while it is deprecated, we should make sure these tests are also covered by the tests in the OAuth library so that we can just remove them from the Strimzi Operators system tests when the right time comes.
+After OAuth APIs are deprecated, we will start removing some of the related system tests.
+But at least some of the basic tests will remain until the OAuth API is completely removed to ensure its functionality.
 
 ## Backwards compatibility
 
