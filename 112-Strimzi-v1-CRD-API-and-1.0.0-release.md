@@ -7,20 +7,20 @@ This proposal covers the introduction of a new Strimzi API version `v1`, migrati
 Strimzi 1.0.0 release is long overdue.
 This is mainly caused by the ZooKeeper removal from Apache Kafka taking much longer than originally anticipated.
 But there are other factors as well.
-Some more information about the history can be found this [blog post from 2023](https://strimzi.io/blog/2023/12/11/where-is-strimzi-1.0.0/).
+Some more information about the history can be found in this [blog post from 2023](https://strimzi.io/blog/2023/12/11/where-is-strimzi-1.0.0/).
 
-One of the reasons why we decided to wait for ZooKeeper to be removed from Apache Kafka was that it would allow us to remove some parts of our CRD API before doing the `v1` API version which will be integral part of Strimzi 1.0.0.
-As ZooKeeper is now removed from Strimzi, we can now proceed with introducing the `v1` API version and release Strimzi 1.0.0.
+One of the reasons why we decided to wait for ZooKeeper to be removed from Apache Kafka was that it would allow us to remove some parts of our CRD API before doing the `v1` API version which will be an integral part of Strimzi 1.0.0.
+As ZooKeeper has now been removed from Strimzi, we can now proceed with introducing the `v1` API version and release Strimzi 1.0.0.
 
 ## Proposal
 
 ### Timeline
 
-The migration from `v1beta2` will happen as a two step process:
+The migration from `v1beta2` will happen as a two-step process:
 * The first step will be done in Strimzi 0.49.
     * It will introduce the `v1` API into the Strimzi CRDs
-    * It will deprecated the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`)
-    * And it will transition the Topic and User Operators to already use the `v1` API.
+    * It will deprecate the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`)
+    * And it will transition the Topic and User Operators to use the `v1` API.
     * Users will need to make sure their `KafkaUser` resources do not use the deprecated/removed `operation` field.
 * The second step will be done 3 releases later in Strimzi 0.52/1.0.0
     * This version will remove the `v1beta2` API (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
@@ -42,19 +42,17 @@ More details and explanation to the different steps is provided in the sections 
 Users will have the time between the 0.49 and 0.52/1.0.0 releases to migrate their custom resources to the `v1` API.
 The only slight exception will be the `KafkaUser` resources.
 While users will be able to keep using the older versions of the `KafkaUser` API between 0.49.0 and 0.52.0/1.0.0, they will not be able to use the deprecated field `operation` in the ACL rule definition.
-Any resources using this field will be rejected by the User Operator as invalid (however, the User it self will not be deleted from the Apache Kafka cluster).
+Any resources using this field will be rejected by the User Operator as invalid (however, the User itself will not be deleted from the Apache Kafka cluster).
 This is because the User Operator will be already using the new `v1` API internally.
 While technically the same applies to the Topic Operator and the `KafkaTopic` resources, the `KafkaTopic` resource has no deprecated fields that are being removed in the `v1` API version.
 So there is no similar impact on the `KafkaTopic` resources as on the `KafkaUser` resources.
 
-The 0.49.0 and 0.52.0/1.0.0 should not be mandatory points to go through.
-The transition process allows to skip some of these versions.
-Users will need to include in their upgrade paths:
-* At least one of the Strimzi versions 0.49, 0.50 and 0.51.
-  Any of these versions will introduce the `v1` API and switch the User and Topic Operators to use it
-* Strimzi 0.52.0/1.0.0 or newer which will remove the old API versions and transition the Cluster Operator to use the `v1` API.
+The upgrade process does not require including Strimzi 0.49.0 or 0.52.0/1.0.0 specifically.
+However, upgrade paths must include:
+* **At least one of Strimzi 0.49.0, 0.50.0, or 0.51.0**, which introduces the `v1` API and transitions the User and Topic Operators to use it.
+* **Strimzi 0.52.0/1.0.0 or newer**, which removes the old API versions and transitions the Cluster Operator to the `v1` API.
 
-As a result, Strimzi users can for example:
+For example, Strimzi users can:
 * Start with Strimzi 0.47.0
 * Upgrade to Strimzi 0.50.0
     * Before this upgrade, they should make sure they do not use the `operation` field in the `KafkaUser` resource
@@ -64,16 +62,16 @@ As a result, Strimzi users can for example:
 ### First step
 
 In the first phase, the Strimzi CRDs will be modified to add the new `v1` API to the existing CRDs.
-The details of how the `v1` API will look like for the different resources and how will it differ from the existing API version(s) are described in a separate section below.
+The details of how the `v1` API will look for the different resources and how it will differ from the existing API versions are described in a separate section below.
 In the first phase, we will also deprecate the old CRD API versions.
 The CRD API version deprecation is a flag in the CRD resource.
 Deprecated versions can still be used, but Kubernetes will issue a warning when the deprecated API is used.
 
 Most of the CRDs will continue to use the `v1beta2` version as the stored version in the first phase.
-Only the `KafkaUser` and `KafkaTopic` CRDs will already switch to `v1` as the storage version.
+Only the `KafkaUser` and `KafkaTopic` CRDs will already switch to `v1` as the stored version.
 With the exception of the `KafkaUser` resource, users are not expected to do anything in the first phase other than upgrade the CRDs and the other Strimzi resources.
 
-The `Kafka` CRD YAML will be generated with disabled field descriptions because otherwise it would be too big for `kubectl apply`.
+The `Kafka` CRD YAML will be generated with field descriptions disabled because otherwise it would be too big for `kubectl apply`.
 
 #### The User and Topic Operator problem
 
@@ -84,14 +82,14 @@ When the Strimzi upgrade happens, in the first phase:
 * The Cluster Operator Pod is rolled
 
 While these two events are not synchronized and are _eventually consistent_, they happen at roughly the same time.
-The User and Topic Operators on the other hand, they are rolled only much later as part of the Kafka cluster reconciliation.
+The User and Topic Operators, on the other hand, are only rolled much later as part of the Kafka cluster reconciliation.
 This can be many minutes after the CRDs were updated.
 
 Additionally, the Topic and User Operator are deleting their Users / Topics from the Kafka cluster when the resources are deleted.
 This is different from the Cluster Operator, which in general does not delete the operands as they are deleted by Kubernetes Garbage Collection.
 (While this does not apply to the `KafkaConnector` resources which are deleted by the operator through the Connect REST API, the `KafkaConnector` resources are reconciled only when the corresponding `KafkaConnect` resource exists.)
 As a result, if the Cluster Operator does not see the custom resources for some time, it will not delete anything.
-In contrast, the User and Topic Operators would delete any topic or user configuration when they don't see the corresponding CRs (in case of the User Operator) or when the perceive that they have been deleted (in case of the Topic Operator).
+In contrast, the User and Topic Operators would delete any topic or user configuration when they don't see the corresponding CRs (in case of the User Operator) or when they perceive that they have been deleted (in case of the Topic Operator).
 
 This had significant impact on the introduction of `v1beta2` and migration from `v1beta1` to `v1beta2` APIs.
 We used the following schedule:
@@ -113,12 +111,11 @@ And only in Strimzi 0.24, we moved the User and Topic Operators to use the new `
 And till today, these API versions are present there only for these two resources.
 
 We need to learn from this for the `v1` migration.
-That is why this proposal moves the User and Topic Operators to use the `v1` API already in the first phase.
-Thanks to that, the User and Topic Operators will already be using the `v1` API when the older API versions are removed in the second phase.
-And thanks to that they will avoid the problem we had when moving to `v1beta2`.
+Therefore, this proposal moves the User and Topic Operators to `v1` in the first step, so they’re already using `v1` when older API versions are removed.
 
 However, moving the User and Topic Operators to the `v1` API early means that their custom resources need to be updated already before the upgrade to the first phase.
-Because the operators using the `v1` API will not see any fields that are not present anymore in it because they were deprecated and removed.
+If the User and Topic Operators are transitioned to the `v1` API early, their custom resources must be updated before the first upgrade phase. 
+Fields that were deprecated and removed from the `v1` API will no longer be visible to these operators once the transition occurs.
 
 For example, when the User Operator using the `v1` API reconciles a `KafkaUser` resource still using the deprecated field `.spec.authorization.acls[].operation`, it will not see this field in the custom resource.
 It will be simply missing.
@@ -142,10 +139,10 @@ And it would likely extend the time needed for the migration to `v1` which is no
 
 ### Second step
 
-The second phase is expected to be done in Strimzi 0.52.0 / 1.0.0.
+The second step is expected to be done in Strimzi 0.52.0 / 1.0.0.
 This version will update the stored version of the remaining custom resources to `v1`.
 And it will remove the old deprecated API versions.
-The field descriptions will be enabled again for the `v1` API as with the `v1` version only it would be now small enough again to include them.
+The field descriptions will be re-enabled for the `v1` API as with the `v1` version only it would be now small enough again to include them.
 The Cluster Operator in this version will also use the `v1` API.
 
 Before upgrading to the Strimzi 0.52.0 / 1.0.0, users will need to convert all their custom resources to the `v1` version.
@@ -154,7 +151,7 @@ The conversion can be done manually or using a provided conversion tool (more on
 The conversion tool will also do the initial update of the stored API version to `v1` and will remove the older API versions from the CRD status after the conversion to allow their removal.
 
 After applying the conversion tool, users would upgrade to Strimzi 0.52.0 / 1.0.0.
-During the upgrade - when applying the new CRDs - the old API version will be removed.
+During the upgrade — when applying the new CRDs — the old API version will be removed.
 
 ### Strimzi 1.0.0 version
 
@@ -212,7 +209,7 @@ The following changes will be done to the `KafkaConnect` API in the `v1` version
 * The `deployment` section in `.spec.template` is deprecated and will be removed in `v1` without replacement.
 * The `externalConfiguration` section in `.spec` is deprecated and will be removed in `v1`.
   It was replaced with various other fields.
-* The `type: jaeger` tracing in `.spec.tracing` is deprecated and will be removed without replacement (`type: opentelemetry` tracing support remains unchanged
+* The `type: jaeger` tracing in `.spec.tracing` is deprecated and will be removed without replacement (`type: opentelemetry` tracing support remains unchanged).
 * `.spec.replicas` field will be required in the `v1` API.
   During the CRD conversion, it will be set to `3` when not set (the original default value).
 * The `type: oauth` authentication will be removed in the `v1` version.
@@ -315,7 +312,7 @@ The following changes will be done to the `Kafka` API in the `v1` version:
 * In the `.spec.kafka` section (or its subsections before moving to `.spec` directly)
     * The `enableECDSA` field in the OAuth authentication is deprecated and will be removed in `v1` without replacement.
     * `secrets` section in `type: custom` authentication is deprecated and will be removed in `v1`.
-      It is replaced by additional volumes feature in the `template` section.
+      It is replaced by mounting secrets through the additional volumes feature in the `template` section.
     * The `statefulset` option of the `.spec.kafka.template` section is deprecated and will be removed in `v1` without replacement.
     * The `type: opa` authorization in `.spec.kafka.listeners` has been deprecated and will be removed in `v1`.
       It is replaced by `type: custom` authorization.
@@ -334,9 +331,9 @@ The following changes were considered and rejected:
 ### Conversion tool
 
 A conversion tool will be provided to the users as part of Strimzi 0.49 when the `v1` API is introduced.
-The Conversion tool will allow:
+The conversion tool will allow:
 * Automatic conversion of the custom resources
-* The updating of the stored CRD versions
+* Updating each CRD’s stored API version to `v1`
 
 The automatic conversion of the resources will:
 * Remove the fields that were deprecated without replacement if they are still used
@@ -360,7 +357,7 @@ So it is backwards compatible with the `v1beta2` APIs.
 So users who upgrade to Strimzi 0.52 / 1.0 or later and use only the `v1` API will be able to downgrade to Strimzi 0.49 - 0.51.
 They would just install the older versions and their existing `v1` resources would be usable as valid `v1beta2` resources.
 
-Downgrading from Strimzi 0.49-51 to Strimzi 0.8 or older is more complicated.
+Downgrading from Strimzi 0.49 – 0.51 to Strimzi 0.48 or older is more complicated.
 The older versions do not support the `v1` API.
 When downgrading, users would need to:
 * (At least initially) keep the newer CRD files including the `v1` version in order to avoid problems with the User and Topic Operators that will be still using the `v1` version for some time
@@ -369,7 +366,7 @@ When downgrading, users would need to:
 
 ### Testing strategy
 
-A new system tests will be written to cover the CRD upgrades.
+New system tests will be written to cover the CRD upgrades.
 In addition to that, a new pipeline based on the existing tests will be created that will use the `v1` API from the system tests to manage the custom resources.
 This pipeline will use the existing tests (any existing system tests testing deprecated fields will be disabled in this pipeline).
 
@@ -381,7 +378,7 @@ As our examples in general do not use any deprecated fields, the update will mos
 ### Documentation
 
 The Overview, Get Started, and Deploying and Managing guides will be updated to use the `v1` CRD version already in the first phase with Strimzi 0.49.0.
-The update will especially include all commands and all YAMl examples.
+The update will especially include all commands and all YAML examples.
 The example YAMLs will be updated in the API Reference as well.
 In addition to that, the generated reference will be also updated to include the information about the fields that will be present only in some versions.
 
