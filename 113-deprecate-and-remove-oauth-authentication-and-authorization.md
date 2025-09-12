@@ -176,6 +176,7 @@ spec:
 The examples of using the `type: custom` configuration will be added to the documentation.
 The existing documentation using the OAuth APIs should be removed after its deprecation, while ensuring the things it covers are well documented in the OAuth library documentation/README.
 We will also include basic instructions for how to migrate to the `type: custom` APIs, which will link to the Strimzi OAuth library docs for details about the different options.
+The migration instructions will also include a mapping between the API options and the actual OAuth library configuration options.
 
 ### Examples
 
