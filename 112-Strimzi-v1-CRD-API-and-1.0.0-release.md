@@ -19,6 +19,9 @@ As ZooKeeper has now been removed from Strimzi, we can now proceed with introduc
 The migration from `v1beta2` will happen as a two-step process:
 * The first step will be done in Strimzi 0.49.
     * It will introduce the `v1` API into the Strimzi CRDs
+      All API versions will be marked as served (`served: true`).
+      For `KafkaUser` and `KafkaTopic` resources, the `v1` version will be used as stored (`storage: true`).
+      For all other resources, the stored version will be `v1beta2`.
     * It will deprecate the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
       The deprecation warning messages will point to the section of our documentation about the `v1` API and its migration.
       This message will be showed by tools such as `kubectl` when using the old APIs.
@@ -29,12 +32,13 @@ The migration from `v1beta2` will happen as a two-step process:
     * It will also transition the Cluster Operator to use the `v1` API as well.
     * Before upgrading to this version, users will need to convert all their custom resources and the CRDs.
       The conversion could be done using the conversion tool (described in more detail in one of the later sections) or manually.
+      It will also update the `storage` flag so that the `v1` version is used as stored.
 
 This might correspond to the following release dates:
 * 0.49.0 in early November 2025
 * 0.50.0 early January 2026
 * 0.51.0 late February 2026
-* 0.52.0 / 1.0.0 in April 2026
+* 0.52.0 / 1.0.0 in late April 2026
 
 *The dates are subject to change.*
 
@@ -66,7 +70,7 @@ For example, Strimzi users can:
 
 In the first phase, the Strimzi CRDs will be modified to add the new `v1` API to the existing CRDs.
 The details of how the `v1` API will look for the different resources and how it will differ from the existing API versions are described in a separate section below.
-In the first phase, we will also deprecate the old CRD API versions.
+In the first phase, we will also deprecate the old CRD API versions (set the flag `deprecated: true`).
 The CRD API version deprecation is a flag in the CRD resource.
 Deprecated versions can still be used, but Kubernetes will issue a warning when the deprecated API is used.
 
@@ -74,7 +78,9 @@ Most of the CRDs will continue to use the `v1beta2` version as the stored versio
 Only the `KafkaUser` and `KafkaTopic` CRDs will already switch to `v1` as the stored version.
 With the exception of the `KafkaUser` resource, users are not expected to do anything in the first phase other than upgrade the CRDs and the other Strimzi resources.
 
-The `Kafka` CRD YAML will be generated with field descriptions disabled because otherwise it would be too big for `kubectl apply`.
+The `Kafka` CRD YAML with both `v1beta2` and `v1` versions is too big and it would not be possible to use it with `kubectl apply` because of its size.
+Instead of updating all our docs and forcing users to use `kubectl creat` / `kubectl replace` instead of `kubectl apply`, we will generate the `Kafka` CRD with the `description` fields.
+That will make it smaller and allow it to be used with `kubectl apply`.
 
 #### The User and Topic Operator problem
 
@@ -86,7 +92,7 @@ When the Strimzi upgrade happens, in the first phase:
 
 While these two events are not synchronized and are _eventually consistent_, they happen at roughly the same time.
 The User and Topic Operators, on the other hand, are only rolled much later as part of the Kafka cluster reconciliation.
-This can be many minutes after the CRDs were updated.
+This can be many minutes after the CRDs were updated, especially with big Kafka cluster as all Kafka nodes need to be rolled before the User and Topic Operators are rolled.
 
 Additionally, the Topic and User Operator are deleting their Users / Topics from the Kafka cluster when the resources are deleted.
 This is different from the Cluster Operator, which in general does not delete the operands as they are deleted by Kubernetes Garbage Collection.
@@ -121,7 +127,7 @@ If the User and Topic Operators are transitioned to the `v1` API early, their cu
 Fields that were deprecated and removed from the `v1` API will no longer be visible to these operators once the transition occurs.
 
 For example, when the User Operator using the `v1` API reconciles a `KafkaUser` resource still using the deprecated field `.spec.authorization.acls[].operation`, it will not see this field in the custom resource.
-It will be simply missing.
+It will be missing and the User operator will thrown an error when reconciling the user.
 So for the User Operator to work well, users have to make sure that their `KafkaUser` resources do not use the deprecated `.spec.authorization.acls[].operation` and use instead the `.spec.authorization.acls[].operations` array.
 If any resource is not updated, the User Operator will report an error as it will be missing the `operation` field (due to the `v1` API schema) as well as the `operations` array (due to not being used by the user).
 However, the User Operator will not delete the user.
