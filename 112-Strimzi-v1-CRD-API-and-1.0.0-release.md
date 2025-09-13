@@ -79,8 +79,9 @@ Only the `KafkaUser` and `KafkaTopic` CRDs will already switch to `v1` as the st
 With the exception of the `KafkaUser` resource, users are not expected to do anything in the first phase other than upgrade the CRDs and the other Strimzi resources.
 
 The `Kafka` CRD YAML with both `v1beta2` and `v1` versions is too big and it would not be possible to use it with `kubectl apply` because of its size.
-Instead of updating all our docs and forcing users to use `kubectl creat` / `kubectl replace` instead of `kubectl apply`, we will generate the `Kafka` CRD with the `description` fields.
+Instead of updating all our docs and forcing users to use `kubectl creat` / `kubectl replace` instead of `kubectl apply`, we will generate the `Kafka` CRD without the `description` fields.
 That will make it smaller and allow it to be used with `kubectl apply`.
+The description fields will be used again once the `v1beta2` version is removed in Strimzi 0.52 / 1.0.0.
 
 #### The User and Topic Operator problem
 
