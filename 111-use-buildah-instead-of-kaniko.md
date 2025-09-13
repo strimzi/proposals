@@ -56,12 +56,13 @@ It will just output the SHA, not the full image, so we need to build it from the
 We will use following commands:
 
 ```shell
-buildah build --file=/dockerfile/Dockerfile --tag=<IMAGE> --storage-driver=vfs
-buildah push --storage-driver=vfs --digestfile=/tmp/digest <ADDITIONAL_OPTS> <IMAGE>
+buildah build --file=/dockerfile/Dockerfile --tag=<IMAGE> --storage-driver=vfs <ADDITIONAL_BUILD_OPTS>
+buildah push --storage-driver=vfs --digestfile=/tmp/digest <ADDITIONAL_PUSH_OPTS> <IMAGE>
 buildah images --digests --filter=digest=sha256:$(cat /tmp/digest) --format='{{.Name}}@{{.Digest}}' > /dev/termination-log
 ```
 - `<IMAGE>` is placeholder for user desired name of the image (with registry, repository, and possibly tag)
-- `<ADDITIONAL_OPTS>` is placeholder for user desired additional options for the `buildah push` command
+- `<ADDITIONAL_BUILD_OPTS>` is placeholder for user desired additional options for the `buildah build` command
+- `<ADDITIONAL_PUSH_OPTS>` is placeholder for user desired additional options for the `buildah push` command
 
 We need to take these three steps in order to get the SHA of the image together with correct repository.
 This will work in all scenarios, including when the user does not specify a tag and the default (`latest`) is used.
@@ -69,40 +70,45 @@ This will work in all scenarios, including when the user does not specify a tag 
 Together with this feature, and upcoming v1 API, we will do following changes inside the `DockerOutput` model:
 
 1. we will deprecate `additionalKanikoOptions` field as the name of it is connected directly to Kaniko and more generic name can be used (this field will be removed as part of the v1 API).
-2. we will add `additionalOptions` field which will be used from now on and will cover additional options for both Kaniko and Buildah.
+2. we will add two new fields - `additionalBuildOptions` and `additionalPushOptions` - to cover additional options for both phases
 
 The `additionalKanikoOptions` will still be used with Kaniko until the `UseConnectBuildWithBuildah` feature gate moves to GA or until it is removed in the CRD v1 API, whatever comes first.
 An automated warning about deprecation will be added inside the `.status` section of the `KafkaConnect` CR in case it is used as for all other deprecated fields.
-Additionally, if both of the fields will be filled with values, `additionalOptions` takes precedence.
-Once the `UseConnectBuildWithBuildah` feature gate is moved to Beta, the `additionalKanikoOptions` will be completely ignored, the warning about deprecation will slightly change to "is deprecated and ignored" in case that it will be used.
-For Buildah, we will check only the `additionalOptions` field.
-In case that user will specify `additionalKanikoOptions` with Buildah enabled feature gate, warning about deprecation and about ignored field will be added to the `.status` section again.
+Instead of `additionalKanikoOptions`, users should use `additionalBuildOptions`, but not `additionalPushOptions`.
+We will not split the Kaniko's additional options to two groups, and we will keep everything configured in one.
+That's because Kaniko doesn't have the build and push phases split, but everything is done in one command.
+The difference between the build and push options in Kaniko is that the `-pull` suffix is applied for options used only for the build phase.
 
-Following table shows what was described above and how these two fields will be checked and handled:
+Buildah, in the other hand, has these phases split and has its own set of options for both.
+In order to allow specifying different options and their values for both of these phases, we will add two fields.
+Additionally, if user will use Kaniko and specify both `additionalKanikoOptions` and `additionalBuildOptions`, `additionalBuildOptions` takes precedence.
 
-| `additionalKanikoOptions` used | `additionalOptions` used | `UseConnectBuildWithBuildah` in Beta | Buildah used | Warning about deprecation | Warning about ignored field | Used field                |
-|--------------------------------|--------------------------|--------------------------------------|--------------|---------------------------|-----------------------------|---------------------------|
-| ☑️                             | ❌                        | ❌                                    | ❌            | ☑️                        | ❌                           | `additionalKanikoOptions` |
-| ☑️                             | ❌                        | ☑️                                   | ❌            | ☑️                        | ☑️                          | none                      |
-| ☑️                             | ❌                        | ❌️                                   | ☑️           | ☑️                        | ☑️                          | none                      |
-| ☑️                             | ❌                        | ☑️                                   | ☑️           | ☑️                        | ☑️                          | none                      |
-| ☑️                             | ☑️                       | ❌                                    | ❌            | ☑️                        | ☑️                          | `additionalOptions`       |
-| ☑️                             | ☑️                       | ☑️                                   | ❌            | ☑️                        | ☑️                          | `additionalOptions`       |
+For Buildah, we will check only the `additionalBuildOptions` and `additionalPushOptions` fields.
+In case that user will specify `additionalKanikoOptions` with Buildah enabled feature gate, two conditions with warnings will be added into `.status` section of `KafkaConnect` CR - one about deprecation and one about `additionalKanikoOptions` being ignored, as Buildah is used.
 
-As in case of Kaniko, Buildah will have also some allowed options that can be specified during the `push` phase:
-- `--authfile` - path to the authentication file (usually created using the `buildah login`).
-- `--cert-dir` - path to directory with certificates that should be used for connecting to registries.
-- `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
-- `--retry` - number of times to retry in case of failure during image pull (the base one).
-- `--retry-delay` - duration between retry attempts.
-- `--tls-verify` - skip TLS verification for insecure registries.
+As in case of Kaniko, Buildah will have also some allowed options that can be specified for the `build` and `push` phases:
 
-If the user-specified Buildah options will contain forbidden options (or not known), user will be notified by message inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
+- `additionalBuildOptions`
+  - `--authfile` - path to the authentication file (usually created using the buildah login).
+  - `--cert-dir` - path to directory with certificates that should be used.
+  - `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
+  - `--decryption-key` - the `[key[:passphrase]]` to be used for decryption of images.
+  - `--retry` - number of times to retry in case of failure during image pull (the base one).
+  - `--retry-delay` - duration between retry attempts.
+  - `--tls-verify` - skip TLS verification for insecure registries.
 
-If Buildah is enabled through the feature gate and the user provides Kaniko-specific options, those options will be ignored, and a warning will be reported in the `.status` section of the `KafkaConnect` CR.
-Once the feature gate will be moved to beta, the additional Kaniko options field will be deprecated.
-Additionally, we change the environment variable from `STRIMZI_DEFAULT_KANIKO_EXECUTOR_IMAGE` to `STRIMZI_DEFAULT_BUILDAH_IMAGE` in our deployment files.
-When the feature gate will be moved to GA and Kaniko implementation will be removed, the environment variable for Kaniko will be removed from the code as well (and ignored in case that user sets it).
+- `additionalPushOptions`
+  - `--authfile` - path to the authentication file (usually created using the `buildah login`).
+  - `--cert-dir` - path to directory with certificates that should be used for connecting to registries.
+  - `--creds` - the `[username[:password]]` to use to authenticate with the registry if required.
+  - `--retry` - number of times to retry in case of failure during image pull (the base one).
+  - `--retry-delay` - duration between retry attempts.
+  - `--tls-verify` - skip TLS verification for insecure registries.
+
+If the user-specified Buildah options will contain forbidden options (or not known), condition with warning will be added inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
+
+Once the feature gate will be moved to beta, we change the environment variable from `STRIMZI_DEFAULT_KANIKO_EXECUTOR_IMAGE` to `STRIMZI_DEFAULT_BUILDAH_IMAGE` in our deployment files.
+After it's moved to GA and Kaniko implementation will be removed, the environment variable for Kaniko will be removed from the code as well (and ignored in case that user sets it).
 
 Finally, this feature will be available on Kubernetes only - it will not be available on OpenShift, which is mentioned as one of the rejected alternative.
 So the implementation and usage of OpenShift Build API will be kept.
