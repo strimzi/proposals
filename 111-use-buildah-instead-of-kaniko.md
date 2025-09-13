@@ -71,7 +71,8 @@ Together with this feature, and upcoming v1 API, we will do following changes in
 1. we will deprecate `additionalKanikoOptions` field as the name of it is connected directly to Kaniko and more generic name can be used (this field will be removed as part of the v1 API).
 2. we will add `additionalOptions` field which will be used from now on and will cover additional options for both Kaniko and Buildah.
 
-The `additionalKanikoOptions` will still be used until the Buildah feature gate is moved to Beta stage, but warning about deprecation will be added inside the `.status` section of the `KafkaConnect` CR.
+The `additionalKanikoOptions` will still be used with Kaniko until the `UseConnectBuildWithBuildah` feature gate moves to GA or until it is removed in the CRD v1 API, whatever comes first.
+An automated warning about deprecation will be added inside the `.status` section of the `KafkaConnect` CR in case it is used as for all other deprecated fields.
 Additionally, if both of the fields will be filled with values, `additionalOptions` takes precedence.
 Once the `UseConnectBuildWithBuildah` feature gate is moved to Beta, the `additionalKanikoOptions` will be completely ignored, the warning about deprecation will slightly change to "is deprecated and ignored" in case that it will be used.
 For Buildah, we will check only the `additionalOptions` field.
