@@ -77,14 +77,13 @@ An automated warning about deprecation will be added inside the `.status` sectio
 Instead of `additionalKanikoOptions`, users should use `additionalBuildOptions`, but not `additionalPushOptions`.
 We will not split the Kaniko's additional options to two groups, and we will keep everything configured in one.
 That's because Kaniko doesn't have the build and push phases split, but everything is done in one command.
-The difference between the build and push options in Kaniko is that the `-pull` suffix is applied for options used only for the build phase.
 
 Buildah, in the other hand, has these phases split and has its own set of options for both.
 In order to allow specifying different options and their values for both of these phases, we will add two fields.
 Additionally, if user will use Kaniko and specify both `additionalKanikoOptions` and `additionalBuildOptions`, `additionalBuildOptions` takes precedence.
 
 For Buildah, we will check only the `additionalBuildOptions` and `additionalPushOptions` fields.
-In case that user will specify `additionalKanikoOptions` with Buildah enabled feature gate, two conditions with warnings will be added into `.status` section of `KafkaConnect` CR - one about deprecation and one about `additionalKanikoOptions` being ignored, as Buildah is used.
+In case that user will specify `additionalKanikoOptions` with Buildah enabled feature gate, only the deprecation warning as a condition will be added into the `.status` section of `KafkaConnect` CR, but these options will be ignored.
 
 As in case of Kaniko, Buildah will have also some allowed options that can be specified for the `build` and `push` phases:
 
@@ -105,10 +104,7 @@ As in case of Kaniko, Buildah will have also some allowed options that can be sp
   - `--retry-delay` - duration between retry attempts.
   - `--tls-verify` - skip TLS verification for insecure registries.
 
-If the user-specified Buildah options will contain forbidden options (or not known), condition with warning will be added inside the `.status` section of `KafkaConnect` resource, the `InvalidResourceException` will be thrown (logged inside the operator log) and the build will fail.
-
-Once the feature gate will be moved to beta, we change the environment variable from `STRIMZI_DEFAULT_KANIKO_EXECUTOR_IMAGE` to `STRIMZI_DEFAULT_BUILDAH_IMAGE` in our deployment files.
-After it's moved to GA and Kaniko implementation will be removed, the environment variable for Kaniko will be removed from the code as well (and ignored in case that user sets it).
+If the user-specified Buildah options will contain forbidden options (or not known), the `InvalidResourceException` will be thrown (logged inside the operator log and in the `.status` section of `KafkaConnect` CR) and the build will fail.
 
 Finally, this feature will be available on Kubernetes only - it will not be available on OpenShift, which is mentioned as one of the rejected alternative.
 So the implementation and usage of OpenShift Build API will be kept.
@@ -144,8 +140,9 @@ spec:
     output:
       type: docker
       image: my-internal-registry:5000/repository/image:latest
-      additionalOptions:
+      additionalBuildOptions:
         - "--tls-verify=false"
+      additionalPushOptions:
         - "--quiet"
     plugins:
       - name: kafka-connect-file
