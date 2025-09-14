@@ -178,7 +178,7 @@ We will need also changes to `DockerOutput` model and to the `KafkaConnect` CRD 
 
 Even though it's change in terms of the tool that builds the images, it will be gated behind the feature gate, so users can adapt to this change through few releases.
 Until the feature gate is GA, we will keep the Kaniko implementation in place, ensuring the backwards compatability.
-The `.spec.build.additionalKanikoOptions` field will be deprecated from the start, however it will be usable until the Buildah feature gate is moved to Beta phase.
+The `.spec.build.additionalKanikoOptions` field will be deprecated from the start, however it will be usable until the Buildah feature gate is moved to Beta phase or removed when moving to the `v1` API.
 After that, the `additionalKaninkoOptions` field will be completely ignored and later (with v1 API) it will be removed.
 But we will give users enough time to change between `additionalKanikoOptions` and `additionalOptions` before we reach the Beta phase, so it shouldn't be a problem.
 Finally, once Buildah feature gate will be promoted to GA, we will remove the implementation of Kaniko, together with the Makefile for tagging the Kaniko executor image.
