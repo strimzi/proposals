@@ -76,8 +76,11 @@ The current structure of the `KafkaMirrorMaker2` resources does not correspond t
 * The `targetCluster` field in the mirror configuration has to be always the same value as the `.spec.connectCluster` and is not really _configurable_.
 * It makes it hard to enforce and validate the configuration of the internal Connect topics and consumer group ID.
   See the [_Enforce the configuration of the internal Kafka Connect names and `group.id`_ proposal](https://github.com/strimzi/proposals/pull/176) for more details.
-* The heartbeat connector configuration does not make much sense in the relationship to the source and target clusters.
-  See [strimzi/strimzi-kafka-operator#11842](https://github.com/strimzi/strimzi-kafka-operator/issues/11842) for more details.
+* The heartbeat connector is confusing to configure using the existing `KafkaMirrorMaker2` CR.
+  The heartbeat connector should work in the opposite direction than the source connector.
+  So if the source connectors is mirroring from `cluster-a` to `cluster-b` (the the `cluster-b` is the target and also the Connect cluster), the heartbeat connector needs to be configured to use the `cluster-a` as the target and Connect cluster.
+  This is not possible in the current `KafkaMirrorMaker2` CR without overriding the source/target configurations directly in the connector `config` section.
+  For more details, see [strimzi/strimzi-kafka-operator#11842](https://github.com/strimzi/strimzi-kafka-operator/issues/11842).
 
 This proposal aims to improve these things.
 
@@ -92,10 +95,9 @@ This proposal suggests deprecating the following fields and remove them in the `
 These will be replaced with the following new fields:
 * `.spec.targetCluster` section for configuring the cluster that will be used as target and Connect cluster
   The new `targetCluster` configuration will differ from the current `.spec.clusters` configuration:
-    * There will be no `alias` field
     * New fields `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be added to configure the consumer group and internal topics names similar to Kafka Connect.
       Please check the [separate proposal](https://github.com/strimzi/proposals/pull/176) for the detailed motivation.
-    * The `bootstrapServers`, `tls`, `authentication` and `config` sections will remain unchanged.
+    * The `alias`, `bootstrapServers`, `tls`, `authentication` and `config` sections will remain unchanged.
 * `.spec.sourceCluster` list for configuring one or more source clusters.
   The source cluster configuration itself will remain identical to the configuration we use today in `.spec.clusters`.
 
