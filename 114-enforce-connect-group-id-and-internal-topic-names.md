@@ -35,7 +35,7 @@ spec:
 ```
 
 These options are required by Connect itself.
-But they are only optional in Strimzi
+But they are only optional in Strimzi.
 And when they are not set, Strimzi will use its own static defaults:
 * `group.id` defaults to `connect-cluster`
 * `offset.storage.topic` defaults to `connect-cluster-offsets`
@@ -64,9 +64,9 @@ While this will not ensure that users properly configure them to a different val
 We will introduce 4 new fields in the `.spec` section of the `KafkaConnect` resource.
 These fields will be:
 * `groupId`
-* `configStorageTopicName`
-* `statusStorageTopicName`
-* `offsetStorageTopicName`
+* `configStorageTopic`
+* `statusStorageTopic`
+* `offsetStorageTopic`
 
 These fields will be optional in the `v1beta2` API.
 But they will be required in the `v1` API.
@@ -83,8 +83,8 @@ So if the users have them set there, they will remain there (but will be ignored
 And the defaults values used by the operator when the `.spec.config` values were not set will be completely removed from the operator.
 
 The existing `v1beta2` resources will be updated during the CRD `v1` conversion.
-* If the values are set in `.spec.config`, they will be taken from there and used to set the new fields `groupId`, `configStorageTopicName`, `statusStorageTopicName`, and `offsetStorageTopicName`.
-* If the values are not set in `.spec.config`, the  fields `groupId`, `configStorageTopicName`, `statusStorageTopicName`, and `offsetStorageTopicName` fields will be set to the default values used by the operator.
+* If the values are set in `.spec.config`, they will be taken from there and used to set the new fields `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic`.
+* If the values are not set in `.spec.config`, the  fields `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` fields will be set to the default values used by the operator.
 
 This conversion will be done automatically by the `v1` CRD Conversion Tool.
 And it will be also included in the manual instructions provided to users who do not want to use the conversion tool.
@@ -102,9 +102,9 @@ metadata:
 spec:
   # ...
   groupId: my-connect-group
-  configStorageTopicName: my-connect-config
-  statusStorageTopicName: my-connect-status
-  offsetStorageTopicName: my-connect-offsets
+  configStorageTopic: my-connect-config
+  statusStorageTopic: my-connect-status
+  offsetStorageTopic: my-connect-offsets
   config:
     config.storage.replication.factor: -1
     offset.storage.replication.factor: -1
