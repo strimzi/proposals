@@ -24,8 +24,8 @@ The migration from `v1beta2` will happen as a two-step process:
       For all other resources, the stored version will be `v1beta2`.
     * It will deprecate the old `v1beta2` API version (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
       The deprecation warning messages will point to the section of our documentation about the `v1` API and its migration.
-      This message will be showed by tools such as `kubectl` when using the old APIs.
-    * And it will transition the Topic and User Operators to use the `v1` API.
+      This message will be shown by tools such as `kubectl` when using the old APIs.
+    * And it will transition the Topic and User Operators to use the `v1` API internally.
     * Users will need to make sure their `KafkaUser` resources do not use the deprecated/removed `operation` field.
 * The second step will be done 3 releases later in Strimzi 0.52/1.0.0
     * This version will remove the `v1beta2` API (and for `KafkaTopic` and `KafkaUser` CRDs also the `v1alpha1` and `v1beta1`).
@@ -79,8 +79,10 @@ Only the `KafkaUser` and `KafkaTopic` CRDs will already switch to `v1` as the st
 With the exception of the `KafkaUser` resource, users are not expected to do anything in the first phase other than upgrade the CRDs and the other Strimzi resources.
 
 The `Kafka` CRD YAML with both `v1beta2` and `v1` versions is too big and it would not be possible to use it with `kubectl apply` because of its size.
-Instead of updating all our docs and forcing users to use `kubectl creat` / `kubectl replace` instead of `kubectl apply`, we will generate the `Kafka` CRD without the `description` fields.
+Instead of updating all our docs and forcing users to use `kubectl create` / `kubectl replace` instead of `kubectl apply`, we will generate the `Kafka` CRD without the `description` fields.
 That will make it smaller and allow it to be used with `kubectl apply`.
+The descriptions will be excluded for both the `v1beta2` and `v1` versions, as excluding them only from one version is not sufficient.
+This does not affect the API Reference docs, only the CRDs.
 The description fields will be used again once the `v1beta2` version is removed in Strimzi 0.52 / 1.0.0.
 
 #### The User and Topic Operator problem
