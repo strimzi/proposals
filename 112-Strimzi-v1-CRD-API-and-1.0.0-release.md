@@ -409,6 +409,12 @@ These open points will be clarified in separate issues or proposals.
 They should not be blockers for this proposal.
 However, they need to be done before we release the 0.49.0 version with the `v1` API, as we cannot remove anything from the `v1` API once it is released.
 
+## Out of scope
+
+The Strimzi Access Operator has its own CRD(s).
+These are out of scope of this proposal and are not affected by it.
+The Access Operator CRDs will transition to new versions on their own schedule as it matures.
+
 ## Rejected alternatives
 
 ### Switching the User and Topic Operators at a different schedule
