@@ -403,7 +403,7 @@ We will also add new sections to the documentation covering the automated and ma
 The following points are still open and might result in future changes in the `v1` schema:
 * [Consider places missing additional validation](https://github.com/strimzi/strimzi-kafka-operator/issues/11765)
 * [Enforcing internal topic names and `group.id` in Kafka Connect](https://github.com/strimzi/proposals/pull/176)
-* [Redesign of the `KafkaMirrorMaker2` CR/CRD](https://github.com/strimzi/strimzi-kafka-operator/issues/11842)
+* [Redesign of the `KafkaMirrorMaker2` CR/CRD](https://github.com/strimzi/proposals/pull/178)
 
 These open points will be clarified in separate issues or proposals.
 They should not be blockers for this proposal.
