@@ -180,6 +180,7 @@ Instead, we can continue with 0.5x releases (0.52, 0.53 etc.) until we feel read
 
 The following changes will be done to the `KafkaTopic` API in the `v1` version:
 * In the current versions of the `KafkaTopic` resource, the `.spec` section is not marked as required.
+  But the Topic Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 _Note: As there are no deprecated fields in the current versions of the `KafkaTopic` API, no fields are being removed in the `v1` version._
@@ -199,6 +200,7 @@ The following changes will be done to the `KafkaUser` API in the `v1` version:
   This field will not be present in the `v1` API.
   The `v1` version will also make the `operations` field required.
 * In the current versions of the `KafkaUser` resource, the `.spec` section is not marked as required.
+  But the User Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `KafkaConnector`
@@ -207,6 +209,7 @@ The following changes will be done to the `KafkaConnector` API in the `v1` versi
 * In the current versions of the `KafkaConnector` resource, the `.spec.pause` field is deprecated (replaced with the `state` field).
   This field will not be present in the `v1` API.
 * In the current versions of the `KafkaConnector` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 ##### Rejected changes
@@ -228,6 +231,7 @@ The following changes will be done to the `KafkaConnect` API in the `v1` version
   Users can use the `type: custom` authentication instead.
   Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaConnect` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `KafkaMirrorMaker2`
@@ -245,6 +249,7 @@ The following changes will be done to the `KafkaMirrorMaker2` API in the `v1` ve
   Users can use the `type: custom` authentication instead.
   Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaMirrorMaker2` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 ##### Rejected changes
@@ -265,18 +270,21 @@ The following changes will be done to the `KafkaBridge` API in the `v1` version:
   Users can use the `type: custom` authentication instead.
   Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaBridge` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `KafkaRebalance`
 
 The following changes will be done to the `KafkaRebalance` API in the `v1` version:
 * In the current versions of the `KafkaRebalance` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `StrimziPodSet`
 
 The following changes will be done to the `StrimziPodSet` API in the `v1` version:
 * In the current versions of the `StrimziPodSet` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `KafkaNodePool`
@@ -284,6 +292,7 @@ The following changes will be done to the `StrimziPodSet` API in the `v1` versio
 The following changes will be done to the `KafkaNodePool` API in the `v1` version:
 * The `overrides` section in `type: persistent-claim` storage is deprecated and will be removed without replacement in `v1`.
 * In the current versions of the `KafkaNodePool` resource, the `.spec` section is not marked as required.
+  But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
 
 #### `Kafka`
@@ -293,26 +302,36 @@ The following changes will be done to the `Kafka` API in the `v1` version:
 * In the `.status` section:
     * The `.status.registeredNodeIds` field is deprecated and will be removed without replacement.
     * The `.status.kafkaMetadataState` will be deprecated and removed in the `v1` version without replacement.
-    * The `type` field in `status.listeners` will be removed in the `v1` version.
+    * The `type` field in `status.listeners` is deprecated and not used anymore.
+      It will be removed in the `v1` version.
       It is already replaced by the `name` field in the same section.
 
 * In the `.spec` section:
-    * The `.spec.zookeeper` section will be removed in the `v1` version without replacement.
-    * The `.spec.jmxTrans` section will be removed in the `v1` version without replacement.
+    * The `.spec.zookeeper` is deprecated and not used anymore.
+      It section will be removed in the `v1` version without replacement.
+    * The `.spec.jmxTrans`is deprecated and not used anymore.
+      It  section will be removed in the `v1` version without replacement.
     * In the current versions of the `Kafka` resource, the `.spec` section is not marked as required.
+      But the Cluster Operator does require it and the reconciliation will fail if it is not present.
       The `v1` API will mark it as required.
 
 * In the `.spec.cruiseControl` section:
-    * The `tlsSidecar` section from `.spec.cruiseControl` will be removed in the `v1` version without replacement.
-    * The `tlsSidecarContainer` section from `.spec.cruiseControl.template` will be removed in the `v1` version without replacement.
-    * The `cpuUtilization` and `disk` fields in `.spec.cruiseControl.brokerCapacity` are deprecated and will be removed without replacement in `v1` version.
+    * The `tlsSidecar` section from `.spec.cruiseControl` is deprecated and not used anymore.
+      It will be removed in the `v1` version without replacement.
+    * The `tlsSidecarContainer` section from `.spec.cruiseControl.template` is deprecated and not used anymore.
+      It will be removed in the `v1` version without replacement.
+    * The `cpuUtilization` and `disk` fields in `.spec.cruiseControl.brokerCapacity` are deprecated and not used anymore.
+      They will be removed without replacement in `v1` version.
 
 * In the `.spec.kafkaExporter` section:
-    * The `service` section in `.spec.kafkaExporter.template` is deprecated and will be removed in `v1` without replacement.
+    * The `service` section in `.spec.kafkaExporter.template` is deprecated and not used anymore.
+      It will be removed in `v1` without replacement.
 
 * In the `.spec.entityOperator` section:
-    * The `tlsSidecar` section from `.spec.entityOperator` will be removed in the `v1` version without replacement.
-    * The `tlsSidecarContainer` section from `.spec.entityOperator.template` will be removed in the `v1` version without replacement.
+    * The `tlsSidecar` section from `.spec.entityOperator` is deprecated and not used anymore.
+      It will be removed in the `v1` version without replacement.
+    * The `tlsSidecarContainer` section from `.spec.entityOperator.template` is deprecated and not used anymore.
+      It will be removed in the `v1` version without replacement.
     * The `reconciliationIntervalSeconds` field in `.spec.entityOperator.topicOperator` is deprecated and will be removed in `v1` version.
       It is replaced by the `reconciliationIntervalMs` field.
     * The `zookeeperSessionTimeoutSeconds` field in `.spec.entityoperator.topicOperator` is deprecated and will be removed in `v1` version without replacement.
@@ -325,7 +344,8 @@ The following changes will be done to the `Kafka` API in the `v1` version:
     * The `enableECDSA` field in the OAuth authentication is deprecated and will be removed in `v1` without replacement.
     * `secrets` section in `type: custom` authentication is deprecated and will be removed in `v1`.
       It is replaced by mounting secrets through the additional volumes feature in the `template` section.
-    * The `statefulset` option of the `.spec.kafka.template` section is deprecated and will be removed in `v1` without replacement.
+    * The `statefulset` option of the `.spec.kafka.template` section is deprecated and not used anymore.
+      It will be removed in `v1` without replacement.
     * The `type: opa` authorization in `.spec.kafka.listeners` has been deprecated and will be removed in `v1`.
       It is replaced by `type: custom` authorization.
     * The `type: oauth` authentication will be removed in the `v1` version.
