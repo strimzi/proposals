@@ -229,9 +229,8 @@ The following changes will be done to the `KafkaConnect` API in the `v1` version
   During the CRD conversion, it will be set to `3` when not set (the original default value).
 * `.spec.build.output.additionalKanikoOptions` will be deprecated in a [separate proposal](https://github.com/strimzi/proposals/pull/170).
   It will be replaced by `.spec.build.output.additionalBuildOptions` and removed in `v1`.
-* The `type: oauth` authentication will be removed in the `v1` version.
+* The `type: oauth` authentication is deprecated and will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaConnect` resource, the `.spec` section is not marked as required.
   But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
@@ -247,9 +246,8 @@ The following changes will be done to the `KafkaMirrorMaker2` API in the `v1` ve
 * The `type: jaeger` tracing in `.spec.tracing` is deprecated and will be removed without replacement (`type: opentelemetry` tracing support remains unchanged).
 * `.spec.replicas` field will be required in the `v1` API.
   During the CRD conversion, it will be set to `3` when not set (the original default value).
-* The `type: oauth` authentication will be removed in the `v1` version.
+* The `type: oauth` authentication is deprecated and will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaMirrorMaker2` resource, the `.spec` section is not marked as required.
   But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
@@ -268,9 +266,8 @@ The following changes will be done to the `KafkaBridge` API in the `v1` version:
 * The `type: jaeger` tracing in `.spec.tracing` is deprecated and will be removed without replacement (`type: opentelemetry` tracing support remains unchanged).
 * `.spec.replicas` field will be required in the `v1` API.
   During the CRD conversion, it will be set to `1` when not set (the original default value).
-* The `type: oauth` authentication will be removed in the `v1` version.
+* The `type: oauth` authentication is deprecated and will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
-  Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 * In the current versions of the `KafkaBridge` resource, the `.spec` section is not marked as required.
   But the Cluster Operator does require it and the reconciliation will fail if it is not present.
   The `v1` API will mark it as required.
@@ -350,12 +347,10 @@ The following changes will be done to the `Kafka` API in the `v1` version:
       It will be removed in `v1` without replacement.
     * The `type: opa` authorization in `.spec.kafka.listeners` has been deprecated and will be removed in `v1`.
       It is replaced by `type: custom` authorization.
-    * The `type: oauth` authentication will be removed in the `v1` version.
+    * The `type: oauth` authentication is deprecated and will be removed in the `v1` version.
       Users can use the `type: custom` authentication instead.
-      Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
-    * The `type: keycloak` authorization will be removed in the `v1` version.
+    * The `type: keycloak` authorization is deprecated and will be removed in the `v1` version.
       Users can use the `type: custom` authorization instead.
-      Deprecation of the `type: keycloak` authorization is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
 
 ##### Rejected changes
 
@@ -419,6 +414,10 @@ The example YAMLs will be updated in the API Reference as well.
 In addition to that, the generated reference will be also updated to include the information about the fields that will be present only in some versions.
 
 We will also add new sections to the documentation covering the automated and manual conversion and update the related upgrade and downgrade guides.
+
+## Related proposals
+
+* [Deprecate and remove `type: oauth` authentication and `type: keycloak` authorization](https://github.com/strimzi/proposals/blob/main/112-deprecate-and-remove-oauth-authentication-and-authorization.md)
 
 ## Remaining open points
 
