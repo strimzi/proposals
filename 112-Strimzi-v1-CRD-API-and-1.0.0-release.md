@@ -227,6 +227,8 @@ The following changes will be done to the `KafkaConnect` API in the `v1` version
 * The `type: jaeger` tracing in `.spec.tracing` is deprecated and will be removed without replacement (`type: opentelemetry` tracing support remains unchanged).
 * `.spec.replicas` field will be required in the `v1` API.
   During the CRD conversion, it will be set to `3` when not set (the original default value).
+* `.spec.build.output.additionalKanikoOptions` will be deprecated in a [separate proposal](https://github.com/strimzi/proposals/pull/170).
+  It will be replaced by `.spec.build.output.additionalBuildOptions` and removed in `v1`.
 * The `type: oauth` authentication will be removed in the `v1` version.
   Users can use the `type: custom` authentication instead.
   Deprecation of the `type: oauth` authentication is subject of a separate [proposal](https://github.com/strimzi/proposals/pull/175) that needs to be approved and implemented in the same release as the `v1` is delivered.
