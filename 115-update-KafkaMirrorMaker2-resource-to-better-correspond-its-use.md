@@ -101,7 +101,7 @@ These will be replaced with the following new fields:
 * `.spec.sourceClusters` list for configuring one or more source clusters.
   The source cluster configuration itself will remain identical to the configuration we use today in `.spec.clusters`.
 
-The `.spec.targetCluster`, `.spec.sourceClusterss` and `.spec.mirrors` fields will be required in the `v1` CRD API.
+The `.spec.targetCluster`, `.spec.sourceClusters` and `.spec.mirrors` fields will be required in the `v1` CRD API.
 Within the `.spec.targetCluster` section, the `bootstrapServers`, `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be required in both `v1beta2` and `v1` (this whole section will be optional in `v1beta2`, so this will not break backwards compatibility).
 To allow early migration to the new API while the `v1beta2` API is still in use, the `spec.connectCluster` field will be changed to not be required anymore in `v1beta2` (it is completely removed in `v1`).
 
