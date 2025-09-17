@@ -19,16 +19,21 @@ For the Connect Build feature on Kubernetes, we will use [Buildah](https://build
 Buildah is a well-supported, widely used tool for building container images.
 It also appears that OpenShift’s Build API relies on Buildah, which makes Buildah a strong alternative to Kaniko, with the added assurance of long-term support and maintenance.
 Other than that, Buildah doesn't need any workaround in order to run it on Kubernetes rootlessly - the only thing that is needed during the build and push stages is to specify `--storage-driver=vfs` option.
-The VFS (Virtual File System) driver provides a user-space implementation. It stores each layer as a full copy of the files, but does not require root permissions.
+The VFS (Virtual File System) driver provides a user-space implementation. 
+It stores each layer as a full copy of the files, but does not require root permissions.
 The only trade-off is the build time (it's slower) and consumption of disk space.
 
 Even though we will run Buildah with these options, which should make it rootless, it still needs some capabilities to run without issues during the build phase.
 That means we cannot run the build Pod with restricted Pod Security profile, as these capabilities are dropped in these profiles.
 This is more described in the [Running Buildah in restricted environment](#running-buildah-in-restricted-environment) section of this proposal.
 
-We will use the official Buildah images on Quay.io (currently `quay.io/buildah/stable:v1.40.1`). As with the Kaniko executor image, we will pull the official image, tag it with the version, and push it to the Strimzi repository on Quay.
-That's useful because of our versioning. We will have the image ready even if someone on the Buildah side decides to remove it from their Quay repository.
+We will use the official Buildah images on Quay.io (currently `quay.io/buildah/stable:v1.40.1`).
+As with the Kaniko executor image, we will pull the official image, tag it with the version, and push it to the Strimzi repository on Quay.
+That's useful because of our versioning. 
+We will have the image ready even if someone on the Buildah side decides to remove it from their Quay repository.
 The full name of our Buildah image will be `quay.io/strimzi/buildah:OPERATOR_VERSION` - for `main` branch it will use the `latest` tag, otherwise it will be tagged by the operator version for the particular release.
+
+We will upgrade the Buildah image always to the latest stable version available, primarily to address CVEs and other security issues.
 
 Users then can specify their own Buildah image using `STRIMZI_DEFAULT_BUILDAH_IMAGE` (similarly to what is possible today with Kaniko).
 In case that users will use Kaniko, the Buildah environment variable will be ignored, and vice versa.
@@ -103,6 +108,7 @@ As in case of Kaniko, Buildah will have also some allowed options that can be sp
   - `--retry` - number of times to retry in case of failure during image pull (the base one).
   - `--retry-delay` - duration between retry attempts.
   - `--tls-verify` - skip TLS verification for insecure registries.
+  - `--quiet` - when writing the output image, suppress progress output.
 
 If the user-specified Buildah options will contain forbidden options (or not known), the `InvalidResourceException` will be thrown (logged inside the operator log and in the `.status` section of `KafkaConnect` CR) and the build will fail.
 
@@ -156,7 +162,12 @@ spec:
 ### Running Buildah in restricted environment
 
 To successfully run Buildah in container on Kubernetes, the Pod needs to have some capabilities.
-The required capabilities are `CAP_KILL`, `CAP_SETGID`, and `CAP_SETUID,` which are used during the build phase.”
+The required capabilities are `CAP_KILL`, `CAP_SETGID`, and `CAP_SETUID`, which are used during the build phase.
+Based on my understanding, the capabilities are used for:
+- `CAP_KILL` - used when Buildah needs to terminate helper processes during the container build - especially cleanups or intermediate processes that may not share the same UID.
+- `CAP_SETGID` - used for setting group ownership during the container build during `RUN`, `USER` and also in file-extraction steps. Without that Buildah would not be able to reproduce the metadata of files or drop to the right group inside a container.
+- `CAP_SETUID` - similar to `CAP_SETGID`, but for configuring user ownership - and during the `USER` step.
+
 In case that user will use restricted Pod Security profile, Buildah will not work - as these capabilities are dropped in this profile.
 That is similar to Kaniko - which is not able to run in this restricted profile as well.
 Additionally, that is a reason why we will not implement Buildah for OpenShift - and it's described as [one of the rejected alternatives](#only-one-implementation-of-connect-build---buildah-on-both-kubernetes-and-openshift).
