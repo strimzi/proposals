@@ -340,12 +340,11 @@ The following changes will be done to the `Kafka` API in the `v1` version:
     * The `zookeeperSessionTimeoutSeconds` field in `.spec.entityoperator.userOperator` is deprecated and will be removed in `v1` version without replacement.
 
 * In the `.spec.kafka` section:
-    * The `enableECDSA` field in the OAuth authentication is deprecated and will be removed in `v1` without replacement.
     * `secrets` section in `type: custom` authentication is deprecated and will be removed in `v1`.
       It is replaced by mounting secrets through the additional volumes feature in the `template` section.
     * The `statefulset` option of the `.spec.kafka.template` section is deprecated and not used anymore.
       It will be removed in `v1` without replacement.
-    * The `type: opa` authorization in `.spec.kafka.listeners` has been deprecated and will be removed in `v1`.
+    * The `type: opa` authorization in `.spec.kafka` has been deprecated and will be removed in `v1`.
       It is replaced by `type: custom` authorization.
     * The `type: oauth` authentication is deprecated and will be removed in the `v1` version.
       Users can use the `type: custom` authentication instead.
