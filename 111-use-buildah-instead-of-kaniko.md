@@ -1,6 +1,6 @@
-# Buildah - replacement of Kaniko after its archivation
+# Buildah - replacement of Kaniko after its archival
 
-In our `KafkaConnect` custom resource, we have a possibility to specify plugins that we want to include inside our Connect and build the Connect image, without need of building the image externally.
+In the `KafkaConnect` custom resource, users can specify plugins to include in the Connect image, without needing the build the image externally.
 To support this feature on both Kubernetes and OpenShift, we have two implementations.
 For OpenShift we are using the Build API that OpenShift offers.
 But on Kubernetes, we are using [Kaniko](https://github.com/GoogleContainerTools/kaniko).
@@ -11,46 +11,46 @@ This proposal aims to resolve this issue.
 
 The main motivation behind this proposal is to resolve the issue that Kaniko is archived, and it will not receive any updates (no bug or CVE fixes).
 Currently, it seems to not be a problem, but when some critical CVE or bug arises, we have to fix it.
-Also, we need a support in case that there will be something blocking us on newer versions of Kubernetes, which we would not get in this case anymore.
+We also need support in case a blocking issue arises on newer Kubernetes versions, which we would no longer receive with Kaniko.
 
 ## Proposal
 
 For the Connect Build feature on Kubernetes, we will use [Buildah](https://buildah.io/) as a replacement of Kaniko.
-Buildah is well-supported, widely used tool for building container images.
+Buildah is a well-supported, widely used tool for building container images.
 It also appears that OpenShift’s Build API relies on Buildah, which makes Buildah a strong alternative to Kaniko, with the added assurance of long-term support and maintenance.
 Other than that, Buildah doesn't need any workaround in order to run it on Kubernetes rootlessly - the only thing that is needed during the build and push stages is to specify `--storage-driver=vfs` option.
-VFS (Virtual File System) driver ensures user-space implementation, it stores each layer as a full copy of the files, but without need of root permissions.
+The VFS (Virtual File System) driver provides a user-space implementation. It stores each layer as a full copy of the files, but does not require root permissions.
 The only trade-off is the build time (it's slower) and consumption of disk space.
 
 Even though we will run Buildah with these options, which should make it rootless, it still needs some capabilities to run without issues during the build phase.
 That means we cannot run the build Pod with restricted Pod Security profile, as these capabilities are dropped in these profiles.
 This is more described in the [Running Buildah in restricted environment](#running-buildah-in-restricted-environment) section of this proposal.
 
-We will use the official Buildah images on Quay.io - currently `quay.io/buildah/stable:v1.40.1` - and similarly to Kaniko executor image - we will pull the official image, tag it with the version and push it to the Strimzi repository on Quay.
-That's useful because of our versioning and we will have the image ready even if someone on Buildah side decides to remove it from their Quay repository.
+We will use the official Buildah images on Quay.io (currently `quay.io/buildah/stable:v1.40.1`). As with the Kaniko executor image, we will pull the official image, tag it with the version, and push it to the Strimzi repository on Quay.
+That's useful because of our versioning. We will have the image ready even if someone on the Buildah side decides to remove it from their Quay repository.
 The full name of our Buildah image will be `quay.io/strimzi/buildah:OPERATOR_VERSION` - for `main` branch it will use the `latest` tag, otherwise it will be tagged by the operator version for the particular release.
 
 Users then can specify their own Buildah image using `STRIMZI_DEFAULT_BUILDAH_IMAGE` (similarly to what is possible today with Kaniko).
 In case that users will use Kaniko, the Buildah environment variable will be ignored, and vice versa.
 The users will be responsible for changing these environment variables based on the mode in which they run the Connect build - in case that they have customized Deployment files.
 
-The usage of Buildah will be gated behind feature gate called `UseConnectBuildWithBuildah` that will have following schedule:
+The usage of Buildah will be gated behind a feature gate called `UseConnectBuildWithBuildah` that will have following schedule:
 
 | Alpha (opt-in) | Beta (default-on) | GA     |
 |----------------|-------------------|--------|
 | 0.49.0         | 0.52.0            | 0.55.0 |
 
 The build of the Connect image will be done the same way as today, the main difference will be in the commands used in the build and push process.
-Kaniko executor did everything at once, which can be done by Buildah as well, but I rejected to have it done in one command because:
+Kaniko executor did everything at once, which can be done by Buildah as well, but I decided not to implement it as a single command because:
 
 - We will not get the SHA of image after the push.
 - Once pushed, the image will not be stored locally, so we cannot check the SHA using some different command.
 
 The SHA of the image is needed to keep the compatibility with the previous implementation using Kaniko.
-Kaniko, once the image is build and pushed, is able to return the full name of the image together with the SHA to particular path.
+Kaniko, once the image is built and pushed, is able to return the full name of the image together with the SHA to a specified path.
 That is done using the `--image-name-with-digest-file` option of the Kaniko executor.
 Unfortunately, Buildah doesn't have such option in case that you want to build and push the image in one command (that is done using the `buildah build` command, in order to push directly, you need to prefix the image with `docker://`).
-Buildah has option to store the SHA to specify file on path using `--digestfile` option - but only when `push` command is used.
+Buildah has an option to store the SHA in a specified file using the `--digestfile` option, but only when the `push` command is used.
 It will just output the SHA, not the full image, so we need to build it from the SHA and built image and output it to `/dev/termination-log` in order to have it inside the message of the completed Pod.
 
 We will use following commands:
@@ -78,7 +78,7 @@ Instead of `additionalKanikoOptions`, users should use `additionalBuildOptions`,
 We will not split the Kaniko's additional options to two groups, and we will keep everything configured in one.
 That's because Kaniko doesn't have the build and push phases split, but everything is done in one command.
 
-Buildah, in the other hand, has these phases split and has its own set of options for both.
+Buildah, on the other hand, has these phases split and has its own set of options for both.
 In order to allow specifying different options and their values for both of these phases, we will add two fields.
 Additionally, if user will use Kaniko and specify both `additionalKanikoOptions` and `additionalBuildOptions`, `additionalBuildOptions` takes precedence.
 
@@ -156,14 +156,14 @@ spec:
 ### Running Buildah in restricted environment
 
 To successfully run Buildah in container on Kubernetes, the Pod needs to have some capabilities.
-The capabilities are `cap_kill`, `cap_setgid`, and `cap_setuid`, which are used in the `build` phase.
+The required capabilities are `CAP_KILL`, `CAP_SETGID`, and `CAP_SETUID,` which are used during the build phase.”
 In case that user will use restricted Pod Security profile, Buildah will not work - as these capabilities are dropped in this profile.
 That is similar to Kaniko - which is not able to run in this restricted profile as well.
 Additionally, that is a reason why we will not implement Buildah for OpenShift - and it's described as [one of the rejected alternatives](#only-one-implementation-of-connect-build---buildah-on-both-kubernetes-and-openshift).
 
 ## Affected/not affected projects
 
-The one and only affected project is `strimzi-kafka-operator` repository, especially following classes:
+The only affected project is the `strimzi-kafka-operator` repository, particularly the following classes:
 - `KafkaConnectBuild`
 - `ConnectBuildOperator`
 - `KafkaConnectAssemblyOperator`
@@ -173,7 +173,7 @@ We will need also changes to `DockerOutput` model and to the `KafkaConnect` CRD 
 
 ## Compatibility
 
-Even though it's change in terms of the tool that builds the images, it will be gated behind the feature gate, so users can adapt to this change through few releases.
+Even though it's a change in terms of the tool that builds the images, it will be gated behind the feature gate, so users can adapt to this change through few releases.
 Until the feature gate is GA, we will keep the Kaniko implementation in place, ensuring the backwards compatability.
 The `.spec.build.additionalKanikoOptions` field will be deprecated from the start, however it will be usable until the Buildah feature gate is moved to Beta phase or removed when moving to the `v1` API.
 After that, the `additionalKanikoOptions` field will be completely ignored and later (with v1 API) it will be removed.
@@ -191,7 +191,7 @@ That would mean that Cluster Operator would need another `ClusterRole` that woul
 
 The `anyuid` SCC is needed for Buildah during the image build.
 I don't know the exact internals, but based on my findings, Buildah needs to create an user namespace and also manipulate with UIDs.
-The `anyuid` SCC usage and why it's needed is briefly described in the [Buildah's tutorial about running Buildah on OCP](https://github.com/containers/buildah/blob/main/docs/tutorials/05-openshift-rootless-build.md#create-service-account-for-building-images).
+The use of the `anyuid` SCC and why it's needed is briefly described in [Buildah's tutorial about running Buildah on OCP](https://github.com/containers/buildah/blob/main/docs/tutorials/05-openshift-rootless-build.md#create-service-account-for-building-images).
 
 I tried to workaround the issues I was experiencing with the `restricted-v2` SecurityContext, but unfortunately without luck.
 The same outcome was with `non-root-v2`, only once I applied the `anyuid` SCC, it started to work.
@@ -232,5 +232,5 @@ Even if it's possible solution for the future, we need to wait until it's used a
 
 During implementing and testing the PoC with Buildah, I tried also different tools like BuildKit.
 BuildKit is mainly rootful, but it can be used rootless.
-However, in order to build an image inside the container, it needs some hacking and workarounds, which are not that straighforward as in case of Buildah.
+However, in order to build an image inside the container, it needs some hacking and workarounds, which are not that straightforward as in case of Buildah.
 In order to make things "easy" and not confusing, I decided to reject this alternative and use Buildah instead.
