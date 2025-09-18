@@ -91,18 +91,19 @@ This proposal suggests deprecating the following fields and remove them in the `
 * `.spec.clusters` list
 * `heartbeatConnector` section in the mirror configuration (`.spec.mirrors[].heartbeatConnector`)
 * `targetCluster` field in the mirror configuration (`.spec.mirrors[].targetCluster`)
+* `sourceCluster` field in the mirror configuration (`.spec.mirrors[].targetCluster`)
 
 These will be replaced with the following new fields:
-* `.spec.targetCluster` section for configuring the cluster that will be used as target and Connect cluster
-  The new `targetCluster` configuration will differ from the current `.spec.clusters` configuration:
+* `.spec.target` section for configuring the cluster that will be used as target and Connect cluster
+  The new `target` configuration will differ from the current `.spec.clusters` configuration:
     * New fields `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be added to configure the consumer group and internal topics names similar to Kafka Connect.
       Please check the [separate proposal](https://github.com/strimzi/proposals/pull/176) for the detailed motivation.
     * The `alias`, `bootstrapServers`, `tls`, `authentication` and `config` sections will remain unchanged.
-* `.spec.sourceClusters` list for configuring one or more source clusters.
+* `.spec.mirrors[].source` section for configuring the source cluster.
   The source cluster configuration itself will remain identical to the configuration we use today in `.spec.clusters`.
 
-The `.spec.targetCluster`, `.spec.sourceClusters` and `.spec.mirrors` fields will be required in the `v1` CRD API.
-Within the `.spec.targetCluster` section, the `bootstrapServers`, `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be required in both `v1beta2` and `v1` (this whole section will be optional in `v1beta2`, so this will not break backwards compatibility).
+The `.spec.target`, `.spec.mirrors[].source` and `.spec.mirrors` fields will be required in the `v1` CRD API.
+Within the `.spec.target` section, the `alias`, `bootstrapServers`, `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be required in both `v1beta2` and `v1` (this whole section will be optional in `v1beta2`, so this will not break backwards compatibility).
 To allow early migration to the new API while the `v1beta2` API is still in use, the `spec.connectCluster` field will be changed to not be required anymore in `v1beta2` (it is completely removed in `v1`).
 
 The following example shows the new `KafkaMirrorMaker2` layout:
@@ -115,8 +116,9 @@ metadata:
 spec:
   version: 4.0.0
   replicas: 1
-  targetCluster:
-    bootstrapServers: cluster-c-kafka-bootstrap:9092
+  target:
+    alias: east
+    bootstrapServers: east-kafka-bootstrap:9092
     groupId: my-mm2-group
     configStorageTopic: my-mm2-config
     statusStorageTopic: my-mm2-status
@@ -125,13 +127,10 @@ spec:
       config.storage.replication.factor: -1
       offset.storage.replication.factor: -1
       status.storage.replication.factor: -1
-  sourceClusters:
-    - alias: "cluster-a"
-      bootstrapServers: cluster-a-kafka-bootstrap:9092
-    - alias: "cluster-b"
-      bootstrapServers: cluster-b-kafka-bootstrap:9092
   mirrors:
-    - sourceCluster: "cluster-a"
+    - source:
+        alias: "west"
+        bootstrapServers: west-kafka-bootstrap:9092
       sourceConnector:
         tasksMax: 1
         config:
@@ -147,7 +146,9 @@ spec:
           refresh.groups.interval.seconds: 600
       topicsPattern: ".*"
       groupsPattern: ".*"
-    - sourceCluster: "cluster-b"
+    - source:
+        alias: "south-pole"
+        bootstrapServers: south-pole-kafka-bootstrap:9092
       sourceConnector:
         tasksMax: 1
         config:
@@ -168,12 +169,26 @@ spec:
 The new fields will be immediately available to Strimzi users.
 When both the new and old fields are configured, Strimzi will always prefer the configuration from the new fields.
 During this phase, we would expect the custom resource to use either the new or the old API.
-Mixed use of the APIs (for example, using `.spec.targetCluster` while also using `.spec.clusters`) will be treated as an error and the reconciliations will be failed with the `InvalidResourceException`.
+Mixed use of the APIs (for example, using `.spec.target` while also using `.spec.clusters`) will be treated as an error and the reconciliations will be failed with the `InvalidResourceException`.
 The old configuration will remain fully supported as long as we support the `v1beta2` API.
 Once we drop support for the `v1beta2` API, we will also clean the legacy code from the Strimzi Cluster Operator and support only the new API.
 
 Users who decide not to migrate and use the new fields early will migrate to them when moving to the `v1` API.
 This will happen automatically through the conversion tool or manually if following the manual conversion procedure.
+
+### Overriding the target cluster configuration
+
+The previous design also allowed users to have two different cluster configurations for Connect and target cluster as long as they used the same bootstrap server.
+The new design does not allow users to have a separate cluster configurations for Connect and for target clusters with the same bootstrap server.
+However, the different cluster configurations were only partially used (because of the nature of the _source_ type connectors in Kafka Connect).
+And we assume it is used by a minimal number of users.
+
+To partially mitigate this, we will allow users to override the target and source cluster values using the `target.cluster.` and `source.cluster.` prefixes used for various configuration options in the connector's `config` section (e.g. `.spec.mirrors[].sourceConnector.config`).
+These values would overwrite the options inherited from the source or target cluster definition.
+
+This is a change that cannot be handled automatically by the conversion tool when migrating to the `v1` API.
+So users will need to convert their resources manually.
+But the conversion tool will detect this situation and request the user to update it manually.
 
 ### Documentation
 
@@ -190,15 +205,7 @@ Our MirrorMaker 2 examples will be updated to use the new fields right when the 
 This proposal breaks backwards compatibility and forces users to change their `KafkaMirrorMaker2` custom resources at the latest when migrating to the `v1` CRD API version.
 However, in most cases we expect that our users will use the conversion tool, so this change should be automated and should add minimal additional effort.
 
-The previous design also allowed users to have two different cluster configurations for Connect and target cluster as long as they used the same bootstrap server.
-The new design does not allow users to have a separate cluster configurations for Connect and for target clusters with the same bootstrap server.
-However, the different cluster configurations were only partially used (because of the nature of the _source_ type connectors in Kafka Connect).
-And we assume it is used by a minimal number of users.
-
-Any users using this would need to migrate to a single cluster definition.
-This is a change that cannot be handled automatically by the conversion tool.
-So users will need to convert their resources manually.
-But the conversion tool will detect this situation and request the user to update it manually.
+This change is breaking also for the users using different configurations for the Connect and Target clusters with the same bootstrap server as described above.
 
 ## Rejected alternatives
 
