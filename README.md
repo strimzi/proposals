@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 114 | [Buildah - replacement of Kaniko after its archival](./114-use-buildah-instead-of-kaniko.md) |
 | 113 | [Strimzi `v1` CRD API and 1.0.0 release](./113-Strimzi-v1-CRD-API-and-1.0.0-release.md) |
 | 112 | [Deprecate and remove `type: oauth` authentication and `type: keycloak` authorization](./112-deprecate-and-remove-oauth-authentication-and-authorization.md) |
 | 111 | [Add restart parameters to Kafka connectors](./111-add-restart-parameters-to-kafka-connectors.md) |
