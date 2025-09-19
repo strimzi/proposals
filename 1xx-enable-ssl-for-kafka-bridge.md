@@ -13,33 +13,40 @@ The connection between HTTP Bridge and Kafka cluster can be secured however, cur
 Moreover, some of the endpoints are for internal use only, such as `/healthy`, `/ready` and `/metrics` but they are exposed on the same listener and the same port as the other endpoints that are used by external clients. This means the endpoints for internal use only are also exposed to external clients. And if SSL is enabled, it will introduce more operational complexity as these internal endpoints would need to be configured with TLS and certificates.
 
 ## Proposal
-This proposal also adds new configurations to enable SSL server and specify locations of certificate and key files in PEM format so that client connections to HTTP Bridge can be encrypted. The new configurations will be added to the current `http` prefixed configurations:
+This proposal also adds new configurations to enable SSL server and load keystore certificate and key in PEM format so that client connections to HTTP Bridge can be encrypted. The new configurations will be added to the current `http` prefixed configurations:
 - http.ssl.enable
-- http.ssl.keystore.location
+- http.ssl.keystore.certificate.location
 - http.ssl.keystore.key.location
+- http.ssl.keystore.certificate.chain
+- http.ssl.keystore.key
 - http.ssl.enabled.protocols
 - http.ssl.enabled.cipher.suites
-- http.admin.port
+- http.management.port
 
-When `http.ssl.enable` is set to true, HTTP Bridge server will be started with SSL enabled and the key and certificate loaded from the locations defined by `http.ssl.keystore.location` and `http.ssl.keystore.key.location` configurations. If the existing `http.port` configuration is not set, the server port will be set to `443` by default. This will allow users to make TLS encrypted connections from their clients for all the HTTP Bridge endpoints for client operations. 
+When `http.ssl.enable` is set to true, HTTP Bridge server will be started with SSL enabled and the new configurations will allow users to define locations of the keystore files or certificate chain and key in PEM format. In the future, we can support more formats such as `PKCS12` and `JKS`, if we see requirements from users. 
 
 `http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set, the server will use the same list of protocols that [Kafka use by default](https://kafka.apache.org/documentation/#brokerconfigs_ssl.enabled.protocols), which is `TLSv1.2,TLSv1.3`. 
 
-`http.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that the server will support. If not set, the default list of cipher suites provided by the underlying JDK SSL/TLS engine will be used.
+`https.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that the server will support. If not set, the default list of cipher suites provided by the underlying JDK SSL/TLS engine will be used.
+
+If the existing `http.port` is not set and `http.ssl.enable` is set to true, the server port will be set to `443` by default. This will allow users to make TLS encrypted connections from their clients for all the HTTP Bridge endpoints for client operations.
 
 This proposal also adds a separate listener for the endpoints that are used by internal clients such as
 - `/healthy`
 - `/ready`
 - `/metrics`
 
-The port for this listener will be set by the new configuration `http.admin.port` or 8081 by default.
-The rest of the endpoints will stay on the existing listener with the default port 8080 or 443 if SSL is enabled. 
+The port for this listener will be set by the new configuration `http.management.port` or to 8081 by default. These endpoints will no longer be available on the existing default port defined by `http.port` or 8080. 
+The rest of the endpoints will stay on the existing listener with the default port 8080 and 443 if SSL is enabled. 
 
 This brings a clear separation of internal and external use for the endpoints and makes it simpler to enable SSL for the listener that is used by external clients. It also brings a better performance and security because admin type of operations such as collecting metrics are isolated from traffic for Kafka operations.
 
+Once SSL is enabled, HTTP Bridge server will no longer accept unencrypted connections from external clients. If user wants to allow both HTTP and HTTPS connections, the recommendation would be to deploy 2 separate HTTP Bridge instances, one is enabled with SSL and the other one is not. That way external clients can make both encrypted and unencrypted connections for Kafka operations.
+
+
 ### HTTP Bridge managed by Strimzi operator
 
-When deploying KafkaBridge custom resources with the Strimzi operator, users can set these configurations via `spec.http` in their KafkaBridge CR. Users can enable SSL by setting the new field `spec.http.sslEnable` which is set to false by default. When it is set to true, users have to provide the certificate and key via Kubernetes secret that is referenced in the `certificateAndKey` field.
+When deploying KafkaBridge custom resources with the Strimzi operator, users can set these configurations via `spec.http` in their KafkaBridge CR. Users can enable SSL by setting the new field `spec.http.sslEnable` which is set to false by default. When it is set to true, users have to provide the certificate and key in PEM format via Kubernetes secret that is referenced in the `certificateAndKey` field.
 
 Let's take a look at an example of KafkaBridge CR with the new fields to enable SSL:
 ```yaml
@@ -52,7 +59,6 @@ spec:
   bootstrapServers: <cluster_name>-cluster-kafka-bootstrap:9092
   http:
     port: 8443
-    adminPort: 8081 #NEW FIELD
     sslEnable: true #NEW FIELD
     certificateAndKey: #NEW FIELD
       secretName: my-secret
@@ -60,9 +66,9 @@ spec:
       key: private.key
 ...
 ```
-The liveness and readiness probes will connect to the port defined by `adminPort` (or 8080 if not set).  
+The liveness and readiness probes will connect to port 8081 (instead `http.port` or 8080). If users have metrics set up, they would need to use port 8081 to connect to the `metrics` endpoint and cannot reconfigure this port number as it's only for internal use.
 
-An example of KafkaBridge CR with SSL configurations:
+An example of KafkaBridge CR with other possible SSL configurations:
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaBridge
@@ -86,7 +92,12 @@ spec:
 
 ## Future Improvements
 
-### Supporting mTLS
+### Support more formats for the keystore
+We can support formats such as `PKSC12` and `JKS` as they are common for Java applications. If we support these formats, then we would need to add the following configurations:
+- http.ssl.keystore.type
+- http.ssl.keystore.password
+
+### Support mTLS
 In the future, we can support mutual TLS for the client connections to HTTP Bridge as well. This could be implemented by adding a field `trustedCertificates`, for example:
 
 ```yaml
@@ -98,7 +109,7 @@ spec:
   replicas: 3
   bootstrapServers: <cluster_name>-cluster-kafka-bootstrap:9092
   http:
-    sslPort: 443
+    port: 8443
     sslEnable: true
     certificateAndKey:
       secretName: my-secret
@@ -126,7 +137,7 @@ Users can choose to allow the operator to manage the certificate instead of prov
 
 ## Compatibility
 
-This will introduce a breaking change for users who collect metrics on port 8080 or the port defined by `http.port` configuration. Also users who run Bridge on baremetals and do their own manual healtchecks using `\healthy` and `\ready` endpoints will be affected as well. These users have to reconfigure their healthcheck and monitoring system to use port 8081 or reconfigure their Bridge server with `http.admin.port`.
+This will introduce a breaking change for users who collect metrics on port 8080 or the port defined by `http.port` configuration. Also users who run Bridge on baremetals and do their own manual healtchecks using `/healthy` and `/ready` endpoints will be affected as well. These users have to reconfigure their healthcheck and monitoring system to use port 8081 or reconfigure their Bridge server with `http.management.port`.
 
 ## Rejected alternatives
 
