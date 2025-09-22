@@ -215,7 +215,7 @@ Since we are working with only goal related violation every anomaly would have s
 In case the anomaly is unfixable due to issues like a lack of physical hardware (e.g. insufficient number of racks to satisfy rack awareness, insufficient number of brokers to satisfy `ReplicaCapacityGoal`, or insufficient number of resources to satisfy resource capacity goals), then they will be ignored.
 The `AnomalyDetectorNotifier` will override all the methods declared by the `AnomalyNotifier` interface.
 We will provide a concrete implementations of the `AnomalyNotifier.alert` method which will alert the operator whenever an anomaly is detected by the operator.
-Upon detection of an anomaly, the notifier would create a configmap with name set as `goal-violation-map`. 
+Upon detection of an anomaly, the notifier would create a ConfigMap with name set as `<cluster-name>-goal-violation-map`. 
 
 The ConfigMap will look like this:
 
@@ -234,7 +234,7 @@ data:
 # ...
 ```
 
-The advantages of using a single configmap for every anomaly are:
+The advantages of using a single ConfigMap for every anomaly are:
 1. Single place to put in all the anomalies
 2. Even when dealing multiple Kafka clusters, the ConfigMap created will be equal to number of clusters deployed
 
