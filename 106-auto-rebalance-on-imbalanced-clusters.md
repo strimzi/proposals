@@ -255,14 +255,44 @@ We don't have to worry about the loss of any other new anomalies which was detec
 
 Users cannot configure the notifier if they are utilising the auto-rebalance on imbalanced cluster.
 This is because the operator is using our custom notifier for getting alerts about goal violations. 
-If the users try to override the notifier while the `imbalance` mode is enabled, the auto-rebalance `imbalance` configuration then the operator would throw errors in the auto-rebalance status field of the Kafka CR.
+If the users try to override the notifier while the `imbalance` mode is enabled, then the operator would throw warnings in the status field of the Kafka CR and ignore the changes made by the user
+
+```yaml
+status:
+  autoRebalance:
+    state: Idle
+    lastTransitionTime: "2025-09-22T16:04:00Z"
+    modes:
+      - mode: imbalance
+  conditions:
+    - type: Error
+      status: "True"
+      reason: UnsupportedOperationException
+      message: |
+        Notifier cannot be overridden since `imbalance` mode is enabled in the `auto-rebalance` configuration
+```
 
 If the users really want to have their own way of dealing with the imbalanced clusters then they can disable auto-rebalance in `imbalance` mode and use their own notifier. 
 Another way for users to use their own notifier can be to extend our notifier and use our alert method i.e `super.alert()` first in their `alert()` method implementation.
 
 #### What happens if an unfixable goal violation happens
 
-In case, there is an unfixable goal violation like `DiskDistributionUsage` goal is violated but even after rebalance we cannot fix it since the all the disks are already completely populated, in that case the notifier would simply ignore that anomaly. This is because Cruise Control provides a check to first see if the violated goal can be fixed or not by trying a dry run internally. If the violated goal is unfixable then that goal is ignored and will not be added to the ConfigMap but the user will be prompted about the unfixable violation in the auto-rebalancing status section of the Kafka CR.
+In case, there is an unfixable goal violation like `DiskDistributionUsage` goal is violated but even after rebalance we cannot fix it since the all the disks are already completely populated, in that case the notifier would simply ignore that anomaly. This is because Cruise Control provides a check to first see if the violated goal can be fixed or not by trying a dry run internally. If the violated goal is unfixable then that goal is ignored and will not be added to the ConfigMap but the user will be prompted about the unfixable violation in the status section of the Kafka CR.
+
+```yaml
+status:
+  autoRebalance:
+    state: Idle 
+    lastTransitionTime: "2025-09-22T16:04:00Z"
+    modes:
+      - mode: imbalance
+  conditions:
+    - type: Warning
+      status: "True"
+      reason: UnfixableViolatedGoal
+      message: |
+        The detected `DiskDistributionGoal` cannot be fixed.
+```
 
 #### Metrics for tracking the rebalance requests
 
