@@ -58,7 +58,7 @@ The type of the `version` field will be String, allowing the user to pass ranges
 
 ### MirrorMaker2
 
-The `version` field will also be added to the `KafkaMirrorMaker2` CR and status:
+The `version` field will also be added to the `KafkaMirrorMaker2` CR:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
