@@ -59,11 +59,11 @@ spec:
   bootstrapServers: <cluster_name>-cluster-kafka-bootstrap:9092
   http:
     port: 8443
-    sslEnable: true #NEW FIELD
-    certificateAndKey: #NEW FIELD
-      secretName: my-secret
-      certificate: public.crt
-      key: private.key
+    tls: #NEW FIELD
+      serverCertChainAndKey: #NEW FIELD
+        secretName: my-secret
+        certificate: public.crt
+        key: private.key
 ...
 ```
 The liveness and readiness probes will connect to port 8081 (instead `http.port` or 8080). If users have metrics set up, they would need to use port 8081 to connect to the `metrics` endpoint and cannot reconfigure this port number as it's only for internal use.
@@ -79,14 +79,14 @@ spec:
   bootstrapServers: <cluster_name>-cluster-kafka-bootstrap:9092
   http:
     port: 8443
-    sslEnable: true 
-    certificateAndKey: 
-      secretName: my-secret
-      certificate: public.crt
-      key: private.key
-    config: #NEW FIELD
-      ssl.enabled.protocols: "TLSv1.1, "TLSv1.2", "TLSv1.3"
-      ssl.enabled.cipher.suites: "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+    tls: #NEW FIELD
+      serverCertChainAndKey: #NEW FIELD
+        secretName: my-secret
+        certificate: public.crt
+        key: private.key
+      config: #NEW FIELD
+        ssl.enabled.protocols: "TLSv1.1, "TLSv1.2", "TLSv1.3"
+        ssl.enabled.cipher.suites: "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
 ...
 ```
 
@@ -110,16 +110,16 @@ spec:
   bootstrapServers: <cluster_name>-cluster-kafka-bootstrap:9092
   http:
     port: 8443
-    sslEnable: true
-    certificateAndKey:
-      secretName: my-secret
-      certificate: public.crt
-      key: private.key
-    trustedCertificates: 
-      - secretName: my-cluster-cluster-cert
-        pattern: "*.crt"
-      - secretName: my-cluster-cluster-cert
-        pattern: "*.crt"    
+    tls: 
+      serverCertChainAndKey: 
+        secretName: my-secret
+        certificate: public.crt
+        key: private.key
+      trustedCertificates: #NEW FIELD
+        - secretName: my-cluster-cluster-cert
+          pattern: "*.crt"
+        - secretName: my-cluster-cluster-cert
+          pattern: "*.crt"    
 ...
 ```
 This is not in the scope of this proposal, as we will likely to support multiple authentication mechanisms in the future.
