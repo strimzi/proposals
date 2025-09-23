@@ -106,9 +106,9 @@ The Strimzi cluster operator will use the cluster identifier in two ways:
 1. Generating `advertised.listeners` and `controller.quorum.voters` configuration (see [Configuration of Kafka properties in a stretch cluster](#configuration-of-kafka-properties-in-a-stretch-cluster)).
 2. Determining the target Kubernetes cluster for node pool resources.
 
-#### Step 2: Deploy a cluster operator to each Kubernetes cluster
+#### Step 2: Deploy and configure the cluster operator
 
-##### Central cluster operator configuration
+The cluster operator should be deployed on all Kubernetes clusters. 
 
 The operator running in the central Kubernetes cluster must be provided with the following information to allow creation of resources in remote clusters:
 
@@ -116,7 +116,7 @@ The operator running in the central Kubernetes cluster must be provided with the
 - A URL endpoint for the Kubernetes API server running in each remote cluster.
 - Credential(s) to allow authentication with the remote Kubernetes API server(s).
 
-The information outlined above will be provided as environment variables for the cluster operator.
+The information outlined above will be provided as environment variables for the central cluster operator.
 The values of the environment variables use the following format:
 
 ```yaml
@@ -160,24 +160,6 @@ data:
   kubeconfig: <base64-encoded-kubeconfig>
 ```
 
-##### Remote cluster operator configuration
-
-When deploying the operator to remote clusters, the operator must be configured to reconcile only StrimziPodSet resources by setting the existing environment variable:
-
-```yaml
-- name: STRIMZI_POD_SET_RECONCILIATION_ONLY
-  value: true
-```
-
-This configuration provides important safeguards:
-
-- It minimizes the resources (CPU and memory) required by the operator on remote Kubernetes clusters.
-- It simplifies the operator logs by reducing noise.
-- It prevents accidental reconciliation of other Strimzi resources (such as Kafka, KafkaNodePool, or KafkaConnect) if they are mistakenly created in the remote cluster.
-
-It is therefore essential to set `STRIMZI_POD_SET_RECONCILIATION_ONLY=true` when deploying the operator to remote clusters in a stretch cluster deployment.
-The official Strimzi documentation should clearly state that it is necessary to set STRIMZI_POD_SET_RECONCILIATION_ONLY=true when deploying the operator to remote clusters.
-
 #### Step 3: Create Kafka and KafkaNodePool resources in the central cluster
 
 ##### Kafka CR
@@ -187,7 +169,7 @@ To enable stretch cluster functionality, users must explicitly opt in by adding 
 ```yaml
 metadata:
   annotations:
-    strimzi.io/stretch-cluster: "true"
+    strimzi.io/enable-stretch-cluster: "true"
 ```
 
 This annotation signals the user's intent to deploy a stretch Kafka cluster.
@@ -216,10 +198,41 @@ Additionally, when deploying a stretch cluster, the `StrimziPodSet` resources in
 ```yaml
 metadata:
   annotations:
-    strimzi.io/remote-podset: "true"
+    strimzi.io/stretch-cluster-alias: <cluster-id>
 ```
 
-This annotation indicates to the remote Cluster Operator that the `StrimziPodSet` is part of a stretch cluster deployment and enables it to reconcile the resource independently, even though the `Kafka` and `KafkaNodePool` custom resources are not present in the remote cluster.
+The `strimzi.io/stretch-cluster-alias` annotation indicates that a `StrimziPodSet` is part of a stretch cluster deployment. 
+This allows the remote Cluster Operator to reconcile the `StrimziPodSet` independently, without requiring the presence of `Kafka` or `KafkaNodePool` custom resources in the remote cluster.
+When a `StrimziPodSet` includes this annotation, all pods it creates will automatically inherit the same `strimzi.io/stretch-cluster-alias` value. 
+For example:
+
+```yaml
+apiVersion: core.strimzi.io/v1beta2
+kind: StrimziPodSet
+metadata:
+  annotations:
+    strimzi.io/kafka-version: .....
+    strimzi.io/storage: .....
+    strimzi.io/stretch-cluster-alias: cluster3
+    .....
+    .....
+```
+
+will result in pods like:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    strimzi.io/cluster-ca-cert-generation: ..
+    strimzi.io/cluster-ca-key-generation: ..
+    strimzi.io/stretch-cluster-alias: cluster3
+    .....
+    .....
+```
+
+This design ensures that pods carry the cluster identity (`stretch-cluster-alias`) directly, enabling updates and management without needing to reference the parent `StrimziPodSet`.
 
 ##### KafkaNodePool CR
 
@@ -407,6 +420,7 @@ These DNS names are essential for TLS clients (brokers and controllers) in remot
 
 ```bash
 DNS:my-cluster-broker-0.cluster1.my-cluster-kafka-brokers.stretch.svc.clusterset.local #new entry
+DNS:cluster1.my-cluster-kafka-brokers.strimzins.svc.clusterset.local #new entry
 DNS:my-cluster-broker-0.my-cluster-kafka-brokers.stretch.svc.cluster.local
 DNS:my-cluster-kafka-brokers.stretch.svc
 DNS:my-cluster-kafka-bootstrap.stretch.svc
@@ -417,20 +431,25 @@ DNS:my-cluster-kafka-bootstrap.stretch.svc
 
 ```bash
 DNS:my-cluster-controller-5.cluster1.my-cluster-kafka-brokers.stretch.svc.clusterset.local #new entry
+DNS:cluster1.my-cluster-kafka-brokers.strimzins.svc.clusterset.local #new entry
 DNS:my-cluster-controller-5.my-cluster-kafka-brokers.stretch.svc.cluster.local
 DNS:my-cluster-kafka-brokers.stretch.svc
 DNS:my-cluster-kafka-bootstrap.stretch.svc
 ...
 ```
 
-The key additional entry in stretch mode is
+Key additional entries in stretch mode is
 
+```
+DNS:<stretch-cluster-id>.<service-name>.<namespace>.svc.clusterset.local
+```
+and
 ```
 DNS:<pod-name>.<stretch-cluster-id>.<service-name>.<namespace>.svc.clusterset.local
 ```
 
-This entry is added only when stretch mode is enabled (i.e., when `STRIMZI_REMOTE_KUBE_CONFIG` environment variable is set and the `Kafka` CR is annotated with `strimzi.io/enable-stretch-cluster: "true`).
-Regular single-cluster deployments do not include this entry, preserving the existing SAN generation logic.
+These entries are added only when stretch mode is enabled (i.e., when `STRIMZI_REMOTE_KUBE_CONFIG`, `STRIMZI_CENTRAL_CLUSTER_ID` environment variables are set and the `Kafka` CR is annotated with `strimzi.io/enable-stretch-cluster: "true`).
+Regular single-cluster deployments do not include these entries, preserving the existing SAN generation logic.
 This ensures secure, DNS-verifiable TLS communication between Kafka nodes across clusters without compromising on hostname verification or requiring any changes to Kafka's default TLS configuration.
 
 ### Additional considerations and reference information
@@ -448,6 +467,15 @@ Each method provides different levels of security and flexibility, allowing user
 External access mechanisms, such as Routes, Ingress, or LoadBalancer services, will be deployed in each cluster, allowing clients to seamlessly connect to the stretch cluster.
 Each cluster will have a unique bootstrap address as described by [`Kafka` and `KafkaNodePool` resource status](#kafka-and-kafkanodepool-resource-status).
 Clients must configure `bootstrap.servers` as a comma separated list of bootstrap addresses.
+
+#### Kafka Rolling Updates
+
+In a stretched Kafka cluster, Kafka pods follow the same rolling update process as in a non-stretched deployment. The central Cluster Operator is responsible for determining whether a pod (in the central or remote cluster) needs to be restarted. This decision is based on:
+- The pod running an outdated revision
+- Certificate Authority (CA) renewal or removal
+- File system resize requirements
+- Changes in Kafka certificates
+To identify the location of each pod, the Operator uses the `strimzi.io/stretch-cluster-alias` annotation present on the pod. Based on this annotation, the Operator determines whether the pod resides in the central or a remote cluster and performs the rolling update accordingly.
 
 #### Resource cleanup on remote Kubernetes clusters
 
