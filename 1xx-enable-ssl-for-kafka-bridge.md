@@ -13,6 +13,7 @@ The connection between HTTP Bridge and Kafka cluster can be secured however, cur
 Moreover, some of the endpoints are for internal use only, such as `/healthy`, `/ready` and `/metrics` but they are exposed on the same listener and the same port as the other endpoints that are used by external clients. This means the endpoints for internal use only are also exposed to external clients. And if SSL is enabled, it will introduce more operational complexity as these internal endpoints would need to be configured with TLS and certificates.
 
 ## Proposal
+
 This proposal also adds new configurations to enable SSL server and load keystore certificate and key in PEM format so that client connections to HTTP Bridge can be encrypted. The new configurations will be added to the current `http` prefixed configurations:
 - http.ssl.enable
 - http.ssl.keystore.certificate.location
@@ -25,7 +26,7 @@ This proposal also adds new configurations to enable SSL server and load keystor
 
 When `http.ssl.enable` is set to true, HTTP Bridge server will be started with SSL enabled and the new configurations will allow users to define locations of the keystore files or certificate chain and key in PEM format. In the future, we can support more formats such as `PKCS12` and `JKS`, if we see requirements from users. 
 
-`http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set, the server will use the same list of protocols that [Kafka use by default](https://kafka.apache.org/documentation/#brokerconfigs_ssl.enabled.protocols), which is `TLSv1.2,TLSv1.3`. 
+`http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set by the user, the server will use `TLSv1.2,TLSv1.3` as the default. 
 
 `https.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that the server will support. If not set, the default list of cipher suites provided by the underlying JDK SSL/TLS engine will be used.
 
@@ -37,12 +38,11 @@ This proposal also adds a separate listener for the endpoints that are used by i
 - `/metrics`
 
 The port for this listener will be set by the new configuration `http.management.port` or to 8081 by default. These endpoints will no longer be available on the existing default port defined by `http.port` or 8080. 
-The rest of the endpoints will stay on the existing listener with the default port 8080 and 443 if SSL is enabled. 
+The rest of the endpoints will stay on the existing listener with the default port 8080 or 443 if SSL is enabled. 
 
 This brings a clear separation of internal and external use for the endpoints and makes it simpler to enable SSL for the listener that is used by external clients. It also brings a better performance and security because admin type of operations such as collecting metrics are isolated from traffic for Kafka operations.
 
 Once SSL is enabled, HTTP Bridge server will no longer accept unencrypted connections from external clients. If user wants to allow both HTTP and HTTPS connections, the recommendation would be to deploy 2 separate HTTP Bridge instances, one is enabled with SSL and the other one is not. That way external clients can make both encrypted and unencrypted connections for Kafka operations.
-
 
 ### HTTP Bridge managed by Strimzi operator
 
