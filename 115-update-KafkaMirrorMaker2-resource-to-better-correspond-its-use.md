@@ -103,7 +103,8 @@ These will be replaced with the following new fields:
   The source cluster configuration itself will remain identical to the configuration we use today in `.spec.clusters`.
 
 The `.spec.target`, `.spec.mirrors[].source` and `.spec.mirrors` fields will be required in the `v1` CRD API.
-Within the `.spec.target` section, the `alias`, `bootstrapServers`, `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be required in both `v1beta2` and `v1` (this whole section will be optional in `v1beta2`, so this will not break backwards compatibility).
+Within the `.spec.target` section, the `alias`, `bootstrapServers`, `groupId`, `configStorageTopic`, `statusStorageTopic`, and `offsetStorageTopic` will be required in both `v1beta2` and `v1` in case the `.spec.target` section is used.
+However, this whole section will be optional in `v1beta2`, so this will not break backwards compatibility, and users who do not use the `.spec.target` section do not care about any required fields in it.
 To allow early migration to the new API while the `v1beta2` API is still in use, the `.spec.connectCluster` field will no longer be required in `v1beta2` (it is completely removed in `v1`).
 
 The following example shows the new `KafkaMirrorMaker2` layout:
@@ -166,15 +167,15 @@ spec:
       groupsPattern: ".*"
 ```
 
-The new fields will be immediately available to Strimzi users.
+The new fields will be available to Strimzi users starting with Strimzi 0.49.0.
 When both the new and old fields are configured, Strimzi will always prefer the configuration from the new fields.
 During this phase, we would expect the custom resource to use either the new or the old API.
-Mixed use of the APIs (for example, using `.spec.target` while also using `.spec.clusters`) will be treated as an error and the reconciliations will be failed with the `InvalidResourceException`.
 The old configuration will remain fully supported as long as we support the `v1beta2` API.
 Once we drop support for the `v1beta2` API, we will also clean the legacy code from the Strimzi Cluster Operator and support only the new API.
 
 Users who decide not to migrate and use the new fields early will migrate to them when moving to the `v1` API.
 A conversion tool will be available to assist with migration to the `v1` API, though manual steps are also supported.
+For more details, see the [Strimzi `v1` CRD API proposal](https://github.com/strimzi/proposals/blob/main/113-Strimzi-v1-CRD-API-and-1.0.0-release.md).
 
 ### Overriding the target cluster configuration
 
