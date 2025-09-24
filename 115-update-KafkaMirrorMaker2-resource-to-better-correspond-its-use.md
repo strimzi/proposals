@@ -173,7 +173,8 @@ During this phase, we would expect the custom resource to use either the new or 
 The old configuration will remain fully supported as long as we support the `v1beta2` API.
 Once we drop support for the `v1beta2` API, we will also clean the legacy code from the Strimzi Cluster Operator and support only the new API.
 
-Users who decide not to migrate and use the new fields early will migrate to them when moving to the `v1` API.
+Users can start using the new API from Strimzi 0.49 release on.
+They have to migrate from the old API to the new API latest before upgrading to Strimzi 0.52 / 1.0.0 and newer.
 A conversion tool will be available to assist with migration to the `v1` API, though manual steps are also supported.
 For more details, see the [Strimzi `v1` CRD API proposal](https://github.com/strimzi/proposals/blob/main/113-Strimzi-v1-CRD-API-and-1.0.0-release.md).
 
@@ -186,6 +187,38 @@ And we assume it is used by a minimal number of users.
 
 To partially mitigate this, we will allow users to override the target and source cluster values using the `target.cluster.` and `source.cluster.` prefixes used for various configuration options in the connector's `config` section (e.g. `.spec.mirrors[].sourceConnector.config`).
 These values would overwrite the options inherited from the source or target cluster definition.
+For example:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaMirrorMaker2
+metadata:
+  name: my-mirror-maker-2
+spec:
+  # ...
+  target:
+    alias: east
+    bootstrapServers: east-kafka-bootstrap:9093
+    tls: {}
+    authentication:
+      type: tls
+      certificateAndKey:
+        secretName: east-user
+        certificate: user.crt
+        key: user.key
+    # ...
+  mirrors:
+    - sourceConnector:
+        tasksMax: 1
+        config:
+          target.cluster.ssl.keystore.key: "<PRIVATE_KEY>"
+          target.cluster.ssl.keystore.certificate.chain: "<CERTIFICATE_CHAIN>"
+          replication.factor: -1
+          offset-syncs.topic.replication.factor: -1
+          sync.topic.acls.enabled: "false"
+          refresh.topics.interval.seconds: 600
+      # ...
+```
 
 The conversion tool cannot migrate connector-level `source.cluster.*` and `target.cluster.*` overrides. 
 It will detect them and prompt the user to update the custom resources manually.
