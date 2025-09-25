@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 116 | [Update `KafkaMirrorMaker2` resource structure to better correspond to its use](./116-update-KafkaMirrorMaker2-resource-to-better-correspond-its-use.md) |
 | 115 | [Enforce the configuration of the internal Kafka Connect names and `group.id`](./115-enforce-connect-group-id-and-internal-topic-names.md) |
 | 114 | [Buildah - replacement of Kaniko after its archival](./114-use-buildah-instead-of-kaniko.md) |
 | 113 | [Strimzi `v1` CRD API and 1.0.0 release](./113-Strimzi-v1-CRD-API-and-1.0.0-release.md) |
