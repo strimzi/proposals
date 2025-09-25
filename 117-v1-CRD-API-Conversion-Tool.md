@@ -62,7 +62,6 @@ Users can decide whether to convert resources directly in the cluster or, for ex
 Shortly before the upgrade to Strimzi 0.52 / 1.0.0, users will also be required to run the `crd-upgrade` command.
 After successfully running this command, they will be able to install Strimzi 0.52 / 1.0.0 which will contain only the `v1` CRDs.
 If they try to upgrade to Strimzi 0.52 / 1.0.0 without running the command, the installation will fail as the CRDs will not be updated.
-(However, the operators themselves should work fine as long as all resources were converted and are valid `v1` API resources.)
 
 ### Limitations
 
@@ -100,9 +99,8 @@ It will also allow us to release it as part of the regular Strimzi release proce
 
 ## Documentation
 
-Documentation will include the procedure for how to use the Conversion Tool to convert the resources.
-And - eventually, in the last phase (Strimzi 0.52 / 1.0.0) - it will also cover how to upgrade the CRDs.
-The release notes will inform users about the API change and lead them to the documentation.
+Documentation will include the procedure for how to use the Conversion Tool to convert the resources together with the documentation of the manual conversion process as well as the upgrade to the `v1` API version in the Strimzi 0.52 / 1.0.0 version.
+The migration process is described in detail in the main [_Strimzi v1 CRD API and 1.0.0 release_ proposal](https://github.com/strimzi/proposals/blob/main/113-Strimzi-v1-CRD-API-and-1.0.0-release.md).
 
 ### Testing
 
