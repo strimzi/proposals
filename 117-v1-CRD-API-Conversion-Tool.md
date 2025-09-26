@@ -15,7 +15,7 @@ This proposal provides additional details.
 ### Conversion Tasks
 
 The conversion tool should be able to fulfill the following tasks:
-* Support conversion of the custom resources by modifying their structure to account for the fields that were renamed or moved:
+* Support conversion of the custom resources by modifying their structure to account for the fields that were renamed, moved, or removed:
     * Be able to do the conversion inside a Kubernetes cluster across all namespaces, in a single namespace, or for a particular custom resource only
     * Convert YAML files with the Strimzi custom resources in-place (by modifying the existing file) or by creating a new file
 * Support updating the CRDs:
@@ -27,7 +27,7 @@ Users should be able to use only some of these tasks if needed and combine the C
 
 ### Architecture
 
-The Conversion Tool will be written in Java and mostly follow the architecture of the previous tool we used last time when migrating from `v1beta1` to `v1beta2` API.
+The Conversion Tool will be written in Java and mostly follow the architecture of the [previous tool](https://github.com/strimzi/strimzi-kafka-operator/tree/0.22.0/api-conversion) we used last time when migrating from `v1beta1` to `v1beta2` API.
 Using Java would simplify the release process as it would depend directly on the Strimzi API.
 
 The Conversion Tool itself will be distributed as ZIP and TAR.GZ archives.
