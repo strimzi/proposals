@@ -55,6 +55,7 @@ It will have 3 commands:
 ### Workflow
 
 Users will be able to use the `convert-file` or `convert-resource` commands at any point between the Strimzi 0.49 and 0.52 / 1.0.0 release.
+The conversion must be done after upgrading to Strimzi 0.49 or later.
 Conversion is required no later than the upgrade to Strimzi 0.52.0 / 1.0.0.
 The converted resources will work with the Strimzi versions 0.49.0 and newer.
 Users can decide whether to convert resources directly in the cluster or, for example, convert YAML files offline and commit them to a GitOps repository.
@@ -89,6 +90,7 @@ The changes which the Conversion Tool will not be able to handle are:
 * Removal of the `externalConfiguration` section in the `KafkaConnect` CR
 
 However, the Conversion Tool will detect these changes, fail the conversion, and request the user to do the conversion manually before re-running the tool.
+It will also provide a link to the documentation for the manual conversion.
 
 ### Release process
 
@@ -110,6 +112,8 @@ Additionally, System Tests will be added to test the whole lifecycle of the conv
 * Creating the resources
 * Running the conversion
 * Removing the old API versions (and eventually in the last phase also install the operator using the `v1` API version)
+
+The System tests related to the conversion will be removed again after the Strimzi 0.52 / 1.0.0 release.
 
 ## Rejected alternatives
 
