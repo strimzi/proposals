@@ -187,3 +187,11 @@ The main issue we face is the user awareness.
 Using a feature gate would only postpone when the change is rolled out to most users.
 It would not improve the awareness.
 For this reason, the use of feature gate was rejected.
+
+### Merging the templates even at a deeper level
+
+Merging the template fields even on a deeper level was considered.
+For example, having different environment variables configured in the container template in `Kafka` and `KafkaNodePool` resources, merging them together and using both of them.
+However, this would add significant complexity to the code base as well as to the user experience.
+It would make it less predictable what the merge would actually result in.
+And it would make it hard to unset the values set in the `Kafka` template from the `KafkaNodePool` template.
