@@ -1,4 +1,4 @@
-# Add scope parameter to Maven artifacts for Kafka Connect build
+# Add includeScope parameter to Maven artifacts for Kafka Connect build
 
 Kafka Connect build creates a container image using the plugins configured through the `.spec.build.plugins` property of the `KafkaConnect` custom resource.
 
@@ -24,17 +24,17 @@ spec:
             version: <maven_version_number>
 ```
 
-This proposal aims to support specifying the scope threshold for Maven artifacts, enabling users to configure which dependencies they would like to fetch and include in the container image.
+This proposal aims to support specifying the include scope threshold for Maven artifacts, enabling users to configure which dependencies they would like to fetch and include in the container image.
 
 ## Current situation
 
-Currently, no scope threshold is specified when pulling Maven dependencies, which results in downloading all dependencies, including test, provided, system, etc.
+Currently, no include scope threshold is specified when pulling Maven dependencies, which results in downloading all dependencies, including test, provided, system, etc.
 
 This can make the build process longer, container images larger, and potentially lead to version conflicts as discussed in [issue #11799](https://github.com/strimzi/strimzi-kafka-operator/issues/11799).
 
 ## Motivation
 
-We should allow users to specify the scope threshold for Maven artifacts to configure which dependencies they would like to include in the container image.
+We should allow users to specify the include scope threshold for Maven artifacts to configure which dependencies they would like to include in the container image.
 
 Benefits include:
 - Faster build process
@@ -44,7 +44,7 @@ Benefits include:
 
 ## Proposal
 
-The proposal is to allow users to specify a scope threshold for copying Maven dependencies during the Kafka Connect build, using a new property `scope` that applies only to Maven artifacts.
+The proposal is to allow users to specify the include scope threshold for copying Maven dependencies during the Kafka Connect build, using a new property `includeScope` that applies only to Maven artifacts.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -64,12 +64,12 @@ spec:
             group: <maven_group>
             artifact: <maven_artifact>
             version: <maven_version_number>
-            scope: runtime # new optional property
+            includeScope: runtime # new optional property
 ```
 
 This property will be optional to allow backwards compatibility. 
 - when specified - the value will be used for copying dependencies. 
-- when not specified - no scope will be used, resulting in all dependencies being pulled, maintaining the current behavior.
+- when not specified - no scope threshold will be used, resulting in all dependencies being pulled, maintaining the current behavior.
 
 The possible set of values for this property would be based on the [Maven Dependency Plugin's includeScope parameter](https://maven.apache.org/plugins/maven-dependency-plugin/copy-dependencies-mojo.html#includeScope):
 
@@ -98,4 +98,3 @@ This property will be optional and when not specified, the current behavior of p
 Other alternatives considered and the reasons why they were not chosen are as follows:
 
 1. Changing the current implementation without introducing this optional property - This could cause unexpected behavior for current users.
-2. Supporting both `includeScope` and `excludeScope` properties to align with names, meaning, and behavior of Maven `copy-dependency` plugin - The additional property might not be needed or used much.
