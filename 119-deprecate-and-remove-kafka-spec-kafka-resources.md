@@ -69,7 +69,7 @@ In the second phase, as part of the 0.52 / 1.0.0 release:
 
 The documentation will be updated with this change.
 We will make sure the regular documentation does not use or recommend the deprecated field.
-The conversion will be covered as part of the `v1` CRD API conversion documentation.
+The (manual) conversion will be covered as part of the `v1` CRD API conversion documentation.
 It will also be included in the release notes as it is a breaking change.
 
 ## Backwards compatibility
