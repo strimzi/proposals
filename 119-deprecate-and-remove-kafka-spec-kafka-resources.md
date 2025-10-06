@@ -1,6 +1,6 @@
 # Deprecate and remove `.spec.kafka.resources` from the `Kafka` custom resource
 
-This proposal suggests deprecating the `.spec.kafka.resources` field of the `Kafka` custom resource and removing it in the `v1` CRD API.
+This proposal recommends deprecating the `.spec.kafka.resources` field of the `Kafka` custom resource and removing it in the `v1` CRD API.
 
 ## Current situation
 
@@ -50,7 +50,7 @@ This proposal therefore suggests failing the conversion and requesting users to 
 We should expect this to affect many users, because most clusters that existed before node pools had the resources configured in the `Kafka` CR as it was the only option at that time.
 So in some cases, even if the users have different configurations in the `KafkaNodePool` resources, they might still have the old settings in the `Kafka` CR as well.
 This means that this proposal might have a significant impact on users.
-But there are other fields that will need to be converted manually, so this should be worth it if it helps us achieve a cleaner `v1` CRD API.
+However, other fields will need to be converted manually, so this change is justified if it contributes to a cleaner `v1` CRD API.
 
 ### Implementation
 
