@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 119 | [Add includeScope parameter to Maven artifacts for KafkaConnect build](./119-add-includeScope-parameter-to-maven-artifact-for-kafka-connect-build.md) |
 | 118 | [Running multiple versions of Connector plugins](./118-running-multiple-versions-of-connector-plugins.md) |
 | 117 | [`v1` CRD API Conversion Tool](./117-v1-CRD-API-Conversion-Tool.md) |
 | 116 | [Update `KafkaMirrorMaker2` resource structure to better correspond to its use](./116-update-KafkaMirrorMaker2-resource-to-better-correspond-its-use.md) |
