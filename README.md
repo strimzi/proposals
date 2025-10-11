@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 121 | [Deprecate and remove `.spec.kafka.resources` from the `Kafka` custom resource](./121-deprecate-and-remove-kafka-spec-kafka-resources.md) |
 | 120 | [Improve template behavior in Kafka Node Pools](./120-improve-template-behavior-in-Kafka-node-pools.md) |
 | 119 | [Add includeScope parameter to Maven artifacts for KafkaConnect build](./119-add-includeScope-parameter-to-maven-artifact-for-kafka-connect-build.md) |
 | 118 | [Running multiple versions of Connector plugins](./118-running-multiple-versions-of-connector-plugins.md) |
