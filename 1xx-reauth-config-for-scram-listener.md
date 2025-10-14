@@ -35,7 +35,7 @@ spec:
         authentication:
           type: scram-sha-512
     config:
-      listener.external.connections.max.reauth.ms: 3600000 
+      listener.external-9094.connections.max.reauth.ms: 3600000 
 ```
 
 ## Affected/not affected projects
