@@ -53,7 +53,7 @@ We will also add examples for doing this using topology spread constraints and p
 ## Backwards compatibility
 
 **This proposal is not backwards compatible!**
-Users who currently rely on the default rules will be required to add their own rules.
+Users who currently rely on the default rules will be required to add their own rules from Strimzi 0.49.0 on.
 However, given the default rules provide no guarantees, these users are already running with a bad configuration.
 So if this change helps to force them to fix the configuration, it can be seen as beneficial.
 
