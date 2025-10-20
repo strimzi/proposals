@@ -14,7 +14,7 @@ Moreover, some of the endpoints are for internal use only, such as `/healthy`, `
 
 ## Proposal
 
-This proposal introduces adds new configurations to enable an SSL server and load a keystore certificate and key in PEM format so that client connections to HTTP Bridge can be encrypted. The new configurations will be added to the existing `http` prefixed configurations:
+This proposal introduces new configurations to enable an SSL server and load a keystore certificate and key in PEM format so that client connections to HTTP Bridge can be encrypted. The new configurations will be added to the existing `http` prefixed configurations:
 - http.ssl.enable
 - http.ssl.keystore.certificate.location
 - http.ssl.keystore.key.location
@@ -24,11 +24,11 @@ This proposal introduces adds new configurations to enable an SSL server and loa
 - http.ssl.enabled.cipher.suites
 - http.management.port
 
-When `http.ssl.enable` is set to `true`, the HTTP Bridge server starts with SSL enabled and the new configurations will allow users to define locations of the keystore files or certificate chain and key in `PEM` format. Additional formats such as `PKCS12` and `JKS` might be supported in the future if users request them.
+When `http.ssl.enable` is set to `true`, the HTTP Bridge server starts with SSL enabled and the new configurations will allow users to define locations of the keystore files via `http.ssl.keystore.certificate.location` and `http.ssl.keystore.key.location` or certificate chain and key via `http.ssl.keystore.certificate.chain` and `http.ssl.keystore.key` in `PEM` format. Additional formats such as `PKCS12` and `JKS` might be supported in the future if users request them.
 
-`http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set by the user, the server will use `TLSv1.2,TLSv1.3` as the default. 
+`http.ssl.enabled.protocols` can be configured with a comma separated list of enabled secure transport protocols that the server will accept from connecting clients. If not set by the user, the server will use `TLSv1.2,TLSv1.3` as the default. If set to an invalid value or unsupported value (determined by the underlying JDK SSL/TLS engine), they are ignored and the default of the underlying JDK SSL/TLS engine is used. This part will be documented for users. 
 
-`http.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that the server will support. If not set, the default list of cipher suites provided by the underlying JDK SSL/TLS engine will be used.
+`http.ssl.enabled.cipher.suites` can be configured with a comma separated list of cipher suites that the server will support. If not set, the default list of cipher suites provided by the underlying JDK SSL/TLS engine will be used. If set to an invalid value or unsupported value (determined by the underlying JDK version), they are ignored and the default of the underlying JDK is used. This part will be documented for users.
 
 If the existing `http.port` is not set and `http.ssl.enable` is set to `true`, the server port will be set to `443` by default. This will allow users to make TLS encrypted connections from their clients for all the HTTP Bridge endpoints for client operations.
 
