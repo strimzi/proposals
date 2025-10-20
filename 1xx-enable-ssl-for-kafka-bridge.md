@@ -84,7 +84,7 @@ spec:
         certificate: public.crt
         key: private.key
       config: #NEW FIELD
-        ssl.enabled.protocols: [TLSv1.1, TLSv1.2, TLSv1.3]
+        ssl.enabled.protocols: "TLSv1.1,TLSv1.2,TLSv1.3"
         ssl.enabled.cipher.suites: "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
 ...
 ```
