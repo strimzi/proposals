@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 123 | [Remove default Pod anti-affinity rules when rack awareness is enabled](./123-remove-default-pod-anti-affinity-rules-when-rack-awareness-is-enabled.md) |
 | 122 | [Add support for TLS/SSL on the HTTP interface](./122-enable-ssl-for-kafka-bridge.md) |
 | 121 | [Deprecate and remove `.spec.kafka.resources` from the `Kafka` custom resource](./121-deprecate-and-remove-kafka-spec-kafka-resources.md) |
 | 120 | [Improve template behavior in Kafka Node Pools](./120-improve-template-behavior-in-Kafka-node-pools.md) |
