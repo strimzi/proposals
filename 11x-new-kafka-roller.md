@@ -51,9 +51,21 @@ The objective of this proposal is to introduce a new KafkaRoller with more struc
 
 The new roller will have the same behaviour of the current roller but with the additional features above, however, the implementation will be different following the finite state machine design. 
 
+In this proposal term `node` refers to Kafka process that is either controller, broker or combined. When the term `pod` is used, it refers to the Kubernetes `Pod` resource where one of these Kafka processes is running inside.
+
 ## State Machine
 
-Nodes will be observed to transition into states and based on these states, actions will be taken on the nodes, which would result in another state transitions. The process will be repeated for each node until the desired state or the maximum number of attempts is reached. If all nodes reached the desired state, the reconciliation will succeed, otherwise it will fail. There are also some conditions that could result in early termination of the process and fail the reconciliation as well. This will be explained more later. 
+Kafka nodes will be observed to transition into states and based on these states, actions will be taken on the nodes, which would result in another state transitions. This process will be executed on the nodes in a specific order and will be repeated for each node until the desired state or the maximum number of attempts is reached. The order will depend on which role the node has and what the currently observed state. This will be similar to the order the current roller executes:
+1. unready controllers
+2. ready controllers 
+3. unready combined nodes
+4. ready combined nodes
+5. active controller
+6. unready brokers
+7. ready brokers
+where readiness is determined by Kubernetes Pod status.
+
+If all nodes reached the desired state, the reconciliation will succeed, otherwise it will fail. There are also some conditions that could result in early termination of the process and immediately failing the reconciliation. This will be explained more later. 
 
 Observation of a node is based on different sources such as Kubernetes API, KafkaAgent and Kafka Admin API. These sources will be abstracted so that state machine is not dependent on their specifics as long as it's getting the information it needs. The abstractions also enable much better unit testing.
 
@@ -66,7 +78,7 @@ Observation of a node is based on different sources such as Kubernetes API, Kafk
 
 ### Observation sources and information collected
 - Kubernetes API
-   - Pod is not Running but is one of CrashLoopBackOff, ImagePullBackOff, ContainerCreating and PendingAndUnschedulable
+   - Pod is not Running and is one of CrashLoopBackOff, ImagePullBackOff, ContainerCreating and PendingAndUnschedulable
    - Pod is Running but lacking Ready status
    - Pod is Running and Ready
 
@@ -92,7 +104,7 @@ Observation of a node is based on different sources such as Kubernetes API, Kafk
  | - | - | UNKNOWN
  | Pod is not Running | - | NOT_RUNNING 
  | Pod is Running but lacking Ready status | Broker state != 2 | NOT_READY 
- | Pod is Running but lacking Ready stats | Broker state == 2 | RECOVERING 
+ | Pod is Running but lacking Ready status | Broker state == 2 | RECOVERING 
  | Pod is Running and Ready | - | READY
 
 ### States -> Actions Map
@@ -108,7 +120,7 @@ Some states map to multiple possible actions, but only one of them is taken base
 
 `UNKNOWN` nodes will be observed. This is the initial/default state before observation. 
 
-`NOT_RUNNING` nodes will restarted only if they have `POD_HAS_OLD_REVISION`. This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date. For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
+`NOT_RUNNING` nodes will restarted only if pod has an old revision (is out of date). This is because, if the node is not running at all, then restarting it likely won't make any difference unless the node is out of date. For example, if a pod is in pending state due to misconfigured affinity rule, there is no point restarting this pod again or restarting other pods, because that would leave them in pending state as well. If the user then fixed the misconfigured affinity rule, then we should detect that the pod has an old revision, therefore should restart it so that pod is scheduled correctly and runs.
 
 `RECOVERING` nodes will be waited and observed only. A Kafka node can take a long time to become ready while performing log recovery and it's not easy to determine how long it might take. Therefore, it's important to avoid restarting the node during this process, as doing so would restart the entire log recovery, potentially causing the node to enter a loop of continuous restarts without becoming ready. Moreover, while a node is in recovery, no other node should be restarted, as this could impact cluster availability and affect the client.
 
@@ -126,15 +138,15 @@ As previously mentioned, the process for nodes will be repeated unless the maxim
 
 In each reconciliation, number of attempts is tracked for each node. The number of attempts is how many times the overall process is repeated per node because of not reaching the desired state and the number of restarts is how many times a node is actually restarted. If any node has reached the maximum number of attempts or restarts, the reconciliation will fail. If the maximum number of reconfiguration is reached, then the node will marked to restart but will not fail the reconciliation. When a new reconcilation starts, these tracked number of actions taken on nodes will be reset.
 
-The current roller also fails the reconciliation in the following situations:
+The current roller also fails the reconciliation in the following situation to avoid continuing the process on more nodes:
 - Cannot connect to KafkaAgent to check broker state metrics (KafkaAgent is crucial when determining safety before rolling nodes, so there is no point to try progress further, if we cannot connect to the KafkaAgent).
-- Pod is stuck and does not have old revision (this will prevent the roller from restarting more nodes, which could result in making them stuck as well and bring down the entire cluster)
+- Pod is not Running and does not have an old revision. (this will prevent the roller from restarting more nodes, which could result in making them stuck as well and bring down the entire cluster)
 
 ### Batch rolling
 
 Batch rolling is one of the major features that the new roller is introducing. The proposed algorithm is to group broker nodes without common partitions together for parallel restart while maintaining availability. The algorithm does not take rack information into an account and the reason for this is explained in the `Rejected Alternatives` section. One thing about batching brokers without rack awareness is that batch size would likely descrease as the roller progresses. It may eventually drop to one, in which case, remaining brokers would be restarted one by one. However, the majority of brokers would likely to get restarted in parallel and that would still speed the rolling in large clusters significantly. Of course, this is up for a discussion, not the final decision. 
 
-There is also an interesting future improvement that can make the batch rolling more effective optimizing with Cruise Control. This improvment will not be in the scope of this proposal but included in `Future Improvements` section.
+There is also an interesting future improvement that can make the batch rolling more effective optimizing with Cruise Control. This improvement will not be in the scope of this proposal but included in `Future Improvements` section.
 
 For this feature, a new configuration `maxBrokerBatchSize` will be added. This is the maximum number of brokers that can be restarted in parallel. This will be set to 1 by default therefore the default behaviour remains same as the current roller, restarting one broker at a time. Another configuration added for this feature is `dryRunForBatchRolling`. This will allow batching nodes without restarting them in parallel. The purpose to let the operator, to verify the effectiveness of this feature in their clusters before enabling it. 
 
@@ -142,7 +154,7 @@ The batching algorithm only applies to broker nodes, however, the capability to 
 
 ### Configurability 
 
-The following are the configuration options for the new roller. Some of them are existing configurations that are used in the same way as the current roller. The new configurations are marked in <b>bold</b>. If exposed to user, the user can configure it via `STRIMZI_` environment variables. Otherwise, the operator will set them to the default values:
+The following are the configuration options for the new roller. Some of them are existing configurations that are used in the same way as the current roller. The new configurations are marked in <b>bold</b>. If exposed to user, the user can configure it via `STRIMZI_` environment variables. Otherwise, the operator will hard code them to the default values:
 
 | Configuration          | Default value | Exposed to user | Description                                                                                                                                                                                                                                                   |
 |:-----------------------|:--------------|:----------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -151,7 +163,7 @@ The following are the configuration options for the new roller. Some of them are
 | maxAttempts             | 10            | No              | The maximum number of times a node can be attempted after not reaching the desired state.  This is checked against the node's `numAttempts`.                                                                                                                      |
 | operationTimeoutMs | 60 seconds    | Yes             | The maximum amount of time we will wait for nodes to transition to `READY` state after an action. This is already exposed to the user via environment variable `STRIMZI_OPERATION_TIMEOUT_MS`. |
 | <b>maxBrokerBatchSize</b>  | 1             | Yes             | The maximum number of broker nodes that can be restarted in parallel. This will be exposed to the user via the new environment variable `STRIMZI_MAX_RESTART_BATCH_SIZE`.
-| <b>dryRunForBatchRolling</b>  | false             | Yes             | If this is set to true as well as `maxBrokerBatchSize` is set to greater than 1, the batch rolling algorithm will be executed but will not restart the nodes in parallel. The batched nodes will only be logged. This conguration will be exposed to the user via the new environment variable `STRIMZI_DRY_RUN_BATCH_ROLLING`.
+| <b>dryRunForBatchRolling</b>  | true             | Yes             | If this is set to true along with `maxBrokerBatchSize` being set to greater than 1, the batch rolling algorithm will be executed but will not restart the nodes in parallel. The batched nodes will only be logged. This conguration will be exposed to the user via the new environment variable `STRIMZI_DRY_RUN_BATCH_ROLLING`.
 | <b>postRestartDelay</b>  | 0             | Yes             | Delay between restarts of nodes or batches. It's set to 0 by default, but can be adjusted by users to slow down the restarts. This will allow users to slow the rolling update.   
 | <b>preferredLeaderElectionDelay</b>   | 10 seconds             | No             | Delay right after a node restart and before triggering partition leader election so that just-rolled broker is leading all the preferred replicas. This is to avoid situations where leaders moving to a newly started node that does not yet have established networking to some outside networks, e.g. through load balancers.
 
@@ -161,6 +173,22 @@ In the future, we can optimize Cruise Control's `BrokerSetAwareGoal` to make the
 
 This solution still has the limitation mentioned in the `Rejected Alternatives` section, that we can't be certain that other tooling hasn't reassigned some replicas since the last rebalance. In this case, the proposed algorithm can be used to check that brokers in the same set have no common partitions. This can be discussed further in the future.
 
+### Testibility and Maintainibility
+
+Currently both unit tests and system tests for the roller is limited in terms of the edge cases it covers. The way unit tests are currently structured and tightly coupled with sources of information used to determine whether to roll nodes makes it challenging to improve and extend the test to increase the coverage. The new roller will have completely newly structured unit tests that will cover the scenarios we test today and much more using the absracted sources of information. (TODO: I think this needs to be much more specific)
+
+As part of this proposal (TODO: do we want a separate proposal for this) we will improve the existing system tests to increase the coverage:
+TODO: explain how we would do this
+
+Also add new system tests for parallel rolling will be added.
+
+## Delivery plan
+
+TODO: More detail on this section
+Delivery order 
+- The system tests improvement
+- Abstraction and utility classes that can be used by the current roller (but do we bother integrating it into the current roller? does that pose risks of breaking the current roller?)
+- One big PR for rest of the implementation, unit tests and new system tests for batch rolling.
 
 ### Feature Gate
 
@@ -178,6 +206,8 @@ The following table shows the expected graduation of the feature gate:
 Currently, I'm not sure what would be the feature gate timeline as it is subject to change based on the actual progress.
 However, each phase probably will take at least 2 releases. 
 
+TODO: Who will enable and test it? How long do we expect to be alpha and beta state to trust? 
+
 ## Affected/not affected projects
 
 This proposal affects only
@@ -193,3 +223,5 @@ The purpose of this proposal is to maintain the same behaviour of the old roller
 
 - Why not use rack information when batching brokers that can be restarted at the same time?
 When all replicas of all partitions have been assigned in a rack-aware way then brokers in the same rack trivially share no partitions, and so racks provide a safe partitioning. However nothing in a broker, controller or cruise control is able to enforce the rack-aware property therefore assuming this property is unsafe. Even if CC is being used and rack aware replicas is a hard goal we can't be certain that other tooling hasn't reassigned some replicas since the last rebalance, or that no topics have been created in a rack-unaware way.
+
+- Why not refactor the existing the roller (TODO: explain more)
