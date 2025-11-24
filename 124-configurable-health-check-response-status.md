@@ -34,6 +34,12 @@ The strict requirements prevent deploying the Kafka Bridge on major cloud platfo
 
 Introduce an environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` that, when set to `true`, changes the successful response status code for the `/ready` and `/healthy` endpoints from 204 (No Content) to 200 (OK).
 
+- The environment variable is checked at startup and the response status is determined once.
+- The default behavior remains unchanged: health check endpoints `/ready` and `/healthy` will return HTTP 204 (No Content) when successful.
+- If the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` is set to `true`, the endpoints return HTTP 200 (OK) when successful.
+- Error responses (HTTP 500 Internal Server Error) remain unchanged regardless of the value of the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200`.
+- The OpenAPI specification and documentation are updated to reflect both possible successful response codes, HTTP 200 (OK) and HTTP 204 (No Content).
+
 ## Affected/not affected projects
 
 This proposal only targets the Strimzi Kafka Bridge.
