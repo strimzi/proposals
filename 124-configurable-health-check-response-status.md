@@ -36,7 +36,7 @@ Introduce an environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_20
 
 - The environment variable is checked at startup and the response status is determined once.
 - The default behavior remains unchanged: health check endpoints `/ready` and `/healthy` will return HTTP 204 (No Content) when successful.
-- If the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` is set to `true`, the endpoints return HTTP 200 (OK) when successful.
+- If the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` is set to `true`, the endpoints return HTTP 200 (OK) with an empty body when successful.
 - Error responses (HTTP 500 Internal Server Error) remain unchanged regardless of the value of the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200`.
 - The OpenAPI specification and documentation are updated to reflect both possible successful response codes, HTTP 200 (OK) and HTTP 204 (No Content).
 
