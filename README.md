@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 125 | [Configurable Health Check Response Status](./125-configurable-health-check-response-status.md) |
 | 124 | [Add support `connections.max.reauth.ms` configuration for SCRAM listeners](./124-reauth-config-for-scram-listener.md) |
 | 123 | [Remove default Pod anti-affinity rules when rack awareness is enabled](./123-remove-default-pod-anti-affinity-rules-when-rack-awareness-is-enabled.md) |
 | 122 | [Add support for TLS/SSL on the HTTP interface](./122-enable-ssl-for-kafka-bridge.md) |
