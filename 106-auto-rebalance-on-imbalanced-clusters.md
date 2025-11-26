@@ -374,17 +374,15 @@ With the new `imbalance` mode, the FSM state transitions would look something li
 * from **RebalanceOnScaleDown** to:
   * **RebalanceOnScaleDown**: if a rebalancing on scale down is still running or another one was requested while the first one ended.
   * **RebalanceOnScaleUp**: if a scale down operation was requested together with a scale up and, because they run sequentially, the rebalance on scale down had the precedence, was executed first and completed successfully. We can now move on with rebalancing for the scale up.
-  * **RebalanceOnImbalance**: if a ConfigMap related to goal violation was detected and the `fixableAnomalies` list is not empty while the `unfixableAnomalies` list is empty. It will run once the queued scale down and scale up is completed.
   * **Idle**: if a scale down operation was requested, it was executed and completed successfully/failed or a full rebalance was asked due to an anomaly but since the scale-down rebalance is done, we can ignore the anomalies assuming they are fixed by the rebalance. In case, they are not fixed, Cruise Control will detect them again and a new rebalance would be requested.
 
 * from **RebalanceOnScaleUp**:
   * **RebalanceOnScaleUp**: if a rebalancing on scale up is still running or another one was requested while the first one ended.
   * **RebalanceOnScaleDown**: if a scale down operation was requested, so the current rebalancing scale up is stopped (and queued) and a new rebalancing scale down is started. The rebalancing scale up will be postponed.
-  * **RebalanceOnImbalance**: if a ConfigMap related to goal violation was detected and the `fixableAnomalies` list is not empty while the `unfixableAnomalies` list is empty. It will run once the queued scale down and scale up is completed.
   * **Idle**: if a scale up operation was requested, it was executed and completed successfully/failed or a full rebalance was asked due to an anomaly but since the scale-up rebalance is done, we can ignore the anomalies assuming they are fixed by the rebalance. In case, they are not fixed, Cruise Control will detect them again and a new rebalance would be requested.
 
 * from **RebalanceOnImbalance**:
-  * **RebalanceOnImbalance**: if another goal violation was detected while the first one ended. If a scale down and scale up is also queued up then they will execute first.
+  * **RebalanceOnImbalance**: if another goal violation was detected while the first one ended or rebalance is still running.
   * **RebalanceOnScaleUp**: if a rebalancing on scale up is queued and will run if there is no other rebalancing scale down in queue. If a rebalancing scale down is in queue then it will be executed first.
   * **RebalanceOnScaleDown**: if a scale down operation was requested, it will run once the full rebalance is completed.
   * **Idle**: if full rebalance was requested, it was executed and completed successfully or failed.
@@ -392,14 +390,14 @@ With the new `imbalance` mode, the FSM state transitions would look something li
 On each reconciliation, the following process will be used:
 
 1. The `KafkaClusterCreator` creates the `KafkaCluster` instance.
-2. The `KafkaAutoRebalancingReconciler.reconcile()` will then check if there was any ConfigMap created with name `my-cluster-goal-violation-map` and whether the `fixableAnomalies` and `unfixableAnomalies` list is empty or not, then the `full` rebalance (imbalance mode) would be performed if the `unfixableAnomalies` list is empty and the `fixableAnomalies` list is not empty.
+2. The `KafkaAutoRebalancingReconciler.reconcile()` will then check if there was any ConfigMap created with name `<cluster-name>-goal-violation-map` and whether the `fixableAnomalies` and `unfixableAnomalies` list is empty or not, then the `full` rebalance (imbalance mode) would be performed if the `unfixableAnomalies` list is empty and the `fixableAnomalies` list is not empty.
 3. If a rebalance is already ongoing and more anomalies are detected, then the operator will just ignore the new anomalies and delete all the anomalies from the `fixableAnomalies` list in the ConfigMap. Any anomalies that are not resolved by the ongoing rebalance will be redetected by the anomaly detector once the FSM returns to the `Idle` state.
 
 The `KafkaAutoRebalancingReconciler.reconcile()` also loads the `Kafka.status.autoRebalance` content:
 
 * `state`: is the FSM state
 * `lastTransitionTime`: when the transition to that state happened.
-* `modes`: sets the mode as `imbalance`
+* `modes`: enabled modes (`remove-brokers`, `imbalance` and/or `add-brokers`) if an auto-rebalancing requested.
 
 The FSM is initialized based on the `state` field.
 
