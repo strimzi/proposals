@@ -651,7 +651,8 @@ Kubernetes garbage collection relies on `OwnerReferences`, but these do not work
 
 **Solution: Garbage Collector ConfigMap**
 
-The operator creates a special "garbage collector" ConfigMap in each remote cluster:
+The operator creates a special "garbage collector" ConfigMap in each remote cluster.
+This ConfigMap has **NO ownerReferences** - it is a standalone resource that the operator explicitly manages:
 
 ```yaml
 apiVersion: v1
@@ -664,16 +665,23 @@ metadata:
     app.kubernetes.io/instance: my-cluster
     strimzi.io/cluster: my-cluster
     strimzi.io/kind: Kafka
-  ownerReferences:
-    - apiVersion: kafka.strimzi.io/v1beta2
-      kind: Kafka
-      name: my-cluster
-      uid: <kafka-cr-uid>
-      controller: true
-      blockOwnerDeletion: false  # Important: false to prevent blocking
+    strimzi.io/component-type: garbage-collector
+  # NO ownerReferences - this is intentional!
+  # Cross-cluster owner references don't work
 data:
-  purpose: "Garbage collection anchor for stretch cluster resources"
+  cluster-id: "cluster-east"
+  kafka-cluster: "my-cluster"
+  namespace: "kafka"
+  purpose: "Garbage collection anchor for remote cluster resources"
+  managed-resources: "StrimziPodSet,ServiceAccount,Secret,ConfigMap,Service,ServiceExport,PersistentVolumeClaim"
 ```
+
+**Why no ownerReferences?**
+
+The Kafka CR exists in the central cluster, not in the remote cluster.
+Kubernetes in the remote cluster cannot validate an owner that exists in a different cluster.
+Setting an ownerReference to a cross-cluster resource would cause Kubernetes to reject it or mark it as orphaned.
+The GC ConfigMap must be a standalone resource that the operator explicitly creates and deletes.
 
 All remote cluster resources (StrimziPodSets, ConfigMaps, Services, etc.) set this GC ConfigMap as their owner:
 
@@ -720,14 +728,12 @@ private <T extends HasMetadata> List<T> addGarbageCollectorOwnerReference(
 6. Kubernetes garbage collector in each remote cluster cascades deletion to all resources owned by the GC ConfigMap
 7. All StrimziPodSets, ConfigMaps, Services, PVCs in remote clusters are automatically deleted
 
-**Why `blockOwnerDeletion: false`?**
+**Key Design Points:**
 
-Setting `blockOwnerDeletion: false` is critical because:
-1. The GC ConfigMap's owner (Kafka CR) is in a different cluster and cannot be validated by the remote cluster's API server
-2. Kubernetes would reject the OwnerReference with `blockOwnerDeletion: true` when the owner is not in the same cluster
-3. Even if accepted, it would prevent the GC ConfigMap from being deleted by the operator
-
-This design ensures complete resource cleanup across all clusters while handling cluster unavailability gracefully.
+The GC ConfigMap itself has **no ownerReferences** because cross-cluster ownership doesn't work.
+Remote resources (Services, ConfigMaps, Secrets) have the GC ConfigMap as their owner (same-cluster ownership).
+The operator explicitly manages the GC ConfigMap lifecycle (create on reconcile, delete on Kafka CR deletion).
+This two-level ownership pattern enables proper garbage collection across cluster boundaries.
 
 #### Kafka Configuration Generation
 
