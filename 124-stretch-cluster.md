@@ -27,7 +27,7 @@ This separation improves resilience because the failure of one Kubernetes cluste
 Clients can continue producing and consuming data without interruption as long as a quorum of brokers and controllers remains operational.
 Unlike MirrorMaker 2 (MM2), a stretch cluster provides strong data durability through synchronous replication and enables fast disaster recovery with automated client failover.
 
-- **Migration Flexibility**: A stretch Kafka cluster enables seamless migration, whether it's moving the entire cluster across Kubernetes environments or cloud providers without downtime, or relocating individual Kafka nodes as needed. 
+- **Migration Flexibility**: A stretch Kafka cluster enables migration flexibility, whether it's moving the entire cluster across Kubernetes environments or cloud providers without downtime, or relocating individual Kafka nodes as needed.
 This flexibility helps with maintenance, scaling, and workload transitions between environments.
 
 ## Proposal
@@ -73,11 +73,11 @@ Stretch clusters can be deployed with fewer than 3 clusters to allow migration f
   Extensive validation with 27 brokers across 3 clusters achieved 50,000 msg/sec throughput with < 1ms inter-cluster latency.
   See "Performance Characteristics and Operational Guidelines" section for complete testing results.
   
-  Users MUST validate network characteristics before deployment using latency tests, bandwidth tests, and optional Chaos Mesh validation (see "Performance Characteristics and Operational Guidelines" section).
+  Users MUST validate network characteristics before deployment using latency tests, bandwidth tests, and optional Chaos Mesh validation.
 
-- **cross cluster networking**: Enabling networking between Kubernetes clusters requires additional technology.
-Users must configure a networking solution that enables pod-to-pod communication across cluster boundaries.
-This proposal defines a Service Provider Interface (SPI) that allows multiple networking implementations to be used as plugins.
+- **cross cluster networking**: Stretch clusters require network connectivity between Kubernetes clusters.
+This may be provided through different mechanisms such as MCS based networking solutions, LoadBalancer-based access, or NodePort-based access.
+This proposal defines a Service Provider Interface (SPI) that allows multiple networking implementations to be plugged in based on the chosen connectivity model.
 
 
 ### Networking Architecture: Plugin-Based Design
@@ -174,6 +174,59 @@ This approach provides:
 - **Extensibility**: Users can implement custom providers without modifying operator code
 - **Testing**: Providers can be tested independently and swapped for different environments
 
+#### Plugin JAR Deployment
+
+Users must provide the networking provider plugin JAR file to the cluster operator.
+This is accomplished by creating a ConfigMap containing the plugin JAR and mounting it as a volume in the operator deployment.
+
+**Step 1: Create ConfigMap with Plugin JAR**
+
+```bash
+# Download or build the plugin JAR
+# For example, using the NodePort provider
+wget https://github.com/strimzi/strimzi-stretch-nodeport-plugin/releases/download/v0.1.0/nodeport-plugin.jar
+
+# Create ConfigMap from the JAR file
+kubectl create configmap stretch-plugin-nodeport \
+  --from-file=nodeport-plugin.jar=nodeport-plugin.jar \
+  --namespace kafka
+```
+
+**Step 2: Mount ConfigMap in Operator Deployment**
+
+Modify the cluster operator deployment to mount the ConfigMap as a volume:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: strimzi-cluster-operator
+  namespace: kafka
+spec:
+  template:
+    spec:
+      containers:
+      - name: strimzi-cluster-operator
+        image: quay.io/strimzi/operator:latest
+        env:
+        - name: STRIMZI_STRETCH_PLUGIN_CLASS_NAME
+          value: io.strimzi.plugin.stretch.NodePortNetworkingProvider
+        - name: STRIMZI_STRETCH_PLUGIN_CLASS_PATH
+          value: /opt/strimzi/plugins/*
+        volumeMounts:
+        - name: plugin-volume
+          mountPath: /opt/strimzi/plugins
+          readOnly: true
+      volumes:
+      - name: plugin-volume
+        configMap:
+          name: stretch-plugin-nodeport
+```
+
+The ConfigMap must be created in the same namespace where the cluster operator is deployed.
+The `mountPath` specified in `volumeMounts` must match the directory referenced in `STRIMZI_STRETCH_PLUGIN_CLASS_PATH`.
+The ConfigMap must be created before the operator pod starts, otherwise the operator will fail to load the plugin.
+
 #### Reference Implementations
 
 The Strimzi project provides reference implementations in separate repositories:
@@ -230,12 +283,109 @@ The following table shows which resources are created in each cluster:
 The central operator has write access to remote clusters via kubeconfig and creates resources directly.
 Remote operators are responsible only for reconciling StrimziPodSet resources (creating/updating pods).
 
+### Configuration Design Rationale
+
+#### Why Stretch Configuration is at Operator Level
+
+The stretch cluster configuration (`STRIMZI_CENTRAL_CLUSTER_ID`, `STRIMZI_REMOTE_KUBE_CONFIG`, plugin settings) is specified at the cluster operator level rather than at the Kafka CR or KafkaNodePool level.
+This design decision addresses several important architectural and operational concerns.
+
+##### Infrastructure-Level Concern
+
+Stretch cluster functionality requires infrastructure-level connectivity and authentication to remote Kubernetes clusters.
+The operator needs kubeconfig credentials and API server endpoints to create resources in remote clusters.
+These credentials grant cluster wide access to Kubernetes APIs and are managed by platform administrators, not application developers.
+
+Placing these credentials at the operator level:
+
+- Aligns with Kubernetes security model where operators run with ServiceAccounts that have cluster-level permissions
+- Avoids embedding sensitive kubeconfig credentials in application level CRs (Kafka, KafkaNodePool).
+- Simplifies credential rotation by updating operator deployment once rather than every Kafka CR
+- Prevents credential sprawl across multiple Kafka instances
+
+##### Single Networking Provider Per Operator
+
+The networking plugin (NodePort, LoadBalancer, MCS) is loaded once at operator startup via Java ServiceLoader.
+The plugin JAR is mounted as a volume in the operator deployment.
+The plugin's initialization code runs once when the operator starts.
+
+This means all Kafka clusters managed by a single operator instance must use the same networking provider.
+Different networking providers cannot coexist in a single operator instance.
+If networking provider were configurable per Kafka CR, the operator would need to:
+- Load and initialize multiple plugin JARs dynamically
+- Maintain separate ClassLoaders for each plugin to avoid conflicts
+- Handle plugin initialization failures on a per-cluster basis
+- Manage plugin lifecycle (loading/unloading) during reconciliation
+
+This adds significant complexity and creates potential ClassLoader isolation issues.
+
+
+**Example scenario:** If networking provider were per Kafka CR, the operator would need to:
+
+Load and initialize multiple plugin JARs dynamically.
+Maintain separate ClassLoaders for each plugin to avoid conflicts.
+Handle plugin initialization failures on a per cluster basis.
+Manage plugin lifecycle (loading/unloading) during reconciliation.
+This adds significant complexity and creates potential ClassLoader isolation issues.
+
+##### Consistent Cluster Topology
+
+The `STRIMZI_CENTRAL_CLUSTER_ID` and `STRIMZI_REMOTE_KUBE_CONFIG` define the operator's view of the multi cluster topology.
+All Kafka clusters managed by this operator share the same cluster topology.
+Allowing different cluster topologies per Kafka CR would create ambiguity:
+- Which cluster is "central" for KafkaConnect or KafkaTopic operators?
+- How would the operator reconcile resources if cluster IDs conflict between different Kafka CRs?
+- What happens if two Kafka CRs define different URLs for the same cluster ID?
+
+Operator-level configuration ensures a single, consistent cluster topology for all managed resources.
+
+##### Operational Simplicity
+
+Having stretch configuration at the operator level simplifies operations:
+
+**Deployment:**
+
+- Deploy operator once with stretch configuration.
+- All subsequent Kafka CRs automatically inherit the multi-cluster capability.
+- No need to repeat configuration in every Kafka CR.
+
+**Troubleshooting:**
+
+- Single source of truth for cluster connectivity issues.
+- Operator logs show connectivity status to all clusters on startup.
+- No need to check individual Kafka CRs to diagnose multi-cluster issues.
+
+##### Support for Non-Stretch Kafka Instances
+
+The design allows the same operator to manage both stretch and non-stretch Kafka clusters:
+Operator configured with stretch settings can still manage regular (non-stretch) Kafka instances.
+Kafka CRs without `strimzi.io/enable-stretch-cluster: "true"` annotation are deployed normally in the Kubernetes cluster where the CR is applied.
+KafkaNodePools without `strimzi.io/stretch-cluster-alias` annotation are deployed to the cluster where the CR is applied.
+
+
+##### Scope for KafkaConnect and KafkaBridge
+
+These ecosystem components are Kafka clients, not part of the Kafka cluster itself.
+They must be deployed only in the central cluster where the Kafka CR resides.
+
+The central operator creates and manages all custom resources (Kafka, KafkaNodePool, KafkaConnect, KafkaBridge, KafkaMirrorMaker2) in the central cluster.
+Remote cluster operators reconcile only StrimziPodSet resources to create Kafka pods.
+The operator does not create Connect, Bridge, or MirrorMaker2 CRs in remote clusters.
+
+These components connect to Kafka as standard clients using bootstrap servers.
+They can connect to any broker in the stretch cluster regardless of which Kubernetes cluster hosts them.
+Deploying them in the central cluster provides a single point of management for all Kafka-related resources.
+
+
+Note on MirrorMaker2:
+KafkaMirrorMaker2 is used only for replication to external (non-stretch) Kafka clusters.
+It is not used for stretch cluster replication, which is handled by Kafka's built-in replication mechanism.
+
 ### Configuration and Setup
 
 #### Step 1: Deploy Cluster Operators
 
 The cluster operator must be deployed to all Kubernetes clusters (central and remote).
-
 The operator in the central cluster requires additional configuration to access remote clusters:
 
 ```yaml
@@ -263,23 +413,68 @@ The operator in the central cluster requires additional configuration to access 
 - `STRIMZI_STRETCH_PLUGIN_CLASS_NAME` (Required): Fully qualified class name of the networking provider
 - `STRIMZI_STRETCH_PLUGIN_CLASS_PATH` (Required): Classpath for loading the provider JAR
 
-**Kubeconfig Secrets:**
+**Creating Kubeconfig Secrets for Remote Clusters:**
 
-For each remote cluster, create a Secret in the **central cluster** containing the kubeconfig for accessing that remote cluster:
+It is the user's responsibility to create Kubernetes secrets in the central cluster to enable connectivity to remote clusters.
+These secrets are essential because all custom resources (Kafka, KafkaNodePool, KafkaTopic, KafkaUser) are created in the central cluster,
+but the operator needs to create Kafka pods and related resources in the remote clusters.
+
+**Step-by-Step Process:**
+
+1. **Create kubeconfig files** for each remote cluster containing the necessary authentication credentials and API server endpoints.
+
+   For example, create the following files:
+   - `kubeconfig-cluster-east` (kubeconfig for Kubernetes cluster `cluster-east`)
+   - `kubeconfig-cluster-west` (kubeconfig for Kubernetes cluster `cluster-west`)
+
+2. **Create secrets in the central cluster** using the kubeconfig files:
+
+   ```bash
+   # Create secret for cluster-east
+   kubectl create secret generic kubeconfig-cluster-east \
+     --from-file=kubeconfig=kubeconfig-cluster-east \
+     --namespace kafka
+
+   # Create secret for cluster-west
+   kubectl create secret generic kubeconfig-cluster-west \
+     --from-file=kubeconfig=kubeconfig-cluster-east \
+     --namespace kafka
+   ```
+
+   **Expected output:**
+   ```
+   secret/kubeconfig-cluster-east created
+   secret/kubeconfig-cluster-west created
+   ```
+
+3. **Verify the secrets** were created successfully:
+
+   ```bash
+   kubectl get secrets -n kafka | grep kubeconfig
+   ```
+
+**Secret Format:**
+
+Each secret must contain a `kubeconfig` key with the base64-encoded kubeconfig data:
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: kubeconfig-cluster-east
-  namespace: kafka  # Created in CENTRAL cluster, not remote
+  namespace: kafka  # Must be created in the CENTRAL cluster
 type: Opaque
 data:
   kubeconfig: <base64-encoded-kubeconfig>  # Credentials to access cluster-east API server
 ```
 
-The central operator uses these secrets to authenticate to remote cluster API servers. 
-The operator validates kubeconfig expiry and reports errors if credentials expire.
+**Important Notes:**
+
+- Secrets must be created in the **central cluster**, not in the remote clusters
+- The secret names must match those referenced in the `STRIMZI_REMOTE_KUBE_CONFIG` environment variable
+- The kubeconfig must have sufficient permissions to create and manage resources in the remote clusters (StrimziPodSets, ConfigMaps, Secrets, Services, PVCs etc.)
+- The central operator validates kubeconfig expiry and reports errors if credentials are about to expire
+- Ensure kubeconfig credentials are properly secured and rotated according to your organization's security policies
 
 #### Step 2: Create Kafka and KafkaNodePool Resources
 
@@ -451,7 +646,20 @@ MissingCRD: "Required CRD 'strimzipodsets.core.strimzi.io' not found in cluster
 
 Reconciliation fails immediately with descriptive errors for invalid configurations.
 
+
+
 ### Low-Level Design and Implementation
+
+#### Garbage Collection for Remote Resources
+
+One of the key challenges in stretch clusters is ensuring proper cleanup of resources created in remote clusters.
+Kubernetes garbage collection relies on `OwnerReferences`, but these do not work across cluster boundaries.
+
+**Problem:**
+
+Central operator creates StrimziPodSets, ConfigMaps, Secrets, Services in remote clusters.
+These resources cannot have OwnerReferences pointing to Kafka CR in central cluster (different cluster).
+Standard Kubernetes garbage collection cannot cascade delete these resources using cross-cluster owner references.
 
 #### Garbage Collection for Remote Resources
 
@@ -466,6 +674,7 @@ Kubernetes garbage collection relies on `OwnerReferences`, but these do not work
 **Solution: Garbage Collector ConfigMap**
 
 The operator creates a special "garbage collector" ConfigMap in each remote cluster.
+
 This ConfigMap has **NO ownerReferences** - it is a standalone resource that the operator explicitly manages:
 
 ```yaml
@@ -562,7 +771,7 @@ For each broker, the operator calls the provider's `generateAdvertisedListeners(
 "REPLICATION-9091://10.21.37.21:31001,PLAIN-9092://10.21.37.21:31002,TLS-9093://10.21.37.21:31003"
 
 // Example: MCS provider returns
-"REPLICATION-9091://broker-0.cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local:9091,..."
+"REPLICATION-9091://my-cluster-pool-central-0.cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local:9091,..."
 ```
 
 The operator writes this directly to the broker's configuration file.
@@ -591,7 +800,7 @@ String quorumVoters = networkingProvider.generateQuorumVoters(
 "0@10.21.37.21:31093,1@10.21.37.22:31093,2@10.21.50.10:31093,..."
 
 // Example: MCS provider returns
-"0@my-cluster-pool-central-0.cluster-central.my-cluster-kafka-brokers.kafka.svc.clusterset.local:9091,..."
+"0@my-cluster-pool-central-0.cluster-central.my-cluster-kafka-brokers.kafka.svc.clusterset.local:9091,2@my-cluster-pool-east-2.cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local:9091,...."
 ```
 
 This configuration is written to the KRaft configuration file for all brokers and controllers.
@@ -604,12 +813,11 @@ For stretch mode, additional SANs are generated based on the provider's `generat
 
 ```bash
 # Regular SANs (all modes)
-DNS:my-cluster-broker-0.my-cluster-kafka-brokers.kafka.svc.cluster.local
+DNS:my-cluster-pool-central-0.my-cluster-kafka-brokers.kafka.svc.cluster.local
 DNS:my-cluster-kafka-brokers.kafka.svc
 
 # Additional SANs in stretch mode (example from MCS provider)
-DNS:my-cluster-broker-0.cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local
-DNS:cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local
+DNS:my-cluster-pool-central-0.cluster-east.my-cluster-kafka-brokers.kafka.svc.clusterset.local
 ```
 
 This ensures TLS hostname verification succeeds when brokers/controllers connect across clusters.
@@ -888,7 +1096,7 @@ Real production performance in same datacenter multi-AZ deployments will be sign
 **Validation Results:**
 
 Performance testing using OMB and Chaos Mesh validates the performance characteristics described in the "Performance Characteristics and Operational Guidelines" section. 
-The testing methodology is documented and can be replicated by users to validate their own deployments.
+The testing methodology can be documented and can be replicated by users to validate their own deployments.
 
 #### Validation Approach
 
@@ -913,25 +1121,6 @@ External listener types (Route, Ingress, LoadBalancer, NodePort) work in stretch
 - Clients can connect to any cluster's bootstrap address
 - Kafka handles client redirection to appropriate brokers
 
-Example with NodePort external listener:
-
-```yaml
-status:
-  listeners:
-    - name: external
-      type: nodeport
-      addresses:
-        - host: node1.cluster-central.example.com
-          port: 32100
-        - host: node1.cluster-east.example.com
-          port: 32100
-        - host: node1.cluster-west.example.com
-          port: 32100
-      bootstrapServers: >-
-        node1.cluster-central.example.com:32100,
-        node1.cluster-east.example.com:32100,
-        node1.cluster-west.example.com:32100
-```
 
 #### Rack Awareness
 
@@ -956,7 +1145,8 @@ Kafka distributes replicas considering both cluster boundaries and zone labels w
 If the central cluster fails, Kafka brokers and controllers continue operating.
 Administrative control can be restored using one of these approaches:
 
-**Manual Recovery:** (I think we should verify this. I don’t recall how we tested it earlier, other than shutting down the Fyre (central) cluster and rebooting it after some time)
+**Manual Recovery:**
+
 1. Deploy a new Kubernetes cluster or select an existing remote cluster
 2. Deploy the cluster operator
 3. Apply the Kafka and KafkaNodePool CRs
@@ -996,14 +1186,16 @@ Testing was performed across three OpenShift clusters deployed within the same d
 | P99 Latency | 494ms | 175ms | +182% |
 | Error Rate | 0% | 0% | 0% |
 
-**Key Finding:** Stretch clusters deployed in same datacenter configurations **maintain full throughput** while providing high availability across independent Kubernetes clusters and availability zones. The latency increase is acceptable for most production workloads and provides significant operational benefits through fault domain isolation.
+**Key Finding:** Stretch clusters deployed in same datacenter configurations **maintain full throughput** while providing high availability across independent Kubernetes clusters and availability zones.
+The latency increase is acceptable for most production workloads and provides significant operational benefits through fault domain isolation.
 
 **Testing Methodology Note:** Additional latency sensitivity tests (10ms, 50ms, 100ms) used Chaos Mesh to inject artificial latency between **all pods**, including those within the same cluster.
 This represents a **worst-case scenario**, real world same datacenter deployments only experience latency on cross cluster communication, resulting in significantly better performance than these conservative test results suggest.
 
 #### Use Case Suitability
 
-Stretch Kafka clusters are **optimized for specific deployment scenarios**. The following guidance helps users determine when stretch clusters provide value:
+Stretch Kafka clusters are **optimized for specific deployment scenarios**.
+The following guidance helps users determine when stretch clusters provide value:
 
 ##### ✅ Recommended: same datacenter Multi-AZ (Primary Use Case)
 
@@ -1069,80 +1261,6 @@ Benefit: Survives entire AZ failure or K8s control plane outage
 | Intercontinental | > 250ms | Constant failures |
 
 **Alternative:** Use **MirrorMaker 2** for cross region disaster recovery. MM2 provides asynchronous replication optimized for high-latency scenarios and is the correct tool for geographic distribution.
-----
-#### Network Requirements and Pre-Deployment Validation
-
-#### Optional: Advanced Network Validation
-
-**Automated Validation:**
-
-The Strimzi operator automatically validates network latency when you deploy a stretch
-cluster. It deploys test pods, measures TCP latency, and blocks deployment if latency
-exceeds thresholds. This validation runs automatically - no user action required.
-
-**Optional Manual Pre-Validation:**
-
-For high-confidence production deployments, users may optionally perform additional
-validation before applying the Kafka CR:
-
-**1. Extended Latency Test (Optional - 10-minute continuous ping):**
-
-The operator samples latency 5 times. For additional confidence, run an extended test:
-
-```bash
-kubectl run -it --rm latency-test --image=nicolaka/netshoot --restart=Never -- \
-  ping -c 600 <remote-cluster-service-ip> | tee latency-results.txt
-
-# Analyze results
-grep 'rtt min/avg/max/mdev' latency-results.txt
-```
-**2. Bandwidth Test (Recommended for production):**
-
-The operator validates latency but not bandwidth. 
-For production deployments, validate you have sufficient bandwidth:
-
-```bash
-# On cluster-1: start iperf3 server
-kubectl run iperf-server --image=networkstatic/iperf3 -- -s
-
-# On cluster-2: run client test
-kubectl run -it --rm iperf-client --image=networkstatic/iperf3 -- \
-  -c <iperf-server-ip> -t 60 -P 10
-```
-
-Expected: >= 10 Gbps for production deployments.
-
-**3. Chaos Mesh Pre-Validation (Highly Recommended):**
-
-Before production deployment, simulate expected latency and validate Kafka behavior under realistic conditions:
-
-```yaml
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: stretch-cluster-validation
-spec:
-  action: delay
-  delay:
-    latency: "5ms"  # Use your measured inter-cluster latency
-    correlation: "100"
-    jitter: "1ms"
-  selector:
-    namespaces: [kafka-namespace]
-    labelSelectors:
-      app.kubernetes.io/instance: test-cluster
-  mode: all
-  duration: "10m"
-```
-
-Deploy a test Kafka cluster, apply NetworkChaos, run OpenMessaging Benchmark. 
-If performance meets requirements, proceed with production deployment.
-
-Note: These manual tests are optional. 
-The operator's automated validation will block unsuitable deployments. 
-However, for production environments, performing these additional tests provides extra confidence and helps user understand their network characteristics.
-
-
 
 #### Summary: When to Use Stretch Clusters
 
@@ -1174,49 +1292,6 @@ Common approaches include:
 
 Users must ensure kubeconfig credentials are properly secured and rotated.
 The operator validates kubeconfig expiry and reports errors before credentials expire.
-
-### Kafka Ecosystem Components
-
-#### Deployment Strategy for Connect, Bridge, and MirrorMaker 2
-
-**Recommendation:** All Kafka ecosystem components should be deployed in the **central cluster only**.
-
-| Component | Deployment Location | Reason |
-|-----------|---------------------|--------|
-| **KafkaConnect** | Central cluster | Simplifies management, connects as Kafka client |
-| **KafkaBridge** | Central cluster | HTTP/REST proxy, connects as Kafka client |
-| **KafkaMirrorMaker2** | Central cluster | For replication to external (non-stretch) clusters |
-
-**Rationale:**
-- These components are Kafka **clients**, not part of the Kafka cluster itself
-- Deploying in central cluster provides single control plane
-- Operator in remote clusters ignores these CRs (validated and rejected)
-- Simplifies lifecycle management and upgrades
-
-**cross cluster Access:** (These are my thoughts we need to discuss internally whether this will be acceptable for the community)
-If applications in remote clusters need Connect or Bridge access:
-- Expose via Kubernetes Service (ClusterIP, LoadBalancer, or Ingress)
-- Use standard Kubernetes cross cluster networking
-- Consider locality: Deploy Connect workers in each cluster if needed for performance
-
-**Consumer Locality Optimization:**
-Connect workers can use `client.rack` consumer configuration to prefer local brokers:
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaConnect
-metadata:
-  name: my-connect
-spec:
-  config:
-    client.rack: cluster-east  # Matches strimzi.io/stretch-cluster-alias
-```
-
-This reduces cross cluster traffic for consuming by fetching from in-sync replicas in the same cluster.
-
-**Validation:**
-The operator validates that `KafkaConnect`, `KafkaBridge`, and `KafkaMirrorMaker2` CRs are only created in the namespace where the Kafka CR exists (central cluster).
-Attempts to create these resources in remote clusters are rejected with validation errors.
 
 #### Entity Operator
 
@@ -1299,17 +1374,6 @@ No changes to:
 
 **Alternative:** GitOps tools naturally provide CR storage and replication to new clusters.
 
-### Service Mesh Integration
-
-**Rejected:** Direct integration with service mesh solutions (Istio, Linkerd, Consul).
-
-**Reason:**
-- Service meshes solve different problems (traffic management, observability)
-- Not all users want service mesh overhead
-- Can be used alongside stretch clusters if desired
-
-**Alternative:** Plugin architecture allows users to implement service mesh-aware providers if needed.
-
 ## Compatibility and Migration
 
 ### Operator Version Compatibility
@@ -1369,68 +1433,14 @@ The operator handles rolling updates across all clusters while ensuring Kafka qu
 
 **Deprecation Policy:** Breaking SPI changes trigger major version bump. Old plugins continue working with deprecation warnings for 2 releases before removal.
 
-### Migration Scenarios
-
-#### Converting Regular Cluster to Stretch Cluster
-
-**Status:** NOT supported for in place conversion in v1.
-
-**Reason:** Converting existing single cluster deployments to stretch mode requires:
-- Redistributing existing pods across clusters
-- Changing pod network addressing
-- Updating TLS certificates with new SANs
-- Potential data movement
-
-**Recommended Approach:**
-1. Create new stretch cluster with desired topology
-2. Use MirrorMaker 2 to replicate topics from old cluster to new
-3. Switch clients to new cluster
-4. Decommission old cluster after validation
-
-**Future Consideration:** In-place migration may be explored if there is user demand.
-
-#### Converting Stretch Cluster to Regular Cluster
-
-**Scenario:** Consolidating stretch cluster to single Kubernetes cluster.
-
-**Process:**
-1. Remove `strimzi.io/enable-stretch-cluster: "true"` annotation from Kafka CR
-2. Remove `strimzi.io/stretch-cluster-alias` annotations from all KafkaNodePools
-3. Update all KafkaNodePool `targetCluster` to point to same cluster
-4. Operator performs rolling update to reconfigure brokers with new networking
-5. Manually delete stretch networking resources from remote clusters
-
-**Limitation:** All pods must be schedulable to target cluster. If resources are insufficient, operation fails.
 
 ### Backward Compatibility
 
-**Existing Clusters:** Unaffected by stretch cluster feature unless explicitly enabled.
+- **Existing Clusters:** Unaffected by stretch cluster feature unless explicitly enabled.
+- **No CRD Changes:** All stretch configuration uses annotations (no CRD schema changes).
+- **No Behavior Changes:** Operators without stretch configuration behave identically to previous versions.
+- **Upgrade Path:** Users can upgrade to operators with stretch support without any changes to existing deployments.
 
-**No CRD Changes:** All stretch configuration uses annotations (no CRD schema changes).
-
-**No Behavior Changes:** Operators without stretch configuration behave identically to previous versions.
-
-**Upgrade Path:** Users can upgrade to operators with stretch support without any changes to existing deployments.
-
-## Stability and Maturity
-
-**API Stability:** The stretch cluster API (annotations and configuration) is considered **beta** quality in the initial release.
-
-**Expected Changes:**
-- Annotation names are stable and will not change
-- SPI interface may receive additions (backward-compatible)
-- Breaking SPI changes will trigger major version bump with 2-release deprecation period
-
-**Production Readiness:**
-- Recommended for production use in **same datacenter multi-AZ deployments**
-- Extensive testing validates performance and stability (50,000 msg/sec throughput with < 1ms latency)
-- Early adopters encouraged to test in non-production environments first
-- Performance characteristics well-documented based on real world testing
-
-**Future Enhancements:**
-- In-place migration from regular to stretch clusters
-- Automated central cluster failover (if demand exists)
-- Additional provider implementations
 
 ## Summary
 
