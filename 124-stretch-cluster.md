@@ -255,7 +255,94 @@ Each provider handles the specific requirements of its networking approach, incl
 
 #### Topology of a Stretch Cluster
 
-<Add new Architecture diagram>
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          STRETCH KAFKA CLUSTER                              │
+│                        (3 Kubernetes Clusters)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│   Central Cluster    │  │   Remote Cluster 1   │  │   Remote Cluster 2   │
+│   (cluster-central)  │  │   (cluster-east)     │  │   (cluster-west)     │
+├──────────────────────┤  ├──────────────────────┤  ├──────────────────────┤
+│                      │  │                      │  │                      │
+│ ┌──────────────────┐ │  │ ┌──────────────────┐ │  │ ┌──────────────────┐ │
+│ │  Strimzi         │ │  │ │  Strimzi         │ │  │ │  Strimzi         │ │
+│ │  Cluster         │ │  │ │  Cluster         │ │  │ │  Cluster         │ │
+│ │  Operator        │ │  │ │  Operator        │ │  │ │  Operator        │ │
+│ │                  │ │  │ │                  │ │  │ │                  │ │
+│ │  ┌────────────┐  │ │  │ │                  │ │  │ │                  │ │
+│ │  │ Plugin JAR │  │ │  │ │  (No plugin)     │ │  │ │  (No plugin)     │ │
+│ │  │ (NodePort, │  │ │  │ │                  │ │  │ │                  │ │
+│ │  │  LoadBal,  │  │ │  │ │                  │ │  │ │                  │ │
+│ │  │  or MCS)   │  │ │  │ │                  │ │  │ │                  │ │
+│ │  └────────────┘  │ │  │ │                  │ │  │ │                  │ │
+│ │                  │ │  │ │                  │ │  │ │                  │ │
+│ │  Reconciles:     │ │  │ │  Reconciles:     │ │  │ │  Reconciles:     │ │
+│ │  • Kafka CR      │ │  │ │  • StrimziPodSet │ │  │ │  • StrimziPodSet │ │
+│ │  • KafkaNodePool │ │  │ │    (pod creation)│ │  │ │    (pod creation)│ │
+│ │  • All resources │ │  │ │                  │ │  │ │                  │ │
+│ └──────────────────┘ │  │ └──────────────────┘ │  │ └──────────────────┘ │
+│                      │  │                      │  │                      │
+│ ┌──────────────────┐ │  │                      │  │                      │
+│ │ Custom Resources │ │  │                      │  │                      │
+│ ├──────────────────┤ │  │                      │  │                      │
+│ │ • Kafka CR       │ │  │  (No CRs here)       │  │  (No CRs here)       │
+│ │ • KafkaNodePool  │ │  │                      │  │                      │
+│ │ • KafkaConnect   │ │  │                      │  │                      │
+│ │ • KafkaTopic     │ │  │                      │  │                      │
+│ └──────────────────┘ │  │                      │  │                      │
+│          │           │  │                      │  │                      │
+│          │           │  │                      │  │                      │
+│          ▼           │  │                      │  │                      │
+│ ┌──────────────────┐ │  │ ┌──────────────────┐ │  │ ┌──────────────────┐ │
+│ │ Kafka Resources  │ │  │ │ Kafka Resources  │ │  │ │ Kafka Resources  │ │
+│ ├──────────────────┤ │  │ ├──────────────────┤ │  │ ├──────────────────┤ │
+│ │                  │ │  │ │                  │ │  │ │                  │ │
+│ │ StrimziPodSet:   │ │  │ │ GC ConfigMap     │ │  │ │ GC ConfigMap     │ │
+│ │   pool-central   │ │  │ │ (Standalone)     │ │  │ │ (Standalone)     │ │
+│ │                  │ │  │ │       │          │ │  │ │       │          │ │
+│ │ ┌──────┐ ┌─────┐ │ │  │ │       ▼  owns    │ │  │ │       ▼  owns    │ │
+│ │ │kafka │ │kafka│ │ │  │ │ StrimziPodSet:   │ │  │ │ StrimziPodSet:   │ │
+│ │ │  -0  │ │ -1  │ │ │  │ │   pool-east      │ │  │ │   pool-west      │ │
+│ │ │(ctrl)│ │(ctrl│ │ │  │ │       │          │ │  │ │       │          │ │
+│ │ │(brkr)│ │brkr)│ │ │  │ │       ▼  owns    │ │  │ │       ▼  owns    │ │
+│ │ └──────┘ └─────┘ │ │  │ │ ┌──────┐ ┌─────┐ │ │  │ │ ┌──────┐         │ │
+│ │                  │ │  │ │ │kafka │ │kafka│ │ │  │ │ │kafka │         │ │
+│ │ ConfigMaps       │ │  │ │ │  -2  │ │ -3  │ │ │  │ │ │  -4  │         │ │
+│ │ Secrets (CA)     │ │  │ │ │(ctrl)│ │(brkr│ │ │  │ │ │(ctrl)│         │ │
+│ │ Services         │ │  │ │ │(brkr)│ │only)│ │ │  │ │ │(brkr)│         │ │
+│ │ PVCs             │ │  │ │ └──────┘ └─────┘ │ │  │ │ └──────┘         │ │
+│ └──────────────────┘ │  │ │                  │ │  │ │                  │ │
+│                      │  │ │ ConfigMaps       │ │  │ │ ConfigMaps       │ │
+│                      │  │ │ Secrets (CA)     │ │  │ │ Secrets (CA)     │ │
+│                      │  │ │ Services         │ │  │ │ Services         │ │
+│                      │  │ │ PVCs             │ │  │ │ PVCs             │ │
+│                      │  │ │ (All owned by    │ │  │ │ (All owned by    │ │
+│                      │  │ │  GC ConfigMap)   │ │  │ │  GC ConfigMap)   │ │
+│                      │  │ └──────────────────┘ │  │ └──────────────────┘ │
+└──────────────────────┘  └──────────────────────┘  └──────────────────────┘
+           │                         │                         │
+           └─────────────────────────┴─────────────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │  Cross-Cluster Networking       │
+                    │  (Provided by Plugin)           │
+                    │                                 │
+                    │  All implementations are        │
+                    │  external plugins:              │
+                    │  • NodePort Plugin              │
+                    │  • LoadBalancer Plugin          │
+                    │  • MCS Plugin                   │
+                    │  • Custom Plugin                │
+                    └─────────────────────────────────┘
+
+Legend:
+  • Central operator manages ALL resources across all clusters
+  • Remote operators only reconcile StrimziPodSet (create/update pods)
+  • Plugin JAR (NodePort/LoadBalancer/MCS) mounted only in central operator
+  • GC ConfigMap is standalone (no owner) and owns ALL remote resources
+```
 
 The diagram illustrates a topology comprising three Kubernetes clusters.
 
@@ -1006,6 +1093,268 @@ The reconciliation flow for stretch clusters extends the standard Strimzi reconc
 The actual implementation includes additional steps for PVCs, service accounts, network policies, quotas, and cleanup operations. 
 Each step handles both central and remote clusters with proper error handling and continues reconciliation even if individual clusters are temporarily unavailable.
 
+
+
+##### Overall Architecture diagram
+
+##### 1. Plugin Loading and Reconciliation Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OPERATOR STARTUP - PLUGIN LOADING                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. Read Environment Variables
+   ┌──────────────────────────────────────┐
+   │ STRIMZI_CENTRAL_CLUSTER_ID           │
+   │ STRIMZI_REMOTE_KUBE_CONFIG           │
+   │ STRIMZI_STRETCH_PLUGIN_CLASS_NAME    │
+   │ STRIMZI_STRETCH_PLUGIN_CLASS_PATH    │
+   └──────────────────┬───────────────────┘
+                      │
+                      ▼
+2. Initialize Remote Cluster Connections
+   ┌──────────────────────────────────────┐
+   │ RemoteResourceOperatorSupplier       │
+   │ • Load kubeconfig secrets            │
+   │ • Create K8s client for each cluster │
+   │ • Validate connectivity              │
+   └──────────────────┬───────────────────┘
+                      │
+                      ▼
+3. Load Networking Plugin
+   ┌──────────────────────────────────────┐
+   │ StretchNetworkingProviderFactory     │
+   │                                      │
+   │ All providers are plugins!           │
+   │ (NodePort, LoadBalancer, MCS, etc.)  │
+   └──────────────────┬───────────────────┘
+                      │
+                      ▼
+   ┌─────────────────────────────────────┐
+   │ Plugin Loading Steps:               │
+   │ 1. Parse PLUGIN_CLASS_PATH          │
+   │ 2. Find JAR files in path           │
+   │ 3. Create URLClassLoader            │
+   │ 4. Load class by PLUGIN_CLASS_NAME  │
+   │ 5. Verify implements                │
+   │    StretchNetworkingProvider        │
+   │ 6. Instantiate new Provider()       │
+   └──────────────────┬───────────────────┘
+                      │
+                      ▼
+   ┌──────────────────────────────────────┐
+   │ provider.init(config, suppliers)     │
+   │ • Initialize with configuration      │
+   │ • Store cluster suppliers            │
+   │ • Validate plugin requirements       │
+   └──────────────────┬───────────────────┘
+                      │
+                      ▼
+   ┌──────────────────────────────────────┐
+   │ Plugin Ready - Operator Starts       │
+   └──────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    KAFKA CR RECONCILIATION FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+User applies Kafka CR with annotation:
+strimzi.io/enable-stretch-cluster: "true"
+                      │
+                      ▼
+┌──────────────────────────────────────┐
+│ 1. Validation Phase                  │
+│ StretchClusterValidator              │
+│ • Check operator configuration       │
+│ • Verify Kafka CR annotation         │
+│ • Validate KafkaNodePool annotations │
+│ • Check cluster connectivity         │
+│ • Validate kubeconfig credentials    │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 2. Build Kafka Cluster Model         │
+│ KafkaCluster.fromCrd(...)            │
+│ • Parse Kafka CR                     │
+│ • Parse all KafkaNodePools           │
+│ • Determine node distribution        │
+│   - pool-central → cluster-central   │
+│   - pool-east → cluster-east         │
+│   - pool-west → cluster-west         │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 3. Create Garbage Collector          │
+│    ConfigMaps                        │
+│ • Create in each remote cluster      │
+│ • NO ownerReferences (standalone)    │
+│ • Will be owner of ALL remote        │
+│   resources (StrimziPodSet,          │
+│   ConfigMap, Service, Secret, PVC)   │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 4. Reconcile CA and Certificates     │
+│ • Generate cluster CA                │
+│ • Generate broker certificates       │
+│ • Add cross-cluster DNS SANs         │
+│   (via provider.generatePodDnsName)  │
+│ • Replicate secrets to all clusters  │
+│ • Set GC ConfigMap as owner          │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 5. Create Networking Resources       │
+│ FOR EACH pod in each cluster:        │
+│   provider.createNetworkingResources │
+│   • NodePort Plugin: NodePort Svc    │
+│   • LoadBalancer Plugin: LB Svc      │
+│   • MCS Plugin: Svc + ServiceExport  │
+│ • Set GC ConfigMap as owner          │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 6. Generate Kafka Configuration      │
+│ FOR EACH broker:                     │
+│   • advertised.listeners:            │
+│     provider.generateAdvertised      │
+│     Listeners(...)                   │
+│   • controller.quorum.voters:        │
+│     provider.generateQuorumVoters    │
+│     (...)                            │
+│   • broker.rack: cluster-id          │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 7. Create ConfigMaps                 │
+│ • server.properties with Kafka cfg   │
+│ • Distribute to all clusters         │
+│ • Set GC ConfigMap as owner          │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 8. Reconcile StrimziPodSets          │
+│ FOR EACH KafkaNodePool:              │
+│   • Get target cluster ID            │
+│   • Get ResourceOperatorSupplier     │
+│     for that cluster                 │
+│   • Create/Update StrimziPodSet      │
+│   • Set GC ConfigMap as owner        │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 9. Wait for Pods Ready               │
+│ • Watch pods in ALL clusters         │
+│ • Wait for readiness probes          │
+│ • Verify Kafka cluster formation     │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 10. Reconcile Services/Routes        │
+│ • Create bootstrap services          │
+│ • Create per-broker services         │
+│ • Provider-specific resources        │
+│ • Aggregate listener addresses       │
+│ • Set GC ConfigMap as owner          │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ 11. Update Kafka CR Status           │
+│ • kafkaNodePools: [list]             │
+│ • conditions:                        │
+│   - StretchCluster: True             │
+│   - Ready: True                      │
+│ • listeners: [addresses from ALL     │
+│              clusters]               │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│ Reconciliation Complete              │
+│ • Kafka cluster operational          │
+│ • Clients can connect via any        │
+│   cluster's bootstrap address        │
+└──────────────────────────────────────┘
+```
+
+##### 2.  Provider SPI Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    NETWORKING PROVIDER ABSTRACTION                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌────────────────────────────────┐
+                    │   <<interface>>                │
+                    │   StretchNetworkingProvider    │
+                    ├────────────────────────────────┤
+                    │ + init(...)                    │
+                    │ + createNetworkingResources()  │
+                    │ + discoverPodEndpoint()        │
+                    │ + generateAdvertisedListeners()│
+                    │ + generateQuorumVoters()       │
+                    │ + generatePodDnsName()         │
+                    │ + generateServiceDnsName()     │
+                    │ + generateCertificateSans()    │
+                    │ + deleteNetworkingResources()  │
+                    │ + getProviderName()            │
+                    └────────────────┬───────────────┘
+                                     │ implements
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │                                 │
+                    │   ALL are External Plugins      │
+                    │   (Loaded from JAR files)       │
+                    │                                 │
+                    └────────────────┬────────────────┘
+                                     │
+        ┌────────────────────────────┼────────────────────────────┐
+        │                            │                            │
+   ┌────▼─────┐         ┌───────────▼──────┐         ┌──────────▼─────┐
+   │ NodePort │         │  LoadBalancer    │         │      MCS       │
+   │  Plugin  │         │     Plugin       │         │    Plugin      │
+   │(Strimzi) │         │   (Strimzi)      │         │  (Community)   │
+   └────┬─────┘         └────────┬─────────┘         └────────┬───────┘
+        │                        │                            │
+        ▼                        ▼                            ▼
+┌───────────────┐    ┌────────────────────┐      ┌──────────────────┐
+│Creates:       │    │Creates:            │      │Creates:          │
+│• NodePort     │    │• LoadBalancer      │      │• Service         │
+│  Service      │    │  Service           │      │• ServiceExport   │
+│               │    │                    │      │                  │
+│Returns:       │    │Returns:            │      │Returns:          │
+│10.21.37.21:   │    │10.21.50.10:9091    │      │pod.cluster2.svc. │
+│31001          │    │                    │      │clusterset.local: │
+│               │    │                    │      │9091              │
+└───────────────┘    └────────────────────┘      └──────────────────┘
+
+        ┌────────────────────────────────────────────────────┐
+        │           Custom Plugin Example                    │
+        │  (User-provided, any networking solution)          │
+        │                                                    │
+        │  ┌────────────────────────────────────┐            │
+        │  │ com.example.MyCustomNetworking     │            │
+        │  │ Plugin                             │            │
+        │  │                                    │            │
+        │  │ Returns: custom format endpoints   │            │
+        │  └────────────────────────────────────┘            │
+        └────────────────────────────────────────────────────┘
+
+Note: ALL networking providers are external plugins loaded from JARs.
+The operator has NO built-in networking implementations.
+Strimzi provides reference implementations (NodePort, LoadBalancer) as plugins.
+```
 
 ### Testing Strategy
 
