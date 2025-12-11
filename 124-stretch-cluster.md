@@ -743,17 +743,6 @@ One of the key challenges in stretch clusters is ensuring proper cleanup of reso
 Kubernetes garbage collection relies on `OwnerReferences`, but these do not work across cluster boundaries.
 
 **Problem:**
-
-Central operator creates StrimziPodSets, ConfigMaps, Secrets, Services in remote clusters.
-These resources cannot have OwnerReferences pointing to Kafka CR in central cluster (different cluster).
-Standard Kubernetes garbage collection cannot cascade delete these resources using cross-cluster owner references.
-
-#### Garbage Collection for Remote Resources
-
-One of the key challenges in stretch clusters is ensuring proper cleanup of resources created in remote clusters.
-Kubernetes garbage collection relies on `OwnerReferences`, but these do not work across cluster boundaries.
-
-**Problem:**
 - Central operator creates StrimziPodSets, ConfigMaps, Secrets, Services in remote clusters
 - These resources cannot have OwnerReferences pointing to Kafka CR in central cluster
 - Standard Kubernetes garbage collection cannot cascade delete these resources
