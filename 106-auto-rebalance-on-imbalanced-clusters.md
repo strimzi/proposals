@@ -340,6 +340,9 @@ status:
         The detected <anomaly> has unfixable `DiskDistributionGoal` goal.
 ```
 
+Once the warning is issued, the operator will clear the `unfixableAnomalies` list.
+In case the user doesn't fix the anomaly, the `unfixableAnomalies` list will be populated again with the unfixable goal violation, and it will keep happening until the user fixes the anomaly manually.
+
 #### Stopping a running rebalance
 
 To stop a running rebalance the user can apply the `strimzi.io/rebalance=stop` annotation on the generated `KafkaRebalance` resource.
