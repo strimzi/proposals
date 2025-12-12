@@ -17,7 +17,7 @@ The `connections.max.reauth.ms` is a useful configuration for SCRAM authenticati
 
 ## Proposal
 
-Allow users configure `listener.<listener_name>.connections.max.reauth.ms` in `.spec.kafka.config` where `<listener_name>` is listener name and listener port joined by hyphen (`-`). To allow only this particular option but still forbid other listener options, another list of exceptions similar to `FORBIDDEN_PREFIX_EXCEPTIONS` will be added to `KafkaClusterSpec` class. This new list will be used to build a set of prefixes for each listener, which will be then added to the existing forbidden prefix exceptions list. The list will contain `connections.max.reauth.ms` for now but allows us to easily support more per-listener configurations in the future if we need to.
+Allow users configure `listener.name.<listener_name>.connections.max.reauth.ms` in `.spec.kafka.config` where `<listener_name>` is listener name and listener port joined by hyphen (`-`). To allow only this particular option but still forbid other listener options, another list of exceptions similar to `FORBIDDEN_PREFIX_EXCEPTIONS` will be added to `KafkaClusterSpec` class. This new list will be used to build a set of prefixes for each listener, which will be then added to the existing forbidden prefix exceptions list. The list will contain `connections.max.reauth.ms` for now but allows us to easily support more per-listener configurations in the future if we need to.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -35,7 +35,7 @@ spec:
         authentication:
           type: scram-sha-512
     config:
-      listener.external-9094.connections.max.reauth.ms: 3600000 
+      listener.name.external-9094.connections.max.reauth.ms: 3600000 
 ```
 
 ## Affected/not affected projects
