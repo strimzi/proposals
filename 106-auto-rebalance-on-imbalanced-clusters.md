@@ -29,7 +29,7 @@ The frequency of this check can be changed via the `anomaly.detection.interval.m
 Detector classes use different mechanisms to detect their corresponding anomalies.
 For example, `KafkaBrokerFailureDetector`, `DiskFailureDetector` and `TopicAnomalyDetector` utilises Kafka Admin API while `MetricAnomalyDetector` use metrics and `GoalViolationDetector` uses the load distribution (calculated by Cruise Control itself) to detect their anomalies.
 The detected anomalies can be of various types:
-* Goal Violation - This happens if certain [optimization goals](https://strimzi.io/docs/operators/in-development/deploying#optimization_goals) are violated (e.g. DiskUsageDistributionGoal etc.). These goals can be configured through the `self.healing.goals` option in the Cruise Control configuration.  However, this option is currently forbidden in the `spec.cruiseControl.config` section of the `Kafka` CR.
+* Goal Violation - This happens if certain [optimization goals](https://strimzi.io/docs/operators/in-development/deploying#optimization_goals) are violated (e.g. DiskUsageDistributionGoal etc.). These goals can be configured through the `anomaly.detection.goals` option in the Cruise Control configuration. However, this option is currently forbidden in the `spec.cruiseControl.config` section of the `Kafka` CR.
 * Topic Anomaly - When one or more topics in the cluster violate user-defined properties (e.g. some partitions are too large on disk, the replication factor of a topic is different from a given default value etc).
 * Broker Failure - This happens when a non-empty broker crashes or leaves a cluster for a long time.
 * Disk Failure - This failure happens when one of the non-empty disks fails (in a Kafka cluster with JBOD disks).
@@ -64,7 +64,7 @@ There are multiple other [self-healing notifier](https://github.com/linkedin/cru
 
 #### Self Healing
 
-If self-healing is enabled, then an action is returned by the notifier to make a decision whether the anomaly should be fixed or not.
+If self-healing is enabled, Cruise Control will start fixing or not the detected anomaly based on the action returned by the configured notifier.
 If the notifier has returned `FIX` as the action then the classes which are responsible for resolving the anomaly would be called.
 Each detectable anomaly is handled by a specific detector class which then uses another remediation class to run a fix.
 For example, the `GoalViolations` class uses the `RebalanceRunnable` class, the `DiskFailure` class use the `RemoveDisksRunnable` class and so on.
@@ -215,7 +215,8 @@ This means that detected anomalies will be fixed on a first come, first served b
 In situations where the anomaly is unfixable, due to issues like a lack of physical hardware (e.g. insufficient number of racks to satisfy rack awareness, insufficient number of brokers to satisfy `ReplicaCapacityGoal`, or insufficient number of resources to satisfy resource capacity goals), then they will be ignored and the user will be alerted via a condition in the Kafka CR status.
 The `StrimziCruiseControlNotifier` will be kept in a separate repository and will override all the methods declared by the `AnomalyNotifier` interface.
 We will provide a concrete implementations of the `AnomalyNotifier.alert` method which will alert the operator whenever an anomaly is detected by the operator.
-Upon detection of an anomaly, the notifier would create (if it doesn't already exist) or update a ConfigMap with the name `<cluster-name>-goal-violation-map`.
+This implementation of `AnomalyNotifier.alert` will return `IGNORE` to the anomaly detector manager because even if an anomaly is detected, it won't be fixed by Cruise Control but via a "rebalance" operation triggered by the operator.
+Upon detection of an anomaly, the notifier would create (if it doesn't already exist) or update a ConfigMap with the name `<cluster-name>-goal-violations`.
 This ConfigMap will contain all the detected anomalies for a given Kafka cluster.
 
 The ConfigMap will look like this:
@@ -224,7 +225,7 @@ The ConfigMap will look like this:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: my-cluster-goal-violation-map
+  name: my-cluster-goal-violations
 data:
   fixableAnomalies: |
     - <anomaly-id-1>:
@@ -253,7 +254,7 @@ The ConfigMap will also have an optional field called `unfixableAnomalies` list 
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: my-cluster-goal-violation-map
+  name: my-cluster-goal-violations
 data:
   fixableAnomalies: |
     - <anomaly-id-1>:
@@ -263,10 +264,10 @@ data:
         - <fixable-goal-3> 
   unfixableAnomalies: |
     - <anomaly-id-3>:
-        - <unfixed-goal-1>
-        - <unfixed-goal-2>
+        - <unfixable-goal-1>
+        - <unfixable-goal-2>
     - <anomaly-id-4>:
-        - <unfixed-goal-3> 
+        - <unfixable-goal-3> 
 # ...
 ```
 The `unfixableAnomalies` list will state the `anomalyId` as well as the unfixable goals associated with them.
@@ -286,8 +287,9 @@ If we logged the anomaly in the ConfigMap, we may then trigger another rebalance
 This could result in the operator running multiple rebalances for the anomaly and therefore running a lot of unnecessary rebalances.
 
 To tackle this problem we will ignore all the anomalies that are detected while a rebalance is ongoing.
-We will place a check in the auto-rebalance reconciler class which will make sure that if a rebalance is running and a new anomaly is detected, then the anomaly is not added to the `fixableAnomalies` list.
-This way we can avoid the rebalance for the same anomaly which is detected again.
+A check will be placed in the auto-rebalance reconciler class which will make sure that if a rebalance is running or not.
+If an anomaly is detected during the rebalance, then that anomaly will be ignored and `fixableAnomalies` list will be made empty.
+This way a new rebalance can be avoided for the same anomaly which is detected again.
 It is possible that a new anomaly was ignored in the process but the anomaly detector will detect it again in case the rebalance didn't fix it so we don't have to worry about it.
 
 The above also holds true for the manual rebalances.
@@ -399,7 +401,7 @@ With the new `imbalance` mode, the FSM state transitions would look something li
 On each reconciliation, the following process will be used:
 
 1. The `KafkaClusterCreator` creates the `KafkaCluster` instance.
-2. The `KafkaAutoRebalancingReconciler.reconcile()` will then check if there was any ConfigMap created with name `<cluster-name>-goal-violation-map` and whether the `fixableAnomalies` and `unfixableAnomalies` list is empty or not, then the `full` rebalance (imbalance mode) would be performed if the `unfixableAnomalies` list is empty and the `fixableAnomalies` list is not empty.
+2. The `KafkaAutoRebalancingReconciler.reconcile()` will then check if there was any ConfigMap created with name `<cluster-name>-goal-violations` and whether the `fixableAnomalies` and `unfixableAnomalies` list is empty or not, then the `full` rebalance (imbalance mode) would be performed if the `unfixableAnomalies` list is empty and the `fixableAnomalies` list is not empty.
 3. If a rebalance is already ongoing and more anomalies are detected, then the operator will just ignore the new anomalies and delete all the anomalies from the `fixableAnomalies` list in the ConfigMap.
 4. Any anomalies that are not resolved by the ongoing rebalance will be redetected by the anomaly detector once the FSM returns to the `Idle` state.
 
@@ -460,7 +462,7 @@ In this case, the FSM will assume it as falling in the `NotReady` case above.
 
 ## Affected/not affected projects
 
-This change will affect the Strimzi cluster operator and a new repository named `strimzi-notifier` will be added under the Strimzi organisation.
+This change will affect the Strimzi cluster operator and a new repository named `strimzi-cruise-control-notifier` will be added under the Strimzi organisation.
 
 ## Backwards compatibility
 
