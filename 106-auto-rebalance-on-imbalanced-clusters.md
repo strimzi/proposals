@@ -293,7 +293,7 @@ This way a new rebalance can be avoided for the same anomaly which is detected a
 It is possible that a new anomaly was ignored in the process but the anomaly detector will detect it again in case the rebalance didn't fix it so we don't have to worry about it.
 
 The above also holds true for the manual rebalances.
-If a user is running a manual rebalance, and some anomaly is detected while it is happening, we should still not add it to the `fixable` anomalies list.
+If a user is running a manual rebalance, and some anomaly is detected while it is happening, the operator will still ignore the newly detected anomaly.
 
 #### Using other notifiers when using `imbalance` mode
 
