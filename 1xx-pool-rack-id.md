@@ -1,7 +1,7 @@
-# Pool-based Rack Awareness
+# Node Pool Rack IDs
 
 Rack-awareness in Strimzi Kafka can be achieved without broker access to cluster-level Kubernetes APIs
-by assigning one node pool per rack/availability zone.
+by configuring a rack ID in each node pool for usage across all brokers within the pool.
 
 ## Current situation
 
@@ -20,11 +20,7 @@ This requires access to the Kubernetes API by the broker pods and requires clust
 
 For users interested in a heightened security posture, the requirements of the current rack-awareness
 implementation are prohibitive.
-Many users may require adherence to the [separation of duty security principle](https://csrc.nist.gov/glossary/term/separation_of_duty)
-under which application pods processing user data should not have access to the Kubernetes API.
-All usage of the Kubernetes API must then be delegated to the operator.
-
-Furthermore, many Kubernetes cluster administrators may restrict access to cluster-scoped Kubernetes
+Many Kubernetes cluster administrators may restrict access to cluster-scoped Kubernetes
 resources to ensure an application and the user managing it are contained within a limited set of namespaces.
 Today, Strimzi only requires access to cluster-scoped Kubernetes resources for rack-awareness and NodePort
 listener configuration.
@@ -34,37 +30,8 @@ requirements while maintaining a simple deployment model.
 
 ## Proposal
 
-The `Kafka` CR will be updated to include an `idType` field which signifies the type of rack ID
-which will be configured.
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: Kafka
-metadata:
-  annotations:
-    strimzi.io/node-pools: enabled
-  name: my-cluster
-spec:
-  kafka:
-    rack:
-      idType: pool-name
-```
-
-The field will be an optional enumeration type with the following values:
-
-* `node-label` (default)
-  * This rack ID type maintains the existing behavior where rack IDs are configured using a node label
-  * The node label is determined using the existing `topologyKey` field
-* `pool-name`
-  * This rack ID type will use the node pool name as the rack ID
-
-When using the `pool-name` rack ID type, users must configure pod affinity and anti-affinity in the Kafka
-pod template to ensure:
-
-* Brokers within a pool are scheduled in the same availability zone
-* Brokers in different pools are scheduled in different availability zones
-
-This affinity configuration would be configured in the KafkaNodePool:
+The `KafkaNodePool` CR will be updated to include an `rackId` field which configures the rack ID for
+brokers in that node pool.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -74,6 +41,28 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
+  rackId: zone0
+```
+
+The field is a string and takes precedence over rack awareness configuration in the `Kafka` CR.
+
+When using a pool rack ID, users must configure pod affinity and anti-affinity in the Kafka
+pod template to ensure:
+
+* Brokers within pools with the same rack ID are scheduled in the same availability zone
+* Brokers in pools with different rack IDs are scheduled in different availability zones
+
+This affinity configuration would be specified in the KafkaNodePool:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: my-zone0-pool
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  rackId: zone0
   template:
     pod:
       affinity:
@@ -107,21 +96,35 @@ spec:
 
 Only the [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator/) would be affected:
 
-* Changes to the `Rack` API type
-  * New optional `idType` field
-  * Change `topologyKey` field from required to optional
+* Changes to the `KafkaNodePool` API type
+  * New optional `rackId` field
 * Changes to the cluster operator to:
-  * Only create the ClusterRoleBinding when using the `node-label` rack ID type or when using a NodePort listener
-  * Modify the `KafkaBrokerConfigurationBuilder` to use the pool name as the rack ID when the rack ID type is `pool-name`
+  * Modify the `KafkaBrokerConfigurationBuilder` to use the rack ID specified in the KafkaNodePool if defined
 
 ## Compatibility
 
 This proposal maintains CRD compatibility by introducing a new, optional field.
 All existing configurations would continue to be valid and maintain their existing behavior.
 
+## Available alternatives
+
+As outlined in [strimzi-kafka-operator#11504](https://github.com/strimzi/strimzi-kafka-operator/issues/11504),
+Kubernetes 1.33 provides a new alpha feature with which topology node labels are available via the downwardAPI.
+This new feature could be used as another mechanism for configuring rack awareness without cluster-scoped
+RBAC. The proposal here provides a few benefits over this potential future solution:
+
+1. Supports versions of Kubernetes available today
+2. Provides additional flexibility to configure rack IDs that do not align to topology labels
+3. Protects brokers from changes to node labels
+
+Item (3) can be achieved using a similar configuration to the one described [above](#proposal).
+The rack ID configured for each broker is a zone identifier, e.g. `zone0`, and not the name of the
+actual topology node label. When rack IDs in brokers are configured to a specific topology node label,
+e.g. `us-east-2`, any changes to this label would require restarting the brokers. If I wanted to change
+a set of my nodes to use label `us-east-2a`, I may not want my broker pods to immediately restart
+with this change.
+
 ## Rejected alternatives
 
 * Continue with existing rack awareness support using Kubernetes API access in a broker init container
   * This alternative was rejected due to the heightened security requirements of some users, as outlined in the [Motivation](#motivation)
-* Use node topology labels via the downward API as suggested in [strimzi-kafka-operator#11504](https://github.com/strimzi/strimzi-kafka-operator/issues/11504)
-  * This alternative was rejected due to a reliance on a Kubernetes feature that is only in alpha as of 1.33
