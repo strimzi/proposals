@@ -13,11 +13,17 @@ Note: OAuth configuration through `type: oauth` is deprecated. Configurations us
 
 ## Motivation
 
-The `connections.max.reauth.ms` is a useful configuration for SCRAM authentications enabled on a specific listener to define the maximum lifetime of a client connection before re-authentication is required. This ensures that clients with long lived connections periodically re-authenticate in case passwords already changed and reduces the risk of having connections with expired or compromised credentials. Since this configuration is already supported for OAuth and `custom` type authentications, it makes sense to support it for SCRAM authentications too.
+The `connections.max.reauth.ms` is a useful configuration for SCRAM authentication enabled on a specific listener to define the maximum lifetime of a client connection before re-authentication is required. This ensures that clients with long-lived connections periodically re-authenticate in case passwords have changed. 
+It also reduces the risk of having connections with expired or compromised credentials. 
+Since this configuration is already supported for OAuth and `custom` type authentications, it makes sense to support it for SCRAM authentication too.
 
 ## Proposal
 
-Allow users configure `listener.name.<listener_name>.connections.max.reauth.ms` in `.spec.kafka.config` where `<listener_name>` is listener name and listener port joined by hyphen (`-`). To allow only this particular option but still forbid other listener options, another list of exceptions similar to `FORBIDDEN_PREFIX_EXCEPTIONS` will be added to `KafkaClusterSpec` class. This new list will be used to build a set of prefixes for each listener, which will be then added to the existing forbidden prefix exceptions list. The list will contain `connections.max.reauth.ms` for now but allows us to easily support more per-listener configurations in the future if we need to.
+Allow users to configure `listener.name.<listener_name>.connections.max.reauth.ms` in `.spec.kafka.config` where `<listener_name>` is listener name and listener port is joined by a hyphen (`-`). 
+To allow only this particular option but still forbid other listener options, another list of exceptions similar to `FORBIDDEN_PREFIX_EXCEPTIONS` will be added to `KafkaClusterSpec` class. 
+This list will contain `connections.max.reauth.ms` for now but allows us to easily support more per-listener configurations in the future if we need to. 
+The new list, along with the configured listener names will be used to dynamically build fully qualified configuration key (e.g., `listener.name.external-9094.connections.max.reauth.ms`).
+These keys are then added to the existing exception list by the `KafkaConfiguration` class before the list is passed to the configuration filter that removes forbidden entries, allowing these specific configurations to be set.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -48,8 +54,12 @@ As this is a new configuration, there are no backwards compatibility issues rela
 
 ## Rejected alternatives
 
-- Add a new API field via `KafkaListenerAuthenticationScramSha512` class so it can be configured under `spec.kafka.listeners.listener.authentication`. This solution has a risk of ending up with too many various options like OAuth authentication did, which is one of the reasons why it is getting deprecated. 
+- Add a new API field via `KafkaListenerAuthenticationScramSha512` class, so that it can be configured under `spec.kafka.listeners.listener.authentication`. This solution runs the risk of having too many configuration options like OAuth authentication, which is one of the reasons the `oauth` configuration type was deprecated.  
 
-- Allow users configure per-listener options in `.spec.kafka.config` by adding it to [`FORBIDDEN_PREFIX_EXCEPTIONS`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/api/src/main/java/io/strimzi/api/kafka/model/kafka/KafkaClusterSpec.java#L70) with some form of regular expression, however, it could be quite an expensive check to do for all configurations. This also requires a fair amount of changes in `AbstractConfiguration` class, where it filters the forbidden prefix and apply the exceptions. This class is used by various other resources (e.g. KafkaConnectConfiguraiton) and per-listener configuration is only relevant to KafkaCluster resource. Therefore the proposed solution seems simpler to implement and cheaper compared to this one.
+- Allow users to configure per-listener options in `.spec.kafka.config` by adding it to [`FORBIDDEN_PREFIX_EXCEPTIONS`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/api/src/main/java/io/strimzi/api/kafka/model/kafka/KafkaClusterSpec.java#L70) with some form of regular expression. 
+However, this would require more complex validation logic to be applied to all configuration entries. 
+It would also require non-trivial changes to the `AbstractConfiguration` class, which is shared by multiple resources such as `KafkaConnectConfiguration`. 
+Per-listener configuration is only relevant to the `KafkaCluster` resource, so applying this logic globally would increase complexity and maintenance overhead. 
+For these reasons, the proposed solution is simpler to implement and easier to maintain.
 
-- This field can be already configured for `type: custom` authentication so we don't need to add support for it. However, if existing users of SCRAM authentication, want to set this field, they would have to reconfigure their entire authentication section in their Kafka CR to change it from `type: scram` to `type: custom` and then change/set all the neccessary fields for `type: custom`.
+- This field can already be configured for `type: custom` authentication, so we don't need to add support for it. However, if existing users of SCRAM authentication, want to set this field, they would have to reconfigure their entire authentication section in their Kafka CR to change it from `type: scram` to `type: custom` and then change/set all the necessary fields for `type: custom`.
