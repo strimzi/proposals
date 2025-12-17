@@ -32,13 +32,11 @@ The strict requirements prevent deploying the Kafka Bridge on major cloud platfo
 
 ## Proposal
 
-Introduce an environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` that, when set to `true`, changes the successful response status code for the `/ready` and `/healthy` endpoints from 204 (No Content) to 200 (OK).
+Change the successful response status code for the `/ready` and `/healthy` endpoints from 204 (No Content) to 200 (OK).
 
-- The environment variable is checked at startup and the response status is determined once.
-- The default behavior remains unchanged: health check endpoints `/ready` and `/healthy` will return HTTP 204 (No Content) when successful.
-- If the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200` is set to `true`, the endpoints return HTTP 200 (OK) with an empty body when successful.
-- Error responses (HTTP 500 Internal Server Error) remain unchanged regardless of the value of the environment variable `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS_200`.
-- The OpenAPI specification and documentation are updated to reflect both possible successful response codes, HTTP 200 (OK) and HTTP 204 (No Content).
+The OpenAPI specification and documentation are updated to reflect the new successful response codes, HTTP 200 (OK).
+
+The error responses (HTTP 500 Internal Server Error) of the `/ready` and `/healthy` endpoints remain unchanged.
 
 ## Affected/not affected projects
 
@@ -46,21 +44,13 @@ This proposal only targets the Strimzi Kafka Bridge.
 
 ## Compatibility
 
-Fully backward compatible. Default behavior unchanged (204), opt-in via environment variable. No API or configuration changes required.
+While this is a breaking change, it will be aligned with the breaking changes from [proposal 122 (Add support for TLS/SSL on the HTTP interface)](122-enable-ssl-for-kafka-bridge.md) which is introducing a dedicated listener for internal endpoints such as `/ready` and `/healthy`.
 
 ## Rejected alternatives
-
-### Changing the default to 200 (OK)
-
-Changing the default from 204 to 200 would break existing deployments expecting 204. The opt-in approach provides flexibility without breaking changes.
 
 ### Making the response status fully configurable
 
 Allowing arbitrary status codes (e.g., `KAFKA_BRIDGE_HEALTH_CHECKS_RESPONSE_STATUS=200`) adds unnecessary complexity. Only 200 vs. 204 has practical relevance for health checks.
-
-### Using a configuration file property
-
-Environment variables are standard for deployment-specific configuration in containerized environments and keep the configuration file focused on Kafka Bridge-specific settings.
 
 ## Appendix: Cloud Provider and Open-Source Project Survey
 
