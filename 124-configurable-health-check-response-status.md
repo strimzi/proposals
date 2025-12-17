@@ -1,6 +1,6 @@
 # Configurable Health Check Response Status
 
-Add the ability to configure the HTTP response status code returned by the Kafka Bridge health check endpoints (`/ready` and `/healthy`) to accommodate load balancers that only accept HTTP 200 (OK) responses in health checks.
+Change the HTTP response status code returned by the Kafka Bridge health check endpoints (`/ready` and `/healthy`) to accommodate load balancers that only accept HTTP 200 (OK) responses in health checks.
 
 ## Current situation
 
