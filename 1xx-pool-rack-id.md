@@ -22,16 +22,41 @@ For users interested in a heightened security posture, the requirements of the c
 implementation are prohibitive.
 Many Kubernetes cluster administrators may restrict access to cluster-scoped Kubernetes
 resources to ensure an application and the user managing it are contained within a limited set of namespaces.
-Today, Strimzi only requires access to cluster-scoped Kubernetes resources for rack-awareness and NodePort
-listener configuration.
+Today, Strimzi requires access to cluster-scoped Kubernetes resources for rack-awareness, NodePort
+listener configuration, and reading StorageClasses for volume resizing.
 
-Implementing the proposed method for pool-based rack awareness removes these potentially prohibitive
-requirements while maintaining a simple deployment model.
+Implementing the proposed method for pool-based rack awareness makes cluster RBAC optional for rack-awareness.
 
 ## Proposal
 
-The `KafkaNodePool` CR will be updated to include an `rackId` field which configures the rack ID for
-brokers in that node pool.
+The `Kafka` CR will be updated to include a `type` sub-field under `rack` which configures the source
+for broker rack IDs.
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  annotations:
+    strimzi.io/node-pools: enabled
+  name: my-cluster
+spec:
+  kafka:
+    rack:
+      type: envvar
+```
+
+The field will be an optional enumeration type with the following values:
+
+* `node-label`
+  * This rack type maintains the existing behavior where rack IDs are configured using a node label
+  * The node label is determined using the existing `topologyKey` field
+* `envvar`
+  * This rack type uses the `STRIMZI_RACK` environment variable in the broker container to populate the rack ID
+
+When a `topologyKey` is defined, the default rack type will be `node-label` to maintain existing behavior.
+
+The `KafkaNodePool` CR already provides the option to define environment variables which can be used
+for the `envvar` rack type.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -41,13 +66,17 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  rackId: zone0
+  template:
+    kafkaContainer:
+      env:
+        - name: STRIMZI_RACK
+          value: zone0
 ```
 
-The field is a string and takes precedence over rack awareness configuration in the `Kafka` CR.
-
-When using a pool rack ID, users must configure pod affinity and anti-affinity in the Kafka
-pod template to ensure:
+When using rack awareness in general, users should configure affinity or topology spread constraints
+to ensure the proper distribution of pods.
+This proposal relies on distribution of node pools across zones, so users should configure affinity
+or topology spread constraints in the Kafka pod template to ensure:
 
 * Brokers within pools with the same rack ID are scheduled in the same availability zone
 * Brokers in pools with different rack IDs are scheduled in different availability zones
@@ -92,14 +121,21 @@ spec:
                 topologyKey: topology.kubernetes.io/zone
 ```
 
+Although configuring affinity or topology spread constraints is required for proper availability-driven
+data distribution, one benefit of this proposal is that users do not necessarily need to define these
+rules when controlling the rack ID for testing or other purposes.
+
 ## Affected/not affected projects
 
 Only the [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator/) would be affected:
 
-* Changes to the `KafkaNodePool` API type
-  * New optional `rackId` field
+* Changes to the `Kafka` API type
+  * New optional `type` sub-field under `rack`
+  * Change `topologyKey` sub-field under `rack` from required to optional
 * Changes to the cluster operator to:
-  * Modify the `KafkaBrokerConfigurationBuilder` to use the rack ID specified in the KafkaNodePool if defined
+  * Modify the `KafkaBrokerConfigurationBuilder` to use the `STRIMZI_RACK` environment variable for the rack ID if the rack type is `envvar`
+  * Only create the ClusterRoleBinding when using the `node-label` rack ID type or when using a NodePort listener
+  * Only create the rack configuration init container when using the `node-label` rack ID type
 
 ## Compatibility
 
