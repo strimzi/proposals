@@ -2,7 +2,9 @@
 
 This proposal adds Strimzi support for using user (Linux / container) namespaces with Strimzi Pods.
 User namespaces allow users to isolate the user running inside the container from the one in the host and help to improve security.
-User namespaces are enabled in Kubernetes by default from version 1.33 (requires support in the underlying container infrastructure).
+User namespaces are enabled by default in Kubernetes from version 1.33 (requires support in the underlying container infrastructure).
+But they might not be supported in all Kubernetes distributions (such as Kind) and all environments.
+That is why the support for this feature is designed as opt-in and users have to explicitly enable it.
 
 _Note: Linux user namespaces are not related to Kubernetes namespaces in any way._
 
@@ -44,6 +46,7 @@ spec:
 ```
 
 That will allow users to configure the flag and the user namespaces on a per-pod basis.
+When not specified, the Kubernetes default will be used (currently the per-Pod user namespaces are disabled by default).
 
 ### Configuring `hostUsers` through the Pod Security Providers
 
