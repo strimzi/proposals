@@ -1,10 +1,10 @@
 # Add support for user namespace Pods
 
-This proposal adds Strimzi support for using user (Linux / container) namespaces with Strimzi Pods.
-User namespaces allow users to isolate the user running inside the container from the one in the host and help to improve security.
-User namespaces are enabled by default in Kubernetes from version 1.33 (requires support in the underlying container infrastructure).
-But they might not be supported in all Kubernetes distributions (such as Kind) and all environments.
-That is why the support for this feature is designed as opt-in and users have to explicitly enable it.
+This proposal adds Strimzi support for pods that use Linux user namespaces.
+User namespaces isolate the user running inside the container from the user on the host, which helps to improve security.
+User namespaces are enabled by default in Kubernetes from version 1.33, provided the underlying container infrastructure supports them.
+But they might not be supported in all Kubernetes distributions, such as Kind (Kubernetes in Docker), or in all environments.
+For this reason, support for this feature is opt-in and must be explicitly enabled by users.
 
 _Note: Linux user namespaces are not related to Kubernetes namespaces in any way._
 
@@ -12,8 +12,8 @@ _Note: Linux user namespaces are not related to Kubernetes namespaces in any way
 
 User namespaces have various advantages.
 For Strimzi, the security benefits are the most relevant aspect.
-User namespaces help to isolate the processes between different Pods and between the Pod and the host (Kubernetes worker node).
-This helps mitigate the impact of CVEs in the infrastructure as well as in the operands.
+User namespaces help isolate the processes between different Pods and between the Pod and the host (Kubernetes worker node).
+This helps mitigate the impact of CVEs in the infrastructure as well as in the deployed components (operands).
 
 More information about user namespaces can be found in the Kubernetes documentation:
 * [Use a User Namespace with a Pod](https://kubernetes.io/docs/tasks/configure-pod-container/user-namespaces/)
@@ -23,13 +23,13 @@ Adding support for user namespaces would allow Strimzi users to use this feature
 
 ## Proposal
 
-In Kubernetes, the user namespaces are configured using the `hostUsers` flag in the [Pod specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podspec-v1-core).
-By default, it is set to true.
+In Kubernetes, user namespaces are configured using the `hostUsers` flag in the [Pod specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podspec-v1-core).
+By default, this flag is set to `true`.
 That means that the Pod shares the user namespace with the underlying host.
 When set to `false`, a new user namespace will be created for each Pod.
 
-This proposal suggests adding support for the user namespaces in Strimzi Pods in two different ways:
-* Individually on a per-pod basis through the Pod template 
+This proposal suggests adding support for user namespaces in Strimzi Pods in two ways:
+* Individually on a per-Pod basis through the Pod template 
 * Automatically using the Pod Security Provider
 
 ### Configuring `hostUsers` through the Pod template
@@ -45,8 +45,8 @@ spec:
         hostUsers: false
 ```
 
-That will allow users to configure the flag and the user namespaces on a per-pod basis.
-When not specified, the Kubernetes default will be used (currently the per-Pod user namespaces are disabled by default).
+That allows users to configure the flag and user namespaces on a per-Pod basis.
+When not specified, the Kubernetes default is used, which currently means `hostUsers=true` and per-Pod user namespaces are disabled.
 
 ### Configuring `hostUsers` through the Pod Security Providers
 
@@ -63,8 +63,8 @@ The new methods will return a `Boolean` and will be added for every Strimzi-mana
 * `cruiseControlHostUsers` for the Cruise Control
 
 These methods will take a single parameter of the existing type `PodSecurityProviderContext`.
-This type will be extended to include, in addition to the storage and Pod security context configuration, the `hostUsers` value from the Pod template.
-By extending the existing class, we will allow the Pod Security Providers to configure the Pod security depending on the security context and storage configuration.
+This type will be extended to include the `hostUsers` value from the Pod template, in addition to the existing storage and Pod security context configuration
+This allows Pod Security Providers to adjust Pod security settings based on both the security context and storage configuration.
 
 For backwards compatibility with any existing Pod Security Provider implementations, the `PodSecurityProvider` will have default implementations of the new methods.
 They will all return the value configured in the Pod template or `null`.
@@ -92,8 +92,9 @@ The new methods will be called from the Cluster Operator when creating the Pod d
 #### Built-in Pod Security Providers
 
 The existing built-in `BaselinePodSecurityProvider` and `RestrictedSecurityProvider` implementations will remain unchanged and will use the default methods.
-While it would make sense to use the user namespaces out of the box when `RestrictedSecurityProvider` is used, we cannot do that for backwards compatibility reasons (it would break the operands for users without supported user namespaces in their infrastructure or with some custom changes).
-So for the time being, Strimzi users would need to implement their own Pod Security Providers to enable user namespaces for Strimzi Pods automatically without configuring it in the Pod template sections of the Strimzi custom resources.
+It would make sense to enable user namespaces by default when `RestrictedSecurityProvider` is used.
+However, we cannot do this for backwards compatibility, since it would break operands for users whose infrastructure does not support user namespaces or who rely on custom changes.
+So for the time being, Strimzi users need to implement their own Pod Security Providers to enable user namespaces for Strimzi Pods automatically without configuring it in the Pod template sections of the Strimzi custom resources.
 
 _Enabling the user namespaces for Strimzi Pods in the `RestrictedSecurityProvider` by default might be revisited later once the feature is supported by most of our users and once we drop support for older Kubernetes versions._
 
