@@ -76,10 +76,12 @@ Access Operator is distributed and used as a container image - so minimal user i
 
 #### Strimzi HTTP and MQTT Bridge
 
-Strimzi HTTP Bridge and MQTT Bridge (two separate subprojects) will follow the Strimzi Operators and move to Java 21 as well.
-Unlike the projects discussed above, they are distributed not only as container images but also as archives for running locally with pre-installed Java Runtime Environment.
-However, they are not integrated into user applications.
-Moving to Java 21 requires installing and configuring a newer JVM and should not have any further impact.
+Strimzi HTTP Bridge and MQTT Bridge (two separate subprojects) will remain using Java 17 as the language level and maintain compatibility with Java 17.
+They will move to Java 21 as the runtime in the container images to provide consistent experience with the other Strimzi operands.
+But users running them on their own on bare-metal / virtual machines can continue to run them with Java 17.
+
+This approach helps to address the _cgroups_ issues in Java 17 while leaving the users running the Bridge outisde of containers unaffected.
+Both projects will move completely to Java 21 on their own schedule (subject to a separate proposal).
 
 #### Small libraries
 
@@ -101,9 +103,3 @@ Given the minimal effort required to move to Java 21, the proposal recommends ad
 The `api` module and its dependencies could remain at the Java 11 language level, or be moved only to Java 17 instead of Java 21.
 Without more usage data, there appear to be no strong reasons to keep it at the older version.
 This decision can be revisited if sufficient demand arises.
-
-### Keep Bridge at Java 17 and move only the container runtime to Java 21
-
-The Bridge could remain at Java 17, with only the container image updated to Java 21.
-This approach would address the _cgroups_ issues in Java 17 while leaving the Bridge unaffected.
-But, similar to the api module, there is no compelling reason for keeping it at the older version.
