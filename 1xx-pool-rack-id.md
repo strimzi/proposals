@@ -1,7 +1,7 @@
 # Node Pool Rack IDs
 
-Rack-awareness in Strimzi Kafka can be achieved without broker access to cluster-level Kubernetes APIs
-by configuring a rack ID in each node pool for usage across all brokers within the pool.
+Rack awareness in Strimzi Kafka can be achieved without broker access to cluster-level Kubernetes APIs
+by configuring a rack ID in each node pool for use by all brokers within that pool.
 
 ## Current situation
 
@@ -9,23 +9,27 @@ In Kubernetes clusters spanning multiple availability zones, Kafka can tolerate 
 entire zone by ensuring partition replicas are spread across brokers in multiple zones.
 
 This is achieved by configuring the [`broker.rack`](https://kafka.apache.org/documentation/#brokerconfigs_broker.rack)
-property in Kafka to enable rack-aware replication assignment, where a rack is analogous to an availability zone.
+property in Kafka to enable rack-aware replication assignment, where a rack represents an availability zone.
 
-Strimzi currently provides rack-awareness through the usage of an init container which queries the
+Strimzi currently provides rack awareness through the usage of an init container which queries the
 Kubernetes API for the value of a specified topology label on the Kubernetes node where that
 broker is running.
-This requires access to the Kubernetes API by the broker pods and requires cluster-scoped RBAC.
+This requires broker pods to access the Kubernetes API and to use cluster-scoped RBAC.
 
 ## Motivation
 
-For users interested in a heightened security posture, the requirements of the current rack-awareness
-implementation are prohibitive.
-Many Kubernetes cluster administrators may restrict access to cluster-scoped Kubernetes
-resources to ensure an application and the user managing it are contained within a limited set of namespaces.
 Today, Strimzi requires access to cluster-scoped Kubernetes resources for rack-awareness, NodePort
 listener configuration, and reading StorageClasses for volume resizing.
+But some Kubernetes cluster administrators may restrict access to cluster-scoped Kubernetes
+resources to ensure an application and the user managing it are contained within a limited set of namespaces.
+In such situations, Strimzi users were not able to use the rack-awareness feature.
+With this proposal, they will be able to configure and use rack-awareness even when Strimzi does not have the access rights to create `ClusterRolesBinding` resources.
 
-Implementing the proposed method for pool-based rack awareness makes cluster RBAC optional for rack-awareness.
+This feature might also be useful in other situations such as:
+* In testing, where it allows to configure rack-awareness independently of the underlying infrastructure (it, for example, allows to test rack-awareness related features on a single-node Kubernetes cluster by manually defining different racks for different node pools)
+* In future stretch-cluster environments, where automatically configured rack-awareness might not be desired (for example, when moving Kafka nodes between two Kubernetes clusters)
+
+Implementing the proposed pool-based approach makes cluster-scoped RBAC optional for rack awareness.
 
 ## Proposal
 
@@ -51,7 +55,7 @@ The field will be an optional enumeration type with the following values:
   * This rack type maintains the existing behavior where rack IDs are configured using a node label
   * The node label is determined using the existing `topologyKey` field
 * `envvar`
-  * This rack type uses the `STRIMZI_RACK` environment variable in the broker container to populate the rack ID
+  * This rack type configures the `STRIMZI_RACK` environment variable in the broker container to populate the rack ID
 
 When a `topologyKey` is defined, the default rack type will be `node-label` to maintain existing behavior.
 
@@ -81,7 +85,7 @@ or topology spread constraints in the Kafka pod template to ensure:
 * Brokers within pools with the same rack ID are scheduled in the same availability zone
 * Brokers in pools with different rack IDs are scheduled in different availability zones
 
-This affinity configuration would be specified in the KafkaNodePool:
+This affinity configuration must be specified in the `KafkaNodePool` resource:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -123,7 +127,7 @@ spec:
 
 Although configuring affinity or topology spread constraints is required for proper availability-driven
 data distribution, one benefit of this proposal is that users do not necessarily need to define these
-rules when controlling the rack ID for testing or other purposes.
+rules when controlling the rack ID for testing or other non-production scenarios.
 
 ## Affected/not affected projects
 
@@ -132,7 +136,7 @@ Only the [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-opera
 * Changes to the `Kafka` API type
   * New optional `type` sub-field under `rack`
   * Change `topologyKey` sub-field under `rack` from required to optional
-* Changes to the cluster operator to:
+* Changes to the Cluster Operator to:
   * Modify the `KafkaBrokerConfigurationBuilder` to use the `STRIMZI_RACK` environment variable for the rack ID if the rack type is `envvar`
   * Only create the ClusterRoleBinding when using the `node-label` rack ID type or when using a NodePort listener
   * Only create the rack configuration init container when using the `node-label` rack ID type
@@ -153,14 +157,13 @@ RBAC. The proposal here provides a few benefits over this potential future solut
 2. Provides additional flexibility to configure rack IDs that do not align to topology labels
 3. Protects brokers from changes to node labels
 
-Item (3) can be achieved using a similar configuration to the one described [above](#proposal).
+Benefit 3 can be achieved using a similar configuration to the example described [in the proposal section](#proposal).
 The rack ID configured for each broker is a zone identifier, e.g. `zone0`, and not the name of the
-actual topology node label. When rack IDs in brokers are configured to a specific topology node label,
-e.g. `us-east-2`, any changes to this label would require restarting the brokers. If I wanted to change
-a set of my nodes to use label `us-east-2a`, I may not want my broker pods to immediately restart
-with this change.
+actual topology node label. 
+When rack IDs in brokers are configured to a specific topology node label, e.g. `us-east-2`, any changes to this label would require restarting the brokers.
+For example, changing a set of nodes to use label `us-east-2a` may not warrant an immediate restart of broker pods.
 
 ## Rejected alternatives
 
 * Continue with existing rack awareness support using Kubernetes API access in a broker init container
-  * This alternative was rejected due to the heightened security requirements of some users, as outlined in the [Motivation](#motivation)
+  * This alternative was rejected due to the heightened security requirements of some users, as outlined in the [Motivation section](#motivation).
