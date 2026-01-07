@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 126 | [Move Strimzi Operators to Java 21](./126-move-strimzi-operators-to-java-21.md) |
 | 125 | [Change success response status of health checks to 200 (OK)](./125-change-health-check-response-status-200.md) |
 | 124 | [Add support `connections.max.reauth.ms` configuration for SCRAM listeners](./124-reauth-config-for-scram-listener.md) |
 | 123 | [Remove default Pod anti-affinity rules when rack awareness is enabled](./123-remove-default-pod-anti-affinity-rules-when-rack-awareness-is-enabled.md) |
