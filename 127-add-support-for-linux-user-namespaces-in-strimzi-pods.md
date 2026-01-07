@@ -1,4 +1,4 @@
-# Add support for user namespace Pods
+# Add support for Linux user namespaces in Strimzi Pods
 
 This proposal adds Strimzi support for pods that use Linux user namespaces.
 User namespaces isolate the user running inside the container from the user on the host, which helps to improve security.
