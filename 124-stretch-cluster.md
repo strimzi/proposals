@@ -398,13 +398,6 @@ The plugin's initialization code runs once when the operator starts.
 
 This means all Kafka clusters managed by a single operator instance must use the same networking provider.
 Different networking providers cannot coexist in a single operator instance.
-If networking provider were configurable per Kafka CR, the operator would need to:
-- Load and initialize multiple plugin JARs dynamically
-- Maintain separate ClassLoaders for each plugin to avoid conflicts
-- Handle plugin initialization failures on a per-cluster basis
-- Manage plugin lifecycle (loading/unloading) during reconciliation
-
-This adds significant complexity and creates potential ClassLoader isolation issues.
 
 
 **Example scenario:** If networking provider were per Kafka CR, the operator would need to:
@@ -608,7 +601,7 @@ metadata:
   annotations:
     strimzi.io/stretch-cluster-alias: "cluster-central"
 spec:
-  replicas: 2
+  replicas: 1
   roles:
     - controller
     - broker
@@ -628,7 +621,7 @@ metadata:
   annotations:
     strimzi.io/stretch-cluster-alias: "cluster-east"
 spec:
-  replicas: 2
+  replicas: 1
   roles:
     - controller
     - broker
@@ -660,7 +653,7 @@ spec:
         size: 100Gi
 ```
 
-This creates a 5-node Kafka cluster (2+2+1) with controllers and brokers distributed across 3 Kubernetes clusters.
+This creates a 3-node Kafka cluster (1+1+1) with controllers and brokers distributed across 3 Kubernetes clusters.
 
 #### Validation Rules
 
@@ -775,11 +768,6 @@ data:
   managed-resources: "StrimziPodSet,ServiceAccount,Secret,ConfigMap,Service,ServiceExport,PersistentVolumeClaim"
 ```
 
-**Why no ownerReferences?**
-
-The Kafka CR exists in the central cluster, not in the remote cluster.
-Kubernetes in the remote cluster cannot validate an owner that exists in a different cluster.
-Setting an ownerReference to a cross-cluster resource would cause Kubernetes to reject it or mark it as orphaned.
 The GC ConfigMap must be a standalone resource that the operator explicitly creates and deletes.
 
 All remote cluster resources (StrimziPodSets, ConfigMaps, Services, etc.) set this GC ConfigMap as their owner:
@@ -1508,7 +1496,7 @@ Extensive testing validates that stretch Kafka clusters deliver excellent perfor
 Testing was performed across three OpenShift clusters deployed within the same data center, representing the optimal deployment scenario for stretch clusters.
 
 **Test Configuration:**
-- **Infrastructure:** 3 OpenShift clusters, same site (< 1ms inter-cluster latency)
+- **Infrastructure:** 3 OpenShift clusters, same site 
 - **Kafka Topology:** 5 controllers (2+2+1), 27 brokers (9+9+9)
 - **Networking:** Cilium with Multi-Cluster Services (MCS) API
 - **Testing Tool:** OpenMessaging Benchmark (OMB) with Kafka driver
@@ -1535,61 +1523,7 @@ This represents a **worst-case scenario**, real world same datacenter deployment
 Stretch Kafka clusters are **optimized for specific deployment scenarios**.
 The following guidance helps users determine when stretch clusters provide value:
 
-##### ✅ Recommended: same datacenter Multi-AZ (Primary Use Case)
-
-**Scenario:** Multiple Kubernetes clusters within the same data center, across different availability zones.
-
-**Network Characteristics:**
-- Inter-cluster latency: < 5ms (validated < 1ms in testing)
-- Packet loss: < 0.1%
-- Jitter: < 2ms
-- Bandwidth: >= 10 Gbps
-
-<Let's add the Graphs here before we submit the proposal>
-
-**Expected Performance:**
-- **Throughput:** 90-100% of single cluster baseline ✅
-- **Latency:** +50-100% overhead (acceptable for HA benefit)
-- **Availability:** Survives entire Kubernetes cluster failure
-
-**Benefits:**
-- **High Availability:** Independent control planes eliminate single point of failure
-- **Fault Isolation:** Failure of one Kubernetes cluster (control plane, etcd, networking) does not impact Kafka
-- **Compliance:** Meets requirements for separate failure domains
-- **Performance:** Excellent - full throughput maintained
-
-**real world Validation:** Testing demonstrated 50,000 msg/sec throughput with 80ms average latency across 3 clusters in same datacenter.
-
-**Example Architecture:**
-```
-Datacenter: US-East-1
-├── Kubernetes Cluster 1 (AZ-1a): 2 controllers, 9 brokers
-├── Kubernetes Cluster 2 (AZ-1b): 2 controllers, 9 brokers
-└── Kubernetes Cluster 3 (AZ-1c): 1 controller, 9 brokers
-
-Network: Low-latency private network (< 1ms)
-Benefit: Survives entire AZ failure or K8s control plane outage
-```
-
-##### Use with Caution: Metro Area
-
-**Scenario:** Kubernetes clusters in nearby datacenters within metro area (< 50km).
-
-**Network Characteristics:**
-- Inter-cluster latency: 5-50ms
-- Requires highly stable, dedicated network links
-
-**Expected Performance:**
-- **Throughput:** 10-30% of baseline (severe degradation)
-- **Latency:** 1-10 seconds average
-- **Stability:** Sensitive to network jitter
-
-**Testing Data:** At 10ms added latency, throughput drops to 17,000 msg/sec (66% reduction). At 50ms, only 4,300 msg/sec remains (91% reduction).
-
-**IMPORTANT - Conservative Test Methodology:** These latency sensitivity tests represent a **worst-case scenario**. The test methodology injected artificial latency between **ALL pods in ALL clusters**, including pods within the same Kubernetes cluster and namespace. In real world same datacenter deployments, only cross cluster communication would experience added latency (typically < 1ms for same site clusters), while intra-cluster communication remains at normal Kubernetes latency (< 0.5ms). This means **actual production performance in same datacenter multi-AZ deployments will be significantly better** than the degraded numbers shown above, approaching the 0ms baseline performance (50,000 msg/sec).
-
-
-##### NOT Recommended: Regional or cross region
+##### NOT Recommended scenario for Stretch clusters
 
 **Scenarios to Avoid:**
 | Deployment | Latency | Reason |
@@ -1599,24 +1533,6 @@ Benefit: Survives entire AZ failure or K8s control plane outage
 | Intercontinental | > 250ms | Constant failures |
 
 **Alternative:** Use **MirrorMaker 2** for cross region disaster recovery. MM2 provides asynchronous replication optimized for high-latency scenarios and is the correct tool for geographic distribution.
-
-#### Summary: When to Use Stretch Clusters
-
-**✅ Use Stretch Clusters When:**
-- Deploying across multiple AZs in same datacenter (< 5ms latency)
-- Requiring strong consistency (synchronous replication)
-- Need automatic client failover without application changes
-- Organizational requirements for separate Kubernetes control planes
-- Compliance requirements for independent failure domains
-
-**❌ Use MirrorMaker 2 Instead When:**
-- Deploying across regions (> 50ms latency)
-- Geographic disaster recovery is primary goal
-- Can tolerate asynchronous replication
-- Prefer simpler operational model
-
-**Key Takeaway:** Stretch clusters excel at providing high availability within a single datacenter while maintaining full Kafka performance.
-They are not a replacement for cross region disaster recovery, which is better served by MirrorMaker 2.
 
 #### Authentication and Security
 
@@ -1712,7 +1628,7 @@ No changes to:
 
 **Alternative:** GitOps tools naturally provide CR storage and replication to new clusters.
 
-## Compatibility and Migration
+## Compatibility
 
 ### Operator Version Compatibility
 
@@ -1770,6 +1686,14 @@ The operator handles rolling updates across all clusters while ensuring Kafka qu
 3. Fails fast with clear error if incompatible
 
 **Deprecation Policy:** Breaking SPI changes trigger major version bump. Old plugins continue working with deprecation warnings for 2 releases before removal.
+
+**Kafka CR configurable networking providers:** If networking provider were configurable per Kafka CR, the operator would need to:
+- Load and initialize multiple plugin JARs dynamically
+- Maintain separate ClassLoaders for each plugin to avoid conflicts
+- Handle plugin initialization failures on a per-cluster basis
+- Manage plugin lifecycle (loading/unloading) during reconciliation
+
+This adds significant complexity and creates potential ClassLoader isolation issues.
 
 
 ### Backward Compatibility
