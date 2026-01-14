@@ -40,7 +40,7 @@ Broker demotion addresses these concerns by only transferring leadership, which 
 
 The proposal is to add a new `demote-brokers` mode to the existing `KafkaRebalance` custom resource, following the same pattern established by the `add-brokers` and `remove-brokers` modes introduced in [proposal 035](https://github.com/strimzi/proposals/blob/main/035-rebalance-types-scaling-brokers.md).
 
-When `spec.mode` is set to `demote-brokers` in the `KafkaRebalance` resource, paritition leadership is moved off the specified brokers while replicas remain in place.
+When `spec.mode` is set to `demote-brokers` in the `KafkaRebalance` resource, partition leadership is moved off the specified brokers while replicas remain in place.
 
 Users must provide a list of broker IDs to demote for broker-level demotion via the `spec.brokers` field.
 
@@ -61,21 +61,19 @@ spec:
 
 This example would demote brokers 3 and 4, transferring all partition leadership away from them while keeping the replicas in place.
 
-### Supported parameters for `demote-broker` mode
+### Supported fields for `demote-broker` mode
 
-The supported parameters, new and old, for `demote-brokers` mode in the `KafkaRebalance` resource spec are as follows:
+The supported fields, new and old, for `demote-brokers` mode in the `KafkaRebalance` resource spec are as follows:
 
 | Field                            | Type    | Description                                                                
 |----------------------------------|---------|-----------------------------------------------------------------------------|
 | brokers                          | integer array    | List of ids of broker to be demoted in the cluster.                |
-| concurrentLeaderMovements        | integer | Upper bound of ongoing leadership movements. Default is 1000.               |
+| concurrentLeaderMovements        | integer | Upper bound of ongoing leadership swaps. Default is 1000.                   |
 | skipUrpDemotion                  | boolean | Whether to skip demoting leader replicas for under-replicated partitions.   |
 | excludeFollowerDemotion          | boolean | Whether to skip demoting follower replicas on the broker to be demoted.     |
 | excludeRecentlyDemotedBrokers    | boolean | Whether to allow leader replicas to be moved to recently demoted brokers.   |
-| replicaMovementStrategies        | string array | A list of strategy class names used to determine the execution order for replica position swaps within partitions (metadata changes only, no data movement) in the generated optimization proposal. By default BaseReplicaMovementStrategy is used, which will execute the replica position swaps in the order in which they are generated. |
-| replicationThrottle             | integer | The upper bound, in bytes per second, on the bandwidth used to move replicas. There is no limit by default. |
 
-**NOTE**: As part of this proposal, we will also add a `excludeRecentlyDemotedBrokers` parameter for the `full`, `add-brokers`, and `remove-brokers` KafkaRebalance modes to give users the ability to prevent to leader replicas to be moved to recently demoted brokers.
+**NOTE**: As part of this proposal, we will also add a `excludeRecentlyDemotedBrokers` field for the `full`, `add-brokers`, and `remove-brokers` KafkaRebalance modes to give users the ability to prevent to leader replicas to be moved to recently demoted brokers.
 When `excludeRecentlyDemotedBrokers` is set to `true`, a broker is considered demoted for the duration specified by the Cruise Control `demotion.history.retention.time.ms` server configuration.
 By default, this value is 1209600000 milleseconds (14 days) but is configurable in the `spec.cruiseControl.config` section of the `Kafka` custom resource.
 
@@ -100,15 +98,20 @@ The proposal is stored in `status.optimizationResult` and shows which partition 
 
 The implementation includes the following validation:
 
-* When `demote-brokers` mode is specified, the `brokers` parameter must be provided.
+* When `demote-brokers` mode is specified, the `brokers` field must be provided.
 If the field is missing or empty, the operator will reject the rebalance request and report an error in the `KafkaRebalance` status.
 
 * The specified broker IDs in the `brokers` list must exist in the cluster. 
 If any of the broker IDs are invalid, the demotion request will be rejected and the error will be reported in the `KafkaRebalance` status.
 
-* When an impossible demotion operation is requested for example demoting all brokers or transfering leadship from the only in-sync replica when the KafkaRebalance `spec.skipUrpDemotion` configuration is set to `false`, the demotion request will be rejected and the error will be reported in the `KafkaRebalance` status.
+* When an impossible demotion operation is requested for example demoting all brokers or transferring leadership from the only in-sync replica when the KafkaRebalance `spec.skipUrpDemotion` configuration is set to `false`, the demotion request will be rejected and the error will be reported in the `KafkaRebalance` status.
 
-* The following `KafkaRebalance` resource configuration fields are incompatible with broker demotion and if specified, will cause the rebalance to be rejected, an error to logged by the Strimzi Operator, and an errorto be added to the `KafkaRebalance` status:
+* If a target broker fails while leadership is being transferred to it, all demotion operations involving that broker are aborted, and the source brokers remain the leaders for the affected partitions.
+In this case, the overall demotion request continues on a best-effort with the proposed operations, transferring the leadership on brokers that are available.
+
+* The following `KafkaRebalance` resource configuration fields are incompatible with, or no-ops for, broker demotion. 
+If any of these fields are specified, the rebalance request will be rejected, an error will be logged by the Strimzi Operator, and an error will be added to the KafkaRebalance status.
+  * `replicaMovementStrategies`
   * `goals`
   * `skipHardGoalCheck`
   * `rebalanceDisk`
@@ -116,6 +119,7 @@ If any of the broker IDs are invalid, the demotion request will be rejected and 
   * `concurrentPartitionMovementsPerBroker`
   * `concurrentIntraBrokerPartitionMovements`
   * `moveReplicasOffVolumes`
+  * `replicationThrottle`
 
 ### Interaction with other rebalance modes
 
@@ -153,7 +157,7 @@ The proposed changes are fully backward compatible:
 Existing `KafkaRebalance` resources using `full`, `add-brokers`, `remove-brokers`, and `remove-disks` modes continue to work unchanged.
 
 * **CRD compatibility**: The `KafkaRebalance` CRD already includes the `mode` and `brokers` fields required for this feature. 
-No structural changes to the CRD schema are needed beyond allowing the new enum value and adding new parameters.
+No structural changes to the CRD schema are needed beyond allowing the new enum value and adding new fields.
 
 * **Behavioral compatibility**: Existing rebalancing workflows are unaffected. 
 The new mode is opt-in and requires explicit user action.
@@ -186,9 +190,9 @@ spec:
 
 This example would demote the disk volumes 1 and 2 of brokers 0 and volumes 0 and 1 of broker 1, transferring all partition leadership away from those volumes while keeping the replicas in place.
 
-#### Supported parameters for `demote-disks` mode
+#### Supported fields for `demote-disks` mode
 
-In addition to the supported parameters of the `demote-brokers` mode, the `demote-disks` mode in the `KafkaRebalance` resource spec would introduce the following:
+In addition to the supported fields of the `demote-brokers` mode, the `demote-disks` mode in the `KafkaRebalance` resource spec would introduce the following:
 
 | Field                            | Type    | Description
 |----------------------------------|---------|-----------------------------------------------------------------------------|
