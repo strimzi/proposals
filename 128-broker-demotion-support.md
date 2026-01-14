@@ -107,7 +107,7 @@ If any of the broker IDs are invalid, the demotion request will be rejected and 
 * When an impossible demotion operation is requested for example demoting all brokers or transferring leadership from the only in-sync replica when the KafkaRebalance `spec.skipUrpDemotion` configuration is set to `false`, the demotion request will be rejected and the error will be reported in the `KafkaRebalance` status.
 
 * If a target broker fails while leadership is being transferred to it, all demotion operations involving that broker are aborted, and the source brokers remain the leaders for the affected partitions.
-In this case, the overall demotion request continues on a best-effort with the proposed operations, transferring the leadership on brokers that are available.
+In this case, the overall demotion request continues on a best-effort basis with with the remaining proposed operations, transferring the leadership on brokers that are available.
 
 * The following `KafkaRebalance` resource configuration fields are incompatible with, or no-ops for, broker demotion. 
 If any of these fields are specified, the rebalance request will be rejected, an error will be logged by the Strimzi Operator, and an error will be added to the KafkaRebalance status.
@@ -125,29 +125,19 @@ If any of these fields are specified, the rebalance request will be rejected, an
 
 Broker demotion is independent of other rebalance modes:
 
-* **After demotion**: If decommissioning is the end goal, users can subsequently create a `remove-brokers` rebalance to move replicas off of targeted brokers.
+* **add-brokers**: After new brokers are added to the cluster, broker demotion could be used to explicitly transfer partition leadership away from existing brokers to accelerate leadership adoption on newly added brokers. 
 
-* **Before scaling down**: Demotion can be performed before a `remove-brokers` operation as a preparatory step to minimize disruption.
+* **remove-brokers**: Before decommissioning or scaling down brokers, broker demotion could be performed as a preparatory step to minimize disruption.
 
-* **With auto-rebalancing upon scaling**: To reduce the complexity of this proposal, broker demotion will remain as a manual operation independent of cluster scaling as described in [proposal 078](https://github.com/strimzi/proposals/blob/main/078-auto-rebalancing-cluster-scaling.md).
- 
-* **With standard rebalancing**: After demoting brokers, users can run a `full` mode rebalance to redistribute leadership across the remaining leader-eligible brokers.
+* **remove-disks**: Since disk-level demotion support is not included as part of this proposal, this interaction is not applicable.
+
+* **full**: After demoting brokers, users could run a `full` mode rebalance to further redistribute leadership across the remaining leader-eligible brokers.
+
+To reduce the complexity of this proposal and its implementation, broker demotion will remain as a manual operation independent of the other rebalance modes and cluster scaling as described in [proposal 078](https://github.com/strimzi/proposals/blob/main/078-auto-rebalancing-cluster-scaling.md).
 
 ## Affected/not affected projects
 
-This proposal affects only the Strimzi Cluster Operator.
-
-**Affected components:**
-* `KafkaRebalanceAssemblyOperator`
-* CRD schema for `KafkaRebalance`
-
-**Not affected:**
-* Topic Operator
-* User Operator
-* Entity Operator
-* Kafka Bridge
-* Kafka Connect
-* Kafka MirrorMaker 2
+This proposal impacts the Strimzi Cluster Operator in places related to the `KafkaRebalanceAssemblyOperator` and the `KafkaRebalance` API.
 
 ## Compatibility
 
