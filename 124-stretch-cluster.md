@@ -601,7 +601,7 @@ metadata:
   annotations:
     strimzi.io/stretch-cluster-alias: "cluster-central"
 spec:
-  replicas: 1
+  replicas: 3
   roles:
     - controller
     - broker
@@ -621,7 +621,7 @@ metadata:
   annotations:
     strimzi.io/stretch-cluster-alias: "cluster-east"
 spec:
-  replicas: 1
+  replicas: 3
   roles:
     - controller
     - broker
@@ -641,7 +641,7 @@ metadata:
   annotations:
     strimzi.io/stretch-cluster-alias: "cluster-west"
 spec:
-  replicas: 1
+  replicas: 4
   roles:
     - controller
     - broker
@@ -653,7 +653,7 @@ spec:
         size: 100Gi
 ```
 
-This creates a 3-node Kafka cluster (1+1+1) with controllers and brokers distributed across 3 Kubernetes clusters.
+This creates a 10-node Kafka cluster (3+3+4) with controllers and brokers distributed across 3 Kubernetes clusters.
 
 #### Validation Rules
 
