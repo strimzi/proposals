@@ -1,4 +1,4 @@
-# KafkaTopic Cluster ID Protection
+# KafkaTopic Ownership protection
 
 This proposal adds protection to prevent Topic Operators from accidentally managing KafkaTopics that belong to a different Kafka cluster.
 
