@@ -12,6 +12,8 @@ So the `type: ingress` listener API was designed around the [Kubernetes Ingress 
 
 However, the Kubernetes Ingress NGINX controller is now being retired.
 And all maintenance effort will be stopped in March 2026.
+You can read more about it in the related [Kubernetes blog post](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/).
+
 In addition to the archiving of the Kubernetes Ingress NGINX controller, the Ingress API itself is being replaced by the new Gateway API.
 So we should consider the future of the `type: ingress` listener in Strimzi.
 
@@ -22,10 +24,9 @@ This will indicate to users that they should consider using another listener typ
 And that we do not plan to rebase the `type: ingress` listener to any other Ingress controller.
 The API is planned for removal when the `v2` API is introduced.
 
-However, the implementation and support for the `type: ingress` listener will remain in the Strimzi code base.
-Thanks to that, existing users will be able to continue using it without any changes, and move to another listener type on their own schedule.
-The code will be removed at the latest with the move to the `v2` API.
-Or earlier if we decide so in a separate proposal.
+The implementation will remain in the Strimzi code base for the foreseeable future.
+Any future removal would be proposed and agreed separately.
+If appropriate, such a proposal could align the removal with the introduction of the v2 API.
 
 _Note: Strimzi has recently moved to `v1` API. The `v2` API is not expected in the near term._
 
@@ -37,7 +38,7 @@ Deprecation warnings will also be automatically raised by the operator in its lo
 This proposal affects the Strimzi Operators project only.
 It impacts the following components:
 * `api` module (deprecation of the API)
-* `cluster-operator` module (suppress the deprecation warnings)
+* `cluster-operator` module (suppress the Java compiler deprecation warnings)
 * Documentation
 
 ## Backwards compatibility
@@ -59,5 +60,5 @@ Or they might use one of the commercial offerings that provide security patches 
 
 We could rebase the `type: ingress` listener API to support one of the other open source Ingress controllers.
 However, this alternative was rejected because that might break support for Kubernetes Ingress NGINX controller users.
-And because the Ingress API is being replaced by the Gateway API.
+And because the Ingress API is being replaced by the Gateway API (Strimzi might provide a dedicated Gateway APi support in the future, but that is not subject of this proposal).
 Users who want to use a different Ingress controller can always do so using the `type: cluster-ip` listener and manually maintained Ingress resources.
