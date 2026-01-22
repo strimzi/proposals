@@ -106,54 +106,8 @@ spec:
 
 When using rack awareness in general, users must configure affinity or topology spread constraints
 to ensure the proper distribution of pods.
-This proposal relies on distribution of node pools across zones, so users should configure affinity
-or topology spread constraints in the Kafka pod template to ensure:
-
-* Brokers within pools with the same rack ID are scheduled in the same availability zone
-* Brokers in pools with different rack IDs are scheduled in different availability zones
-
-This affinity configuration must be specified in the `KafkaNodePool` resource:
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaNodePool
-metadata:
-  name: my-zone0-pool
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  template:
-    kafkaContainer:
-      env:
-        - name: STRIMZI_RACK_ID
-          value: zone0
-    pod:
-      affinity:
-        podAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 50
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    strimzi.io/cluster: my-cluster
-                    strimzi.io/pool-name: my-zone0-pool
-                topologyKey: topology.kubernetes.io/zone
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 90
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: strimzi.io/cluster
-                      operator: In
-                      values:
-                        - my-cluster
-                    - key: strimzi.io/pool-name
-                      operator: NotIn
-                      values:
-                        - my-zone0-pool
-                topologyKey: topology.kubernetes.io/zone
-```
+This is the case for rack awareness configured with either the existing node label method or the
+proposed environment variable option.
 
 Although configuring affinity or topology spread constraints is required for proper availability-driven
 data distribution, one benefit of this proposal is that users do not necessarily need to define these

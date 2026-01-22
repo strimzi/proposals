@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 128 | [Kafka Node Pool rack IDs from environment variables](./128-rack-ids-from-environment-variables) |
 | 127 | [Add support for Linux user namespaces in Strimzi Pods](./127-add-support-for-linux-user-namespaces-in-strimzi-pods.md) |
 | 126 | [Move Strimzi Operators to Java 21](./126-move-strimzi-operators-to-java-21.md) |
 | 125 | [Change success response status of health checks to 200 (OK)](./125-change-health-check-response-status-200.md) |
