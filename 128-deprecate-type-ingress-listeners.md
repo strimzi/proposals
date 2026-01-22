@@ -52,7 +52,7 @@ While `type: ingress` listeners will be marked as deprecated, this change will h
 
 We could remove the `type: ingress` support completely from the code base.
 However, this alternative was rejected because some users might want to keep using the Kubernetes Ingress NGINX controller despite its archival.
-They might choose to continue using the Kubernetes Ingress NGINX controller despite its archival, for example in disconnected environments where the associated security risks are mitigated.
+For example in disconnected environments where the associated security risks are mitigated.
 Given its open source nature, they can also maintain their own private fork with security fixes.
 Or they might use one of the commercial offerings that provide security patches for it despite its archival.
 
