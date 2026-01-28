@@ -1,6 +1,6 @@
 # In-place Pod resizing
 
-Kubernetes 1.35 graduated the in-place Pod resizing feature to stable ([blog post](https://kubernetes.io/blog/2025/12/19/kubernetes-v1-35-in-place-pod-resize-ga)).
+Kubernetes 1.35 graduated the **In-Place Pod Resize** feature to stable ([blog post](https://kubernetes.io/blog/2025/12/19/kubernetes-v1-35-in-place-pod-resize-ga)).
 In-place Pod resizing allows updating the Pod resource requirements dynamically without restarting the Pod or the container(s) inside it.
 This proposal covers how to integrate and support this feature in Strimzi.
 
@@ -22,14 +22,14 @@ The Pod status section indicates whether the resize was successful or not.
 There are three general error states when the resizing cannot be applied:
 * `Infeasible` resizing state indicating that the requested resource requirements are impossible on a given Kubernetes worker node.
   For example, when requesting more memory or CPU than the worker node's capacity allows.
-  Users can typically react to this state by either rolling the Pod and having it scheduled on another node with sufficient capacity.
+  Users can typically react to this state by rolling the Pod and having it scheduled on another node with sufficient capacity.
 * `Deferred` resizing state indicates that the resource request could be feasible on a given Kubernetes worker node but is currently not possible due to available resources.
-  It might, however, be possible in the future, for example once some other Pods are deleted from the worker node.
-  Users can react to this state by either waiting until the resizing is possible or restarting a Pod and having it scheduled on another worker node with sufficient capacity.
+  It might, however, be possible when other Pods are deleted from the worker node.
+  Users can react to this state by either waiting until the resizing is possible or restarting a Pod and scheduling it on another worker node with sufficient capacity.
 * Pod resizing `Error` indicates that the requested resizing failed.
   It could fail, for example, when the requested reduction of the memory requirements is not possible because the container is consuming more memory than the new memory limit allows.
 
-_Note: When the resizing is unsuccessful and ends in one of the 3 states described above, the Pod continues to run with the original resource configuration._
+_Note: When the resizing unsuccessfully ends in one of these three states, the Pod continues to run with the original resource configuration._
 
 In-place Pod resizing does not allow removing resource limits (or requests when limits are not defined from the beginning), only reconfiguring them.
 If a user wants to remove limits completely from the container(s), the Pod needs to be restarted.
@@ -39,7 +39,7 @@ If a user wants to remove limits completely from the container(s), the Pod needs
 ### Enabling the in-place resizing
 
 In-place resizing will be disabled by default.
-Users will be able to enable it on a per-resource basis using the `strimzi.io/in-place-resizing: "true"` annotation set on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker` resource.
+Users will be able to enable it on a per-resource basis using the `strimzi.io/in-place-resizing: "true"` annotation set on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker2` resource.
 
 Enabling this through an annotation on the custom resource was chosen because:
 * This feature depends on the Kubernetes version, so a feature gate with a fixed graduation plan is not suitable for this feature.
@@ -52,7 +52,7 @@ Enabling this through an annotation on the custom resource was chosen because:
 
 ### Implementation
 
-This proposal suggests support for in-place resizing for Kafka, Kafka Connect, and Kafka Mirror Maker 2 nodes.
+This proposal suggests support for in-place resizing for Kafka, Kafka Connect, and Kafka MirrorMaker 2 nodes.
 These nodes/pods run through the `StrimziPodSet` resources and are managed directly by Strimzi.
 
 #### Current situation
@@ -66,10 +66,10 @@ Today, the `strimzi.io/revision` annotation is derived from the whole Pod specif
 #### Planned changes
 
 To support in-place Pod resizing, this annotation will be split in two:
-* The existing `strimzi.io/revision` annotation will contain the hash of the whole Pod specification with the exception of its resource requirement configurations.
+* The existing `strimzi.io/revision` annotation will contain the hash of the whole Pod specification with the exception of its resource requirement configuration.
 * A new `strimzi.io/resource-revision` annotation will be introduced to contain a hash based on the resource requirements of the different containers in the Pod.
 
-When the in-place Pod resizing is disabled, the operator will use these annotations in the Kafka and Kafka Connect rollers to decide if the Pods need to be rolled in the same way as before.
+When the in-place Pod resizing annotation is not set or set to `false`, the operator decides to roll Kafka and Kafka Connect Pods in the same way as before.
 
 When the in-place resizing is enabled, it will be handled in two different parts of the code.
 1. The `StrimziPodSet` controller will be responsible for the in-place resizing as part of its `StrimziPodSet` / `Pod` reconciliation.
@@ -83,14 +83,14 @@ When the in-place resizing is enabled, it will be handled in two different parts
    When the in-place Pod resizing is enabled, these methods will:
     * Check if the requested resource change is invalid (e.g. resource limits were removed as mentioned earlier).
       If it is invalid, it will trigger a rolling update of the Pod.
-    * Check if the in-place resizing ended up in one of the error states (`Infeasible`, `Error`, etc.).
+    * Check if the in-place resizing resulted in a state that requires a rolling update (for example, `Infeasible` or `Error`).
       If it ended up in one of these states, it will trigger a rolling update of the Pod.
 
 #### Deferred resizing
 
-By default, when the in-place resizing ends up in the `Deferred` state that indicates that there are not enough free resources to resize the Pod, Strimzi will do a rolling update of the Pod to have it rescheduled on another node with sufficient capacity.
+By default, when in-place resizing enters the `Deferred` state, which indicates that there are not enough free resources to resize the Pod, Strimzi performs a rolling update of the Pod to reschedule the Pod on another node with sufficient capacity.
 However, users will be able to set the `strimzi.io/in-place-resizing-wait-for-deferred: "true"` annotation on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker2` resources.
-This annotation will indicate that Strimzi should not roll the Pod when the resizing was `Deferred` and instead wait for capacity to be freed on its current node.
+This annotation indicates that Strimzi should not roll the Pod when the resizing was `Deferred` and instead wait for capacity to be freed on its current node.
 
 _Note: This will not prevent the rolling of the Pod for any other reasons._
 _So if - for example - some other configuration is changed that needs a rolling update, the Pod will be rolled regardless of the `Deferred` resizing state._
@@ -105,15 +105,14 @@ The documentation will also mention the various limitations (see the section bel
 ### Limitations
 
 While in-place Pod resizing is a useful tool, there are also many architectural limitations to it.
-This chapter covers them to make it clearer what to expect from this feature and to better understand when it might be useful.
-Despite these limitations, this is a useful feature.
+They are described here to clarify the expected behavior of this feature and to help users determine when in-place Pod resizing is appropriate.
 
 #### Large Kafka clusters and dedicated nodes
 
 Large Kafka clusters often run on dedicated nodes.
 The dedicated node typically runs only the Kafka brokers and various infrastructure utilities (monitoring tools etc.).
-As the brokers have the whole node's capacity at their disposal all the time, there is no need to change their resource requirements or autoscale them.
-So this feature provides only a little value for these clusters.
+As the brokers have the whole node's capacity at their disposal all the time, there is no requirement to change their resource requirements or autoscale them.
+So this feature provides limited value for these clusters.
 
 #### Smaller clusters and free capacity
 
@@ -128,17 +127,17 @@ If the user has a very tightly bin-packed Kubernetes cluster with no free capaci
 
 While new Java versions have support for Linux containers and can autodetect the container memory capacity, they currently do this only when the JVM is starting.
 So, dynamically resizing the memory might lead to:
-* Unused memory when the memory capacity is increased but Java is not able to use it due to small `Xmx` configuration.
+* Unused memory when the memory capacity is increased, but Java is unable to use it due to a small `Xmx` configuration.
 * Running out of memory when the memory capacity is decreased, but the `Xmx` remains too high.
 
 This might improve in the future as newer Java versions adopt new features such as [automatic heap sizing](https://openjdk.org/jeps/8359211).
 
 #### Cruise Control
 
-This feature allows dynamically resizing the Kafka Pods.
-However, the Cruise Control configuration includes the capacity (resources) of the Kafka brokers.
-This configuration is currently not dynamically configurable.
-As a result, while the Kafka broker Pod might not roll when the resource requirements change, the Cruise Control Pod will always roll in such a situation.
+In-place Pod resizing allows dynamically resizing Kafka broker Pods without necessarily restarting them.
+However, Cruise Control maintains its own configuration that includes the CPU and memory capacity of Kafka brokers.
+This configuration is not updated dynamically.
+As a result, when broker resource requirements change, the Kafka broker Pods might not roll, but the Cruise Control Pod must be restarted to apply the updated capacity information.
 
 #### Vertical Pod Autoscaling
 
@@ -150,7 +149,7 @@ It might also make it easier to do other forms of autoscaling.
 
 A future improvement that might be built on top of the in-place pod resizing is _startup resource requirements_.
 Java-based applications are known for being relatively CPU hungry at startup.
-A startup resource requirements feature might allow starting the Pod with additional (CPU) resources and reducing them later when the Pod is ready.
+A startup resource requirements feature might allow a Pod to start with additional (CPU) resources and reduce them later when the Pod is ready.
 This feature is not part of this proposal.
 
 ## Affected projects
@@ -162,7 +161,7 @@ This proposal affects the Strimzi Cluster Operators and related documentation.
 This proposal affects only the StrimziPodSet-based Pods.
 Pods managed by Kubernetes workload controllers (`Deployments`) such as HTTP Bridge, Topic and User Operators, Kafka Exporter, and Cruise Control are not affected by this.
 As the Pods are not managed directly by Strimzi, it should be possible to use standard Kubernetes tooling on them.
-Also - especially for Topic and User Operators, Kafka Exporter, and Cruise Control - changing their resource requirements seems pretty rare as they are helper tools that do not necessarily need to scale with the Kafka cluster traffic.
+For Topic and User Operators, Kafka Exporter, and Cruise Control, resource requirement changes are uncommon because these components do not need to scale with Kafka cluster traffic.
 
 ## Backwards compatibility
 
