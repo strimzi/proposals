@@ -31,7 +31,6 @@ The `remove-brokers` mode is too aggressive for these scenarios because it moves
 - Significant network bandwidth consumption from replica movement
 - Increased CPU and disk I/O on source and destination brokers
 - Extended time to complete the operation
-- Temporary reduction in replication factor during replica migration
 - Unnecessary disruption when the goal is only to remove leadership
 
 Broker demotion addresses these concerns by only transferring leadership, which is a lightweight operation compared to replica movement.
@@ -65,13 +64,13 @@ This example would demote brokers 3 and 4, transferring all partition leadership
 
 The supported fields, new and old, for `demote-brokers` mode in the `KafkaRebalance` resource spec are as follows:
 
-| Field                            | Type    | Description                                                                
-|----------------------------------|---------|-----------------------------------------------------------------------------|
-| brokers                          | integer array    | List of ids of broker to be demoted in the cluster.                |
-| concurrentLeaderMovements        | integer | Upper bound of ongoing leadership swaps. Default is 1000.                   |
-| skipUrpDemotion                  | boolean | Whether to skip demoting leader replicas for under-replicated partitions.   |
-| excludeFollowerDemotion          | boolean | Whether to skip demoting follower replicas on the broker to be demoted.     |
-| excludeRecentlyDemotedBrokers    | boolean | Whether to allow leader replicas to be moved to recently demoted brokers.   |
+| Field                            | Type          | Description                                                                 | Default   |
+|----------------------------------|---------------|-----------------------------------------------------------------------------|------------
+| brokers                          | integer array | List of ids of broker to be demoted in the cluster.                         | N/A       |
+| concurrentLeaderMovements        | integer       | Upper bound of ongoing leadership swaps.                                    | 1000      |
+| skipUrpDemotion                  | boolean       | Whether to skip demoting leader replicas for under-replicated partitions.   | true      |
+| excludeFollowerDemotion          | boolean       | Whether to skip demoting follower replicas on the broker to be demoted.     | true      |
+| excludeRecentlyDemotedBrokers    | boolean       | Whether to allow leader replicas to be moved to recently demoted brokers.   | false     |
 
 **NOTE**: As part of this proposal, we will also add a `excludeRecentlyDemotedBrokers` field for the `full`, `add-brokers`, and `remove-brokers` KafkaRebalance modes to give users the ability to prevent to leader replicas to be moved to recently demoted brokers.
 When `excludeRecentlyDemotedBrokers` is set to `true`, a broker is considered demoted for the duration specified by the Cruise Control `demotion.history.retention.time.ms` server configuration.
@@ -88,7 +87,7 @@ The workflow for using broker demotion follows the same pattern as other rebalan
 3. The operator transitions the `KafkaRebalance` resource to the `ProposalReady` state. 
 The proposal is stored in `status.optimizationResult` and shows which partition leadership transfers will occur.
 
-4. User reviews the proposal and approves it by annotating the resource with `strimzi.io/rebalance=approve`.
+4. If [auto-approval](https://strimzi.io/docs/operators/latest/deploying#automatically_approving_an_optimization_proposal) is not enabled, the user reviews the proposal and approves it by annotating the resource with `strimzi.io/rebalance=approve`.
 
 5. The operator executes the broker demotion via the `/demote_broker` endpoint with `dryrun=false`.
 
@@ -107,7 +106,7 @@ If any of the broker IDs are invalid, the demotion request will be rejected and 
 * When an impossible demotion operation is requested for example demoting all brokers or transferring leadership from the only in-sync replica when the KafkaRebalance `spec.skipUrpDemotion` configuration is set to `false`, the demotion request will be rejected and the error will be reported in the `KafkaRebalance` status.
 
 * If a target broker fails while leadership is being transferred to it, all demotion operations involving that broker are aborted, and the source brokers remain the leaders for the affected partitions.
-In this case, the overall demotion request continues on a best-effort basis with with the remaining proposed operations, transferring the leadership on brokers that are available.
+In this case, the overall demotion request continues on a best-effort basis with the remaining proposed operations, transferring the leadership on brokers that are available.
 
 * The following `KafkaRebalance` resource configuration fields are incompatible with, or no-ops for, broker demotion. 
 If any of these fields are specified, the rebalance request will be rejected, an error will be logged by the Strimzi Operator, and an error will be added to the KafkaRebalance status.
