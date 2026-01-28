@@ -7,13 +7,13 @@ This proposal covers how to integrate and support this feature in Strimzi.
 ## Motivation
 
 In-place resizing helps reduce the number of Kafka node restarts.
-While for Java-based applications such as Apache Kafka the benefit of dynamically resizing memory requests and limits might be limited, it works well for CPU.
+While dynamically resizing memory requests and limits provides limited benefit for Java-based applications such as Apache Kafka, in-place resizing is effective for CPU because CPU resources can be adjusted without restarting the broker.
 Support for in-place resizing might also help to better leverage Vertical Pod Autoscaling.
 
 ## How in-place Pod resizing works in Kubernetes
 
 In-place Pod resizing is done through the Kubernetes API using a special `resize` sub-resource.
-It allows dynamically changing resource requirements of all regular containers (resource requirements cannot be changed for init containers).
+It allows dynamically changing resource requirements of all non-init containers (resource requirements cannot be changed for init containers).
 It allows increasing or decreasing the CPU and memory limits and requests.
 
 The API call to the `resize` sub-resource changes the resource configuration in the Pod specification.
@@ -41,6 +41,8 @@ If a user wants to remove limits completely from the container(s), the Pod needs
 In-place resizing will be disabled by default.
 Users will be able to enable it on a per-resource basis using the `strimzi.io/in-place-resizing: "true"` annotation set on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker2` resource.
 
+_Note: In-place resizing will not be supported for `KafkaBridge`, because it does not use the `StrimziPodSet` resources._
+
 Enabling this through an annotation on the custom resource was chosen because:
 * This feature depends on the Kubernetes version, so a feature gate with a fixed graduation plan is not suitable for this feature.
 * This feature might be very useful for some use-cases and situations and not so useful in others.
@@ -49,6 +51,10 @@ Enabling this through an annotation on the custom resource was chosen because:
   A cluster operator configuration option would allow enabling or disabling the feature, but for all operands.
 * The annotation is not part of the Strimzi CRD API itself.
   We can easily change it based on the feedback we receive.
+
+Enabling in-place resizing affects only how the resource requirement changes are applied to the operand.
+But users will continue to configure them as before in the `.spec.resources` fields of the `KafkaNodePool`, `KafkaConnect`, and `KAfkaMirrorMaker2` resources.
+(For the time being, users can also continue configuring the Kafka broker/controller resources in the `Kafka` CR, but this option is present only in the old `v1bets2` API and will be removed in Strimzi 1.0.)
 
 ### Implementation
 
@@ -85,6 +91,7 @@ When the in-place resizing is enabled, it will be handled in two different parts
       If it is invalid, it will trigger a rolling update of the Pod.
     * Check if the in-place resizing resulted in a state that requires a rolling update (for example, `Infeasible` or `Error`).
       If it ended up in one of these states, it will trigger a rolling update of the Pod.
+    * In case the in-place update was successful, the roller will continue without rolling the Pod (unless there are some other reasons to roll the Pod).
 
 #### Deferred resizing
 
@@ -141,9 +148,8 @@ As a result, when broker resource requirements change, the Kafka broker Pods mig
 
 #### Vertical Pod Autoscaling
 
-While this feature can support various forms of Vertical Pod Autoscaling, it does not integrate Strimzi with the Kubernetes Vertical Pod Autoscaler.
-It might make it easier to write tools to bridge the Vertical Pod Autoscaler recommendations into Strimzi.
-It might also make it easier to do other forms of autoscaling.
+In-place Pod resizing does not integrate Strimzi with the Kubernetes Vertical Pod Autoscaler (VPA), and Kubernetes VPA is not supported for Strimzi-managed Kafka Pods.
+However, in-place Pod resizing might make it easier to apply resource sizing suggestions from Kubernetes VPA using external tooling.
 
 ## Future improvements
 
