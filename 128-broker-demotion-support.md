@@ -122,7 +122,7 @@ If any of these fields are specified, the rebalance request will be rejected, an
 
 ### Interaction with other rebalance modes
 
-Broker demotion is independent of other rebalance modes:
+Broker demotion is independent of other rebalance modes but can be used before or after them manually:
 
 * **add-brokers**: After new brokers are added to the cluster, broker demotion could be used to explicitly transfer partition leadership away from existing brokers to accelerate leadership adoption on newly added brokers. 
 
@@ -156,51 +156,6 @@ The new mode is opt-in and requires explicit user action.
 ### Add support for disk-level demotion
 
 Since Cruise Control's [`/demote_broker`](https://github.com/linkedin/cruise-control/wiki/REST-APIs#demote-a-list-of-brokers-from-the-kafka-cluster) endpoint includes a parameter for demoting individual disks, `brokerid_and_logdirs`, a logical follow up feature would be to add support for disk-level demotion.
-
-For disk-level demotion, partition leadership is moved off specific disk volumes on selected brokers, while replicas remain on those volumes.
-
-A `KafkaRebalance` custom resource for disk demotion would look like this:
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaRebalance
-metadata:
-  name: demote-disks-example
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  mode: demote-disks
-  moveLeadersOffVolumes:
-    - brokerId: 0
-      volumeIds: [1, 2]
-    - brokerId: 1
-      volumeIds: [0, 1]
-```
-
-This example would demote the disk volumes 1 and 2 of brokers 0 and volumes 0 and 1 of broker 1, transferring all partition leadership away from those volumes while keeping the replicas in place.
-
-#### Supported fields for `demote-disks` mode
-
-In addition to the supported fields of the `demote-brokers` mode, the `demote-disks` mode in the `KafkaRebalance` resource spec would introduce the following:
-
-| Field                            | Type    | Description
-|----------------------------------|---------|-----------------------------------------------------------------------------|
-| moveLeadersOffVolumes            | [BrokerAndVolumeIds](https://strimzi.io/docs/operators/latest/configuring.html#type-BrokerAndVolumeIds-reference) array | List of broker ID and volume pairs to be demoted in the cluster. |
-
-#### Validation and constraints
-
-The implementation would include the following validation:
-
-* The specified broker and volume IDs in the `moveLeadersOffVolumes` list must exist in the cluster. 
-Cruise Control will validate this and return an error for the `KafkaRebalance` status if invalid broker IDs or volume IDs are provided.
-
-### Add support for broker-level demotion before automatic cluster scaling
-
-A future enhancement could integrate broker-level demotion with automatic cluster scaling as described in [proposal 078](https://github.com/strimzi/proposals/blob/main/078-auto-rebalancing-cluster-scaling.md).
-In such an implementation, brokers scheduled for removal could first be automatically demoted, ensuring that partition leadership is transferred away from those brokers before scaling operations proceed. 
-This would reduce operational overhead and improve safety by minimizing leadership movement during broker removal.
-
-This enhancement would build on the existing auto-rebalancing mechanisms and could be implemented as an optional, configurable step in the cluster scaling process.
 
 ## Rejected alternatives
 
