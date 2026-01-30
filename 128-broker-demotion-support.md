@@ -107,6 +107,7 @@ If any of the broker IDs are invalid, the demotion request will be rejected and 
 
 * If a target broker fails while leadership is being transferred to it, all demotion operations involving that broker are aborted, and the source brokers remain the leaders for the affected partitions.
 In this case, the overall demotion request continues on a best-effort basis with the remaining proposed operations, transferring the leadership on brokers that are available.
+Also, a warning listing the affected demoted brokers that still host leader partitions will be added to the `KafkaRebalance` status.
 
 * The following `KafkaRebalance` resource configuration fields are incompatible with, or no-ops for, broker demotion. 
 If any of these fields are specified, the rebalance request will be rejected, an error will be logged by the Strimzi Operator, and an error will be added to the KafkaRebalance status.
