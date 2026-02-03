@@ -12,7 +12,7 @@ In the operators STs, we [implemented builders for these clients](https://github
 
 ## Motivation
 
-The test-clients, even if they are used only in tests, seems to be used by other projects as well - by Kroxylicious or Streamshub.
+The test-clients, even if they are used only in tests, seems to be used by other projects as well - by [Kroxylicious](https://github.com/kroxylicious) or [Streamshub](https://github.com/streamshub).
 However, because we don't have any public builders they can use, they have to write their own.
 The only available implementation is the one in the Strimzi operators repository - but it can be used only in the operators repository, it's not released anywhere.
 Also, in the operators repository, the builders caused issues during the Maven build phase, as the goals were somehow mismatched, so the build failed on non-existing builders being used in the tests.
