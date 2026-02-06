@@ -7,7 +7,7 @@ This proposal suggests publishing `test-clients` classes - mainly the `builders`
 Test-clients repository was created in order to have clients that are needed for the Strimzi operators system tests.
 Originally, we used the `client-examples` repository and its clients, however, after multiple iterations of changes and discussion, we decided to create separate repository for clients used in tests.
 The `test-clients` repository contains implementation of the Kafka clients (producer, consumer, streams), HTTP (producer and consumer), and CLI admin client tool.
-These are bunled and released as an image, which then can be used in the Kubernetes' `Deployment` or `Job` in the tests - and that's how we are using them in our operators STs.
+These are bundled and released as an image, which then can be used in the Kubernetes' `Deployment` or `Job` in the tests - and that's how we are using them in our operators STs.
 In the operators STs, we [implemented builders for these clients](https://github.com/strimzi/strimzi-kafka-operator/tree/main/systemtest/src/main/java/io/strimzi/systemtest/kafkaclients/internalClients), to have a simple manipulation.
 
 ## Motivation
