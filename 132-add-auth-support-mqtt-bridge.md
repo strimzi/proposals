@@ -28,9 +28,9 @@ We will begin by adding new configuration options to the MQTT Bridge. These opti
 mqtt.server.tls.port=8883
 mqtt.server.ssl.enabled=true
 mqtt.server.ssl.keystore=path/to/keystore.jks
-mqtt.server.ssl.keystore-password=your-keystore-password
+mqtt.server.ssl.keystore.password=your-keystore-password
 mqtt.server.ssl.truststore=path/to/truststore.jks
-mqtt.server.ssl.truststore-password=your-truststore-password
+mqtt.server.ssl.truststore.password=your-truststore-password
 ```
 
 For two-way SSL/TLS authentication, we will also need to configure the MQTT Bridge to require client certificates. This can be done by adding the following configuration option:
