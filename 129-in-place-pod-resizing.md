@@ -42,9 +42,14 @@ In-place resizing will be disabled by default.
 Users will be able to enable it on a per-resource basis using the `strimzi.io/in-place-resizing: "true"` annotation set on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker2` resource.
 
 _Note: In-place resizing will not be supported for `KafkaBridge`, because it does not use the `StrimziPodSet` resources._
+_`KafkaBridge` is using Kubernetes `Deployment` and Strimzi is managing only the `Deployment` resource it self._
+_So when resource configuration is changed in `KafkaBridge`, the change is propagated by Strimzi Cluster Operator into the `Deployment` resource._
+_And it is up to Kubernetes to decide how to handle it - and Kubernetes will currently roll the Pod in this case rather than use the in-place Pod resizing._
 
 Enabling this through an annotation on the custom resource was chosen because:
 * This feature depends on the Kubernetes version, so a feature gate with a fixed graduation plan is not suitable for this feature.
+  Even once all Kubernetes versions Strimzi supports have in-place resizing enabled, we would probably still want this feature to be opt-in given the limitations around dynamic memory configuration in Java etc.
+  The limitations are described in more detail in a dedicated section below.
 * This feature might be very useful for some use-cases and situations and not so useful in others.
   Enabling it through annotation fits this purpose.
   A feature gate would end up with the feature being enabled by default which is not desired.
@@ -54,7 +59,7 @@ Enabling this through an annotation on the custom resource was chosen because:
 
 Enabling in-place resizing affects only how the resource requirement changes are applied to the operand.
 But users will continue to configure them as before in the `.spec.resources` fields of the `KafkaNodePool`, `KafkaConnect`, and `KAfkaMirrorMaker2` resources.
-(For the time being, users can also continue configuring the Kafka broker/controller resources in the `Kafka` CR, but this option is present only in the old `v1bets2` API and will be removed in Strimzi 1.0.)
+(For the time being, users can also continue configuring the Kafka broker/controller resources in the `Kafka` CR, but this option is present only in the old `v1beta2` API and will be removed in Strimzi 1.0.)
 
 ### Implementation
 
@@ -98,6 +103,7 @@ When the in-place resizing is enabled, it will be handled in two different parts
 By default, when in-place resizing enters the `Deferred` state, which indicates that there are not enough free resources to resize the Pod, Strimzi performs a rolling update of the Pod to reschedule the Pod on another node with sufficient capacity.
 However, users will be able to set the `strimzi.io/in-place-resizing-wait-for-deferred: "true"` annotation on the `Kafka`, `KafkaConnect`, or `KafkaMirrorMaker2` resources.
 This annotation indicates that Strimzi should not roll the Pod when the resizing was `Deferred` and instead wait for capacity to be freed on its current node.
+That could happen for example by other Pods complete, are rescheduled to different worker nodes, or are evicted.
 
 _Note: This will not prevent the rolling of the Pod for any other reasons._
 _So if - for example - some other configuration is changed that needs a rolling update, the Pod will be rolled regardless of the `Deferred` resizing state._
@@ -144,7 +150,7 @@ This might improve in the future as newer Java versions adopt new features such 
 In-place Pod resizing allows dynamically resizing Kafka broker Pods without necessarily restarting them.
 However, Cruise Control maintains its own configuration that includes the CPU and memory capacity of Kafka brokers.
 This configuration is not updated dynamically.
-As a result, when broker resource requirements change, the Kafka broker Pods might not roll, but the Cruise Control Pod must be restarted to apply the updated capacity information.
+As a result, when broker resource requirements change, the Kafka broker Pods might not roll, but the Cruise Control Pod will be restarted by the Strimzi Cluster Operator to apply the updated capacity information.
 
 #### Vertical Pod Autoscaling
 
