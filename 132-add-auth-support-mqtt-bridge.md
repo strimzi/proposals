@@ -187,7 +187,9 @@ This will allow us to simulate MQTT client connections and verify that the authe
 
 ### Configuration
 
-We will begin by adding new configuration options to the MQTT Bridge. These options will allow users to enable secure MQTT connections and specify the necessary SSL/TLS settings. It will look something like this:
+We will begin by adding new configuration options to the MQTT Bridge.
+These options will allow users to enable secure MQTT connections and specify the necessary SSL/TLS settings.
+It will look something like this:
 
 ```application.properties
 mqtt.server.tls.port=8883
@@ -198,7 +200,8 @@ mqtt.server.ssl.truststore=path/to/truststore.jks
 mqtt.server.ssl.truststore.password=your-truststore-password
 ```
 
-For two-way SSL/TLS authentication, we will also need to configure the MQTT Bridge to require client certificates. This can be done by adding the following configuration option:
+For two-way SSL/TLS authentication, we will also need to configure the MQTT Bridge to require client certificates.
+This can be done by adding the following configuration option:
 
 ```application.properties
 mqtt.server.ssl.client-auth=true
@@ -206,7 +209,9 @@ mqtt.server.ssl.client-auth=true
 
 Optionally, we can also support the configuration for specifying the protocols and cipher suites.
 
-Afer this, we are going to create a new configuration wrapper class to load and manage these new config options, say `MqttSslConfig`. This class will then be part of the existing `MqttConfig`. It would look something like this:
+Afer this, we are going to create a new configuration wrapper class to load and manage these new config options, say `MqttSslConfig`.
+This class will then be part of the existing `MqttConfig`.
+It would look something like this:
 
 ```java
 public class MqttConfig extends AbstractConfig {
@@ -230,7 +235,9 @@ public class MqttConfig extends AbstractConfig {
 
 ### Handling authentication in the server
 
-To handle the authentication logic, we will need to add a new handler to the pipeline of the server. This will require us to modify the existing `MqttServerInitializer`class to include the new handler. The final look of the `MqttServerInitializer` class will be something like this:
+To handle the authentication logic, we will need to add a new handler to the pipeline of the server.
+This will require us to modify the existing `MqttServerInitializer`class to include the new handler.
+The final look of the `MqttServerInitializer` class will be something like this:
 
 ```java
 public class MqttServerInitializer extends ChannelInitializer<SocketChannel> {
@@ -262,7 +269,8 @@ public class MqttServerInitializer extends ChannelInitializer<SocketChannel> {
 
 Thankfully, Netty provides APIs to easily and SSL/TLS support, so we can leverage those APIs to implement the authentication mechanism without having to implement the SSL/TLS logic from scratch. 
 
-We will introduce a new component to encapsulate the logic for the TLS/SSL handshake and the client certificate auth before adding the SSL handler to the pipeline. This component will look something like this:
+We will introduce a new component to encapsulate the logic for the TLS/SSL handshake and the client certificate auth before adding the SSL handler to the pipeline.
+This component will look something like this:
 
 ```java
 public class MqttSslAuthManager {
@@ -298,7 +306,8 @@ public class MqttSslAuthManager {
 }
 ```
 
-Our `MqttServerInitializer` will then use this `MqttSslAuthManager` to create the SSL context and add the SSL handler to the pipeline. It would look something like this:
+Our `MqttServerInitializer` will then use this `MqttSslAuthManager` to create the SSL context and add the SSL handler to the pipeline.
+It would look something like this:
 
 ```java
  @Override
@@ -316,15 +325,19 @@ Our `MqttServerInitializer` will then use this `MqttSslAuthManager` to create th
 
 ### Handling authorization
 
-A very common way to implement authorization in MQTT is to make use of ACLs(Access Control Lists). Our MQTT Bridge is not a full MQTT broker and it's stateless, meaning that we do not persist any client session information, only the mapping rules. 
+A very common way to implement authorization in MQTT is to make use of ACLs(Access Control Lists).
+Our MQTT Bridge is not a full MQTT broker and it's stateless, meaning that we do not persist any client session information, only the mapping rules. 
 
-I will submit a separate proposal to implement the authorization. This will make this proposal more focused and easier to review. I need a clear understanding ot the authorization mechanism alternatives before I can propose a specific implementation for the authorization support in the MQTT Bridge.If it's okay to the Strimzi maintainers, I will submit the authorization proposal after we have implemented the authentication support in this proposal.
+I will submit a separate proposal to implement the authorization.
+This will make this proposal more focused and easier to review.
+I need a clear understanding ot the authorization mechanism alternatives before I can propose a specific implementation for the authorization support in the MQTT Bridge.If it's okay to the Strimzi maintainers, I will submit the authorization proposal after we have implemented the authentication support in this proposal.
 
 ## Testing
 
 We will need to implement both unit and integration tests to verify the functionality of the authentication support in the MQTT Bridge.
 
-We can make use of the Netty `EmbeddedChannel` to test the authentication logic in isolation. This will allow us to simulate MQTT client connections and verify that the authentication mechanism is working as expected.
+We can make use of the Netty `EmbeddedChannel` to test the authentication logic in isolation.
+This will allow us to simulate MQTT client connections and verify that the authentication mechanism is working as expected.
 
 ## Affected/not affected projects
 
