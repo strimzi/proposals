@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 130 | [TLS support in test-container](./130-tls-support-in-test-container.md) |
 | 129 | [Deprecate `type: ingress` listeners](./129-deprecate-type-ingress-listeners.md) |
 | 128 | [Kafka Node Pool rack IDs from environment variables](./128-rack-ids-from-environment-variables.md) |
 | 127 | [Add support for Linux user namespaces in Strimzi Pods](./127-add-support-for-linux-user-namespaces-in-strimzi-pods.md) |
