@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 131 | [In-place Pod resizing](./131-in-place-pod-resizing.md) |
 | 130 | [Publishing Test-Clients to Maven](./130-publishing-test-clients-to-maven.md) |
 | 129 | [Deprecate `type: ingress` listeners](./129-deprecate-type-ingress-listeners.md) |
 | 128 | [Kafka Node Pool rack IDs from environment variables](./128-rack-ids-from-environment-variables.md) |
