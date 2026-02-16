@@ -72,9 +72,10 @@ There is no impact on backwards compatibility.
 Adds an external dependency to the project and increases the maintenance surface.
 Since `keytool` is already available inside the container's JDK, the same result can be achieved with no additional dependencies.
 
-#### OpenSSL with ProcessBuilder
+#### OpenSSL  
 
-Requires `openssl` to be installed on the host machine, cross-platform issues.
+Both `openssl` and `keytool` are available inside the Kafka container image. 
+Keytool was chosen because it integrates naturally with Java keystore ecosystem, and it was a personal preference as it feels more `lightweight` compared to `OpenSSL` for this use case.
 
 #### Pure Java API (sun.security.x509)
 
