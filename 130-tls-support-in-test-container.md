@@ -94,3 +94,8 @@ There is no chain of trust, no separation between client and internal domains, a
 Another approach using one CA to sign both broker and client certificates is simpler than two CAs but collapses the trust domains.
 Any certificate signed by the single CA would be trusted everywhere (i.e., basically a compromised client cert could impersonate a broker).
 Separate CAs (cluster CA and clients CA) mirrors more production-like deployment and keep the trust boundaries distinct.
+
+#### TLS only on client listeners
+
+Encrypting only the client-facing listener would be sufficient for testing and slightly cheaper (i.e., performance and resource-vise).
+Applying TLS for all listeners avoid conditional per-listener and keeps the implementation simple.
