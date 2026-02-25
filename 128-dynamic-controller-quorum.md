@@ -420,6 +420,103 @@ Scaling up the KRaft quorum can be done in the following ways:
 * by adding a new `KafkaNodePool` with `controller` role.
 * by adding the `controller` role to an existing `KafkaNodePool` hosting `broker`-only nodes.
 
+#### Scale-up scenarios
+
+The following scenarios demonstrate how the KRaft quorum reconciliation handles controller scale-up operations, including both the success path and failure recovery mechanisms.
+
+**Scenario 2: Scale up controller (success path)**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- User scales up by adding controller 6
+- Desired controllers become: [3, 4, 5, 6]
+
+*Reconciliation:*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}]
+- Analysis: Node 6 in desired but NOT in status, operator generates random UUID "D"
+- Pod 6 starts and becomes observer 6:D
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[6:D]
+- Analysis: Node 6 in desired but NOT in voters, needs registration
+- Operator finds observer 6:D and registers it using `addRaftVoter`, **SUCCESS**
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}, {6:D}]
+
+**Scenario 2A: Scale up - registration fails**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- User scales up by adding controller 6
+- Desired controllers become: [3, 4, 5, 6]
+
+*Reconciliation (first attempt):*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}]
+- Analysis: Node 6 in desired but NOT in status, operator generates random UUID "D"
+- Pod 6 starts and becomes observer 6:D
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[6:D]
+- Analysis: Node 6 in desired but NOT in voters, needs registration
+- Operator attempts to register 6:D, **FAILS** (e.g., not caught up, quorum unhealthy)
+
+*Outcome (first attempt):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[6:D] (unchanged)
+- Reconciliation failed, status not updated, remains [{3:A}, {4:B}, {5:C}]
+
+*Next reconciliation (automatic retry):*
+- Desired controllers: [3, 4, 5, 6]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[6:D]
+- Analysis: Node 6 in desired but NOT in voters, retry registration
+- Operator registers 6:D, **SUCCESS**
+
+*Outcome (retry):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}, {6:D}]
+
+**Scenario 2B: Scale up - operator crashes after successful registration**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- User scales up by adding controller 6
+- Desired controllers become: [3, 4, 5, 6]
+
+*Reconciliation:*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}]
+- Analysis: Node 6 in desired but NOT in status, operator generates random UUID "D"
+- Pod 6 starts and becomes observer 6:D
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[6:D]
+- Analysis: Node 6 in desired but NOT in voters, needs registration
+- Operator registers 6:D, **SUCCESS**
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Operator **CRASHES** before updating status
+
+*Outcome (with crash):*
+- Status: [{3:A}, {4:B}, {5:C}] (outdated, missing 6:D)
+
+*Next reconciliation (automatic recovery):*
+- Desired controllers: [3, 4, 5, 6]
+- Status: [{3:A}, {4:B}, {5:C}] (outdated)
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Analysis: Node 6 in desired AND already in voters, no action needed
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[] (unchanged)
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}, {6:D}] (status self-heals)
+
+These scenarios demonstrate the idempotent nature of the reconciliation process: it can safely retry across multiple cycles until convergence, and the status automatically self-heals by syncing from the actual quorum state.
+
 ### Removing controllers (scale down)
 
 When the controllers are scaled down, the Strimzi Cluster Operator:
@@ -454,6 +551,102 @@ Scaling down the KRaft quorum can be done in the following ways:
 * by deleting an existing `KafkaNodePool` with `controller` role.
 
 In the last use case, the removed controllers are correctly unregistered but there is no protection against the possibility of having a non-healthy KRaft quorum because the `KafkaNodePool` custom resource deletion, done by the user, can't be blocked or reverted back.
+
+#### Scale-down scenarios
+
+The following scenarios demonstrate how the KRaft quorum reconciliation handles controller scale-down operations, including both the success path and failure recovery mechanisms.
+
+**Scenario 3: Scale down controller (success path)**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5, 6]
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+
+*User action:*
+- User scales down by removing controller 6
+- Desired controllers become: [3, 4, 5]
+
+*Reconciliation:*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Analysis: Node 6 NOT in desired but IS in voters, needs unregistration
+- Operator unregisters 6:D using `removeRaftVoter`, **SUCCESS**
+- Controller pod 6 is then safely deleted
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}]
+
+**Scenario 3A: Scale down - unregistration fails**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5, 6]
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+
+*User action:*
+- User scales down by removing controller 6
+- Desired controllers become: [3, 4, 5]
+
+*Reconciliation (first attempt):*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Analysis: Node 6 NOT in desired but IS in voters, needs unregistration
+- Operator attempts to unregister 6:D, **FAILS** (e.g., quorum unhealthy)
+
+*Outcome (first attempt):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[] (unchanged)
+- Reconciliation failed to prevent shutting down controller not properly unregistered
+- Status not updated, remains [{3:A}, {4:B}, {5:C}, {6:D}]
+- Pod 6 continues running as a voter
+
+*Next reconciliation (automatic retry):*
+- Desired controllers: [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Analysis: Node 6 NOT in desired but IS in voters, retry unregistration
+- Operator unregisters 6:D, **SUCCESS**
+- Pod 6 can be safely deleted
+
+*Outcome (retry):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}]
+
+**Scenario 3B: Scale down - operator crashes after successful unregistration**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5, 6]
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+
+*User action:*
+- User scales down by removing controller 6
+- Desired controllers become: [3, 4, 5]
+
+*Reconciliation:*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}, {6:D}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C, 6:D], observers=[]
+- Analysis: Node 6 NOT in desired but IS in voters, needs unregistration
+- Operator unregisters 6:D, **SUCCESS**
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- Operator **CRASHES** before updating status
+
+*Outcome (with crash):*
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}] (outdated, still has 6:D)
+
+*Next reconciliation (automatic recovery):*
+- Desired controllers: [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}, {6:D}] (outdated)
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- Analysis: Node 6 NOT in desired and NOT in voters, no action needed
+- Pod 6 can be safely deleted (if not already deleted)
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[] (unchanged)
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}] (status self-heals)
+
+These scenarios demonstrate the idempotent nature of the reconciliation process and how it prevents controllers from being shut down before proper unregistration, while the status automatically self-heals by syncing from the actual quorum state.
 
 ### From dedicated to combined nodes (and viceversa)
 
@@ -518,6 +711,79 @@ The metadata stored on the controller's storage directory from when it was a com
 
 If the reconciliation fails during the unregistration phase (e.g., Kafka returns an error), the rolling update will not proceed, preventing broker-only nodes from being restarted while still registered as voters in the quorum.
 
+#### Broker to combined node scenarios
+
+The following scenarios demonstrate how the KRaft quorum reconciliation handles the conversion of broker-only nodes to combined nodes by adding the controller role.
+
+**Scenario 5: Broker to combined node (success path)**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[0:E, 1:F, 2:G]
+- Note: Brokers 0, 1, 2 are already observers (all KRaft nodes join as observers initially)
+
+*User action:*
+- User adds controller role to broker pool hosting nodes 0, 1, 2
+- Desired controllers become: [0, 1, 2, 3, 4, 5]
+
+*Reconciliation:*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}]
+- Analysis: Nodes 0, 1, 2 in desired but NOT in status, new controllers
+- Operator builds new configuration with controller-specific settings
+- Rolling update triggered for nodes 0, 1, 2
+- Pods 0, 1, 2 rolled and restarted with controller role
+- Each node becomes combined node, already has directory ID (E, F, G respectively) in meta.properties
+- Pods labeled with controller role label
+- DescribeQuorum (after rolling): voters=[3:A, 4:B, 5:C], observers=[0:E, 1:F, 2:G]
+- Analysis: Nodes 0, 1, 2 in desired but NOT in voters, need registration
+- Operator finds observers 0:E, 1:F, 2:G and registers them sequentially, **SUCCESS**
+
+*Outcome:*
+- DescribeQuorum: voters=[0:E, 1:F, 2:G, 3:A, 4:B, 5:C], observers=[]
+- Status syncs from quorum: [{0:E}, {1:F}, {2:G}, {3:A}, {4:B}, {5:C}]
+
+**Scenario 5A: Broker to combined node - registration fails, operator crashes**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[0:E, 1:F, 2:G]
+
+*User action:*
+- User adds controller role to broker pool hosting nodes 0, 1, 2
+- Desired controllers become: [0, 1, 2, 3, 4, 5]
+
+*Reconciliation (first attempt):*
+- Status before reconciliation: [{3:A}, {4:B}, {5:C}]
+- Analysis: Nodes 0, 1, 2 in desired but NOT in status, new controllers
+- Pods 0, 1, 2 rolled and restarted with controller role
+- Pods labeled with controller role label, already have E, F, G in meta.properties
+- DescribeQuorum (after rolling): voters=[3:A, 4:B, 5:C], observers=[0:E, 1:F, 2:G]
+- Analysis: Nodes 0, 1, 2 in desired but NOT in voters, need registration
+- Operator registers 0:E, **SUCCESS**
+- Operator attempts to register 1:F, **FAILS**
+- DescribeQuorum: voters=[0:E, 3:A, 4:B, 5:C], observers=[1:F, 2:G]
+- Operator **CRASHES** before updating status
+
+*Outcome (with crash):*
+- Status: [{3:A}, {4:B}, {5:C}] (outdated, missing 0, 1, 2)
+
+*Next reconciliation (automatic recovery):*
+- Desired controllers: [0, 1, 2, 3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}] (outdated)
+- DescribeQuorum: voters=[0:E, 3:A, 4:B, 5:C], observers=[1:F, 2:G]
+- Analysis:
+  - Node 0 in desired AND already in voters, no action needed
+  - Nodes 1, 2 in desired but NOT in voters, need registration
+- Operator registers 1:F and 2:G, **SUCCESS**
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[0:E, 1:F, 2:G, 3:A, 4:B, 5:C], observers=[]
+- Status syncs from quorum: [{0:E}, {1:F}, {2:G}, {3:A}, {4:B}, {5:C}] (status self-heals)
+
+These scenarios demonstrate how the controller role label check ensures that only nodes that have been successfully rolled with the controller role are registered, and how the reconciliation process handles partial registration failures with automatic recovery.
+
 ### Metadata disk changes
 
 When a controller's metadata disk is replaced or changed (e.g., PVC replacement, disaster recovery, JBOD disk configuration changes, moving metadata to a different disk), the controller will have a new directory ID because each disk has its own unique directory ID stored in the `meta.properties` file.
@@ -561,6 +827,251 @@ The idempotent nature of the reconciliation process means it can be safely retri
 
 The directory ID reading from the Kafka Agent is critical for this process.
 If the agent is unavailable or the read fails, the reconciliation will fail and retry later, preventing incorrect assumptions about which directory ID is current.
+
+#### Metadata disk change scenarios
+
+The following scenarios demonstrate how the KRaft quorum reconciliation handles metadata disk changes during rolling updates, including both the success path and various failure recovery mechanisms.
+
+**Scenario 4: Disk change - all operations succeed**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- Disk change on controller node pool (e.g., JBOD configuration change, PVC replacement)
+- Rolling update triggered
+
+*Reconciliation (controller 3 rolls):*
+- Pod 3 restarts with new disk, new directory ID: A'
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Roller delegates to reconciler for single controller reconciliation
+- Multiple incarnations detected (voter 3:A + observer 3:A')
+- Reads meta.properties from pod 3 via Kafka Agent: A'
+- Unregisters 3:A, **SUCCESS**
+- DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+- Registers 3:A', **SUCCESS**
+- DescribeQuorum: voters=[3:A', 4:B, 5:C], observers=[3:A (garbage)]
+- Proceed with controller 4 rolls
+- Similar process, B becomes B'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C], observers=[garbage]
+- Proceed with controller 5 rolls
+- Similar process, C becomes C'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C'], observers=[garbage]
+
+*Outcome:*
+- All nodes in desired AND in voters with correct directory IDs, no action needed
+- Status syncs from quorum: [{3:A'}, {4:B'}, {5:C'}]
+
+**Scenario 4A: Disk change - registration fails**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- Disk change on controller node pool
+- Rolling update triggered
+
+*Reconciliation (controller 3 rolls - first attempt):*
+- Pod 3 restarts with new disk, new directory ID: A'
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Roller delegates to reconciler for single controller reconciliation
+- Multiple incarnations detected (voter 3:A + observer 3:A')
+- Reads meta.properties from pod 3: A'
+- Unregisters 3:A, **SUCCESS**
+- DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+- Tries to register 3:A', **FAILS**
+- Roller stops, reconciliation fails
+
+*Outcome (first attempt):*
+- Status: [{3:A}, {4:B}, {5:C}] (old, not updated because reconciliation failed)
+- DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+
+*Next reconciliation (full quorum reconciliation - automatic recovery):*
+- Desired controllers: [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+- Analysis: Node 3 in desired but NOT in voters, has multiple observers
+- Full reconciliation for node 3:
+  - Multiple observers detected (3:A and 3:A')
+  - Read meta.properties from pod 3: A'
+  - Find observer matching A', register 3:A', **SUCCESS** (recovery)
+- Proceed with controller 4 rolls
+- Similar process, B becomes B'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C], observers=[garbage]
+- Proceed with controller 5 rolls
+- Similar process, C becomes C'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C'], observers=[garbage]
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[3:A', 4:B, 5:C], observers=[3:A (garbage)]
+- Status syncs from quorum: [{3:A'}, {4:B}, {5:C}]
+
+**Scenario 4B: Disk change - unregistration fails**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- Disk change on controller node pool
+- Rolling update triggered
+
+*Reconciliation (controller 3 rolls - first attempt):*
+- Pod 3 restarts with new disk, new directory ID: A'
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Roller delegates to reconciler for single controller reconciliation
+- Multiple incarnations detected (voter 3:A + observer 3:A')
+- Reads meta.properties from pod 3: A'
+- Tries to unregister 3:A, **FAILS**
+- Roller stops, reconciliation fails
+
+*Outcome (first attempt):*
+- Status: [{3:A}, {4:B}, {5:C}] (old, not updated because reconciliation failed)
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+
+*Next reconciliation (full quorum reconciliation - automatic recovery):*
+- Desired controllers: [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Analysis: Node 3 in desired AND in voters, but also has an observer (disk change scenario)
+- Full reconciliation for node 3:
+  - Has voter and observer, potential stale voter
+  - Read meta.properties from pod 3: A'
+  - Voter 3:A but actual directory ID is A', unregister stale 3:A, **SUCCESS** (recovery)
+  - DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+  - Find observer matching A', register 3:A', **SUCCESS**
+- Proceed with controller 4 rolls
+- Similar process, B becomes B'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C], observers=[garbage]
+- Proceed with controller 5 rolls
+- Similar process, C becomes C'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C'], observers=[garbage]  
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[3:A', 4:B, 5:C], observers=[3:A (garbage)]
+- Status syncs from quorum: [{3:A'}, {4:B}, {5:C}]
+
+**Scenario 4C: Disk change - unregistration fails, operator crashes**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+
+*User action:*
+- Disk change on controller node pool
+- Rolling update triggered
+
+*Reconciliation (controller 3 rolls):*
+- Pod 3 restarts with new disk, new directory ID: A'
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Roller delegates to reconciler for single controller reconciliation
+- Tries to unregister 3:A, **FAILS**
+- Operator **CRASHES**
+
+*Outcome (with crash):*
+- Status: [{3:A}, {4:B}, {5:C}] (old, not updated because operator crashed)
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+
+*Next reconciliation (full quorum reconciliation - automatic recovery):*
+- Desired controllers: [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[3:A']
+- Analysis: Node 3 in desired AND in voters, but also has an observer (disk change scenario)
+- Full reconciliation for node 3:
+  - Has voter and observer, potential stale voter
+  - Read meta.properties from pod 3: A'
+  - Voter 3:A but actual directory ID is A', unregister stale 3:A, **SUCCESS** (recovery)
+  - DescribeQuorum: voters=[4:B, 5:C], observers=[3:A (garbage), 3:A']
+  - Find observer matching A', register 3:A', **SUCCESS**
+- Proceed with controller 4 rolls
+- Similar process, B becomes B'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C], observers=[garbage]
+- Proceed with controller 5 rolls
+- Similar process, C becomes C'
+- DescribeQuorum: voters=[3:A', 4:B', 5:C'], observers=[garbage]
+
+*Outcome (recovery):*
+- DescribeQuorum: voters=[3:A', 4:B, 5:C], observers=[3:A (garbage)]
+- Status syncs from quorum: [{3:A'}, {4:B}, {5:C}] (status self-heals)
+
+These scenarios demonstrate the two-phase execution (unregister before register) which prevents race conditions during disk changes, and how the full quorum reconciliation automatically recovers from failures during rolling updates by detecting directory ID mismatches and updating the quorum membership accordingly.
+
+### Disaster recovery
+
+Strimzi already provides a procedure for [recovering a deleted Kafka cluster](https://strimzi.io/docs/operators/latest/deploying#proc-cluster-recovery-volume-str).
+It is related to the scenario where the PVs are still in place but all Kafka related custom resources together with the PVCs were deleted.
+Because the PVs are still in place, all the metadata information is still available including the `meta.properties` file.
+
+For clusters using dynamic quorum, the disaster recovery process requires additional steps to restore the controller directory IDs.
+Similar to how the `clusterId` must be manually retrieved from PVCs and added to the `Kafka` custom resource status, users must also retrieve and provide the controller directory IDs.
+
+The recovery process for dynamic quorum clusters:
+
+1. Manually inspect the PVCs to retrieve the `clusterId` from the `meta.properties` file on any node.
+2. For each controller, retrieve the directory ID (UUID) from the `meta.properties` file located in the metadata log directory.
+3. Edit the `Kafka` custom resource with the status field pre-populated with both the `clusterId` and the `controllers` list containing each controller's ID and directory ID.
+4. The operator will use these directory IDs to build the `initial.controllers` string for formatting, ensuring controllers start with their existing directory IDs preserved. The formatting won't happen because storages are already formatted.
+5. Pods start and use the PVCs with matching directory IDs already present in the `meta.properties` files.
+6. The quorum forms successfully with the preserved directory IDs, and the status is confirmed by syncing from the actual quorum state.
+
+Without the pre-populated `controllers` status field, the operator would generate new random directory IDs, causing a mismatch with the actual directory IDs stored on the PVCs, preventing the cluster from starting correctly.
+
+#### Disaster recovery scenario
+
+The following scenario demonstrates how to recover a dynamic quorum cluster when all custom resources have been deleted but PVCs remain.
+
+**Scenario 6: Disaster recovery**
+
+*Initial state:*
+- All Kafka custom resources deleted (Kafka, KafkaNodePool, etc.)
+- PVCs remain with existing data
+- Controllers were 3, 4, 5 with directory IDs A, B, C
+
+*User action:*
+- User inspects PVCs manually to retrieve metadata
+- Finds controller directory IDs: 3:A, 4:B, 5:C (from `meta.properties` files)
+- Finds cluster ID: "xyz-cluster-id" (similar to how clusterId is retrieved in existing disaster recovery)
+
+*Recovery:*
+- User edit the Kafka CR with status pre-populated:
+  ```yaml
+  apiVersion: kafka.strimzi.io/v1beta2
+  kind: Kafka
+  metadata:
+    name: my-cluster
+  spec:
+    # ... normal spec with same configuration as before ...
+  status:
+    clusterId: "xyz-cluster-id"  # From manual PVC inspection
+    controllers:
+      - id: 3
+        directoryId: "A"
+      - id: 4
+        directoryId: "B"
+      - id: 5
+        directoryId: "C"
+  ```
+
+*Reconciliation:*
+- Operator reads status: [{3:A}, {4:B}, {5:C}]
+- Builds initial.controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
+- Passes to pods via ConfigMap
+- Pods start and format with `-I` option using the initial controllers list
+- PVCs already have matching directory IDs in their `meta.properties` files
+- Storage formatting recognizes existing format and preserves it (due to `-g` flag)
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C]
+- Cluster successfully recovered with original directory IDs preserved
+- Status syncs from quorum: [{3:A}, {4:B}, {5:C}] (confirmed)
+
+This scenario demonstrates that the `controllers` status field serves a similar purpose to `clusterId` for disaster recovery, both requiring manual retrieval from PVCs and pre-population in the Kafka CR status to ensure successful cluster recovery.
 
 ### Migration from static to dynamic quorum
 
