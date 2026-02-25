@@ -351,6 +351,50 @@ The KRaft quorum reconciliation process follows these steps:
 Reading the actual directory ID for a specific controller by reading the `meta.properties` file is a feature which is going to be added to the Kafka Agent and exposed through a dedicated `/directory-id` HTTP endpoint.
 The Kafka Agent is also modified to get the configuration about what is the KRaft metadata log dir on the node, from where accessing the `meta.properties` file.
 
+#### Reconciliation algorithms
+
+The KRaft quorum reconciliation operates through two distinct paths, each with specific responsibilities.
+
+The `KRaftQuorumReconciler` class provides the following main API methods:
+- `reconcileControllerQuorum()`: Entry point for full quorum reconciliation, used by `KafkaReconciler`
+- `reconcileSingleController()`: Entry point for single controller reconciliation, used by `KafkaRoller`
+
+These methods use the following helper methods:
+- `analyzeQuorumChanges()`: Analyzes all desired controllers and builds lists of controllers to register/unregister (calls `analyzeControllerNode()` for each controller)
+- `analyzeControllerNode()`: Analyzes a single controller node to determine if it needs registration/unregistration
+- `executeQuorumChanges()`: Executes the registration and unregistration operations in two phases
+- `buildControllerStatuses()`: Builds controller statuses from the final quorum state
+- `describeMetadataQuorum()`: Kafka Admin API method to query the current quorum state
+
+**Full Quorum Reconciliation** (executed during normal cluster reconciliation):
+
+1. Describe current metadata quorum state using `describeMetadataQuorum()`
+2. Analyze desired controllers via `analyzeQuorumChanges()` method which builds `toRegister` and `toUnregister` lists:
+   - For each desired controller node, calls `analyzeControllerNode()` method:
+     - Check if pod has controller role label (ensures pod has been rolled as controller)
+     - Find if this node ID is part of voters and/or observers in the quorum
+     - If multiple incarnations detected (same node ID with different directory IDs):
+       - Read actual directory ID from pod via Kafka Agent HTTP endpoint
+       - Add voter with wrong directory ID to `toUnregister` list
+       - Add observer matching actual directory ID to `toRegister` list
+     - Else if node has no voter but has observer:
+       - Add the observer to `toRegister` list (handles scale-up or broker to combined node scenarios)
+3. Analyze current voters and identify unwanted ones:
+   - For each voter not in desired controllers:
+     - Add to `toUnregister` list (handles scale-down scenarios)
+4. Execute changes via `executeQuorumChanges()` method in two phases:
+   - Phase 1: Unregister all controllers in the `toUnregister` list (stale/unwanted controllers)
+   - Phase 2: Register all controllers in the `toRegister` list (new controllers)
+5. Read final quorum state using `describeMetadataQuorum()`
+6. Build controller statuses from voters via `buildControllerStatuses()` method and return for CR status update
+
+**Single Controller Reconciliation** (called by KafkaRoller after individual pod restart):
+
+1. Describe current metadata quorum state using `describeMetadataQuorum()`
+2. Analyze only the restarted controller via `analyzeControllerNode()` method which builds `toRegister` and `toUnregister` lists (using same logic as full reconciliation)
+3. Execute changes via `executeQuorumChanges()` method in two phases (unregister first, then register)
+4. Done (status building happens in full reconciliation)
+
 #### Integration with rolling updates
 
 During rolling updates, the quorum reconciliation also operates at a finer granularity through the `KafkaRoller`:
