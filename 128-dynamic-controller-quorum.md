@@ -348,8 +348,10 @@ The KRaft quorum reconciliation process follows these steps:
 
 * Update the status: After successful reconciliation, the operator queries the quorum state one final time to retrieve the current voters and their directory IDs, then updates the `controllers` field in the `Kafka` custom resource status.
 
-Reading the actual directory ID for a specific controller by reading the `meta.properties` file is a feature which is going to be added to the Kafka Agent and exposed through a dedicated `/directory-id` HTTP endpoint.
-The Kafka Agent is also modified to get the configuration about what is the KRaft metadata log dir on the node, from where accessing the `meta.properties` file.
+Retrieving the actual directory ID for a specific controller from the `meta.properties` file is a feature which is going to be added to the Kafka Agent and exposed through a dedicated `/directory-id` HTTP endpoint.
+This endpoint accepts GET requests and returns the directory ID as a plain text UUID string read directly from the `meta.properties` file located in the metadata log directory.
+The Kafka Agent is also modified to receive the KRaft metadata log directory path via an environment variable, enabling it to locate and read the `meta.properties` file.
+Importantly, this endpoint is only invoked when the reconciliation detects multiple incarnations of a controller (same node ID with different directory IDs), and is not called during normal operations, minimizing performance impact.
 
 #### Reconciliation algorithms
 
@@ -1083,7 +1085,7 @@ The following scenario demonstrates how to recover a dynamic quorum cluster when
 - Finds cluster ID: "xyz-cluster-id" (similar to how clusterId is retrieved in existing disaster recovery)
 
 *Recovery:*
-- User edit the Kafka CR with status pre-populated:
+- User edits the Kafka CR with status pre-populated:
   ```yaml
   apiVersion: kafka.strimzi.io/v1beta2
   kind: Kafka
