@@ -105,8 +105,8 @@ In conclusion, for the dynamic quorum to work correctly, all nodes must have a c
 This ensures consistency and allows the quorum to evolve dynamically while maintaining the strong consistency guarantees provided by the Raft consensus protocol.
 
 An alternative approach to bootstrapping a dynamic quorum cluster is to bootstrap a standalone controller first.
-It means that, instead of formatting multiple controllers with the full initial controllers list, only a single controller is formatted and started initially using the `--standalone` flag.
-This creates a quorum of one without requiring the initial controllers list but still writing a bootstrap snapshot file with a corresponding `VotersRecord`.
+It means that, instead of formatting multiple controllers with the full controllers list, only a single controller is formatted and started initially using the `--standalone` flag.
+This creates a quorum of one without requiring the controllers list but still writing a bootstrap snapshot file with a corresponding `VotersRecord`.
 Once this standalone controller is running, additional controllers can be formatted with `--no-initial-controllers`, started as observers, and then dynamically added to the quorum using the standard add controller operations.
 While this approach simplifies the initial bootstrap by avoiding the need to coordinate directory IDs for all controllers upfront, it means the cluster starts with no fault tolerance since a single-controller quorum cannot tolerate any failures.
 However, once additional controllers are added and registered as voters, the cluster achieves the desired redundancy and fault tolerance.
@@ -133,13 +133,13 @@ With the `STRIMZI_CLUSTER_ID` and `METADATA_VERSION` variables loaded from the c
 This works when the Apache Kafka cluster is using the static quorum during a new cluster creation, when all nodes need to be formatted from scratch at the same time, as well as on cluster scaling, when a new broker node is added but the formatting is done the same way (of course controllers scaling is not supported).
 
 The dynamic quorum works differently from the formatting perspective and it makes a clear distintion on the `kafka-storage.sh` usage when it's a new cluster creation or a node addition (both broker or controller).
-When the cluster is created, each broker can be formatted the same way we do today but the controller formatting needs the new `-I` (or `--initial-controllers`) option which specifies the initial controllers list.
-The initial controllers list is a comma separated list of controllers, as `node-id@dns-name:port:directory-id`, which contains the initial controllers building the KRaft quorum in the new cluster we are going to create.
+When the cluster is created, each broker can be formatted the same way we do today but the controller formatting needs the new `-I` (or `--initial-controllers`) option which specifies the controllers list.
+The controllers list is a comma separated list of controllers, as `node-id@dns-name:port:directory-id`, which contains the controllers building the KRaft quorum in the new cluster we are going to create.
 
 The formatting tool is then used the following way:
 
 ```shell
-./bin/kafka-storage.sh format -t="$STRIMZI_CLUSTER_ID" -r="$METADATA_VERSION" -c=/tmp/strimzi.properties -g -I="$INITIAL_CONTROLLERS"
+./bin/kafka-storage.sh format -t="$STRIMZI_CLUSTER_ID" -r="$METADATA_VERSION" -c=/tmp/strimzi.properties -g -I="$CONTROLLERS"
 ```
 
 The issue on cluster creation is about differentiating between broker and controller to use the right options for the formatting.
@@ -160,7 +160,7 @@ The above scenarios can be summarized this way:
 * Dynamic quorum:
   * New cluster creation:
     * broker doesn't need any additional options (but it works well with `-N` as well to simplify the proposal, see later).
-    * controller needs the initial controllers list via `-I`.
+    * controller needs the controllers list via `-I`.
   * Existing cluster, scale up:
     * broker and controller needs the `-N` option.
 
@@ -189,11 +189,11 @@ status:
 This field is populated on cluster creation with dynamic quorum and maintained throughout the cluster lifecycle.
 Of course, this field is not set when the cluster uses static quorum instead.
 
-During each reconciliation, the Strimzi Cluster Operator builds an `initial.controllers` string from the controllers list in the status and passes it through the mounted ConfigMap to the `kafka_run.sh` script.
+During each reconciliation, the Strimzi Cluster Operator builds a `controllers` string from the controllers list in the status and passes it through the mounted ConfigMap to the `kafka_run.sh` script.
 The string format is: `id@dns-name:port:directoryId,id@dns-name:port:directoryId,...`
 
 Importantly, the operator only includes current controllers with the corresponding `directoryId` set when building this string.
-This means that during scale-up operations, new controllers being added (which don't have a directoryId in the status yet) are excluded from the initial controllers string.
+This means that during scale-up operations, new controllers being added (which don't have a directoryId in the status yet) are excluded from the controllers string.
 These new controllers will format their storage using the `-N` option and their directory IDs, automatically generated by Kafka, will be discovered later via the KRaft quorum reconciliation process (more details in the following sections).
 
 The operator also adds a `cluster.bootstrap` field to the ConfigMap, which indicates whether this is a brand new cluster bootstrap (`true`) or an existing cluster operation (`false`).
@@ -225,7 +225,7 @@ quorum := Kafka.status.controllers IS NOT EMPTY ? "dynamic" : "static"
 It's worth noticing that this field is going to be created on the cluster creation (with dynamic quorum) and maintained for the entire life of the cluster.
 It's a no goal for this proposal to remove the static quorum support.
 
-More details about the controllers list management and initial controllers string building in the following sections.
+More details about the controllers list management and controllers string building in the following sections.
 
 ### New cluster creation and reconciliation with dynamic quorum
 
@@ -235,10 +235,10 @@ The Strimzi Cluster Operator:
 * builds the broker and controller configuration by setting the `controller.quorum.bootstrap.servers` field (instead of the `controller.quorum.voters` one).
 * generates a random directory ID, as a UUID, for each controller.
 * saves the `controllers` field (list of `KafkaControllerStatus` objects) within the `Kafka` custom resource status, containing the controller IDs and their corresponding directory IDs.
-* builds the initial controllers string from the controllers status list, and stores it as `initial.controllers` field within the node ConfigMap, to be loaded by the `kafka_run.sh` script where it's needed for formatting the storage properly.
+* builds the controllers string from the controllers status list, and stores it as `controllers` field within the node ConfigMap, to be loaded by the `kafka_run.sh` script where it's needed for formatting the storage properly.
 * adds the `cluster.bootstrap` field to the ConfigMap to indicate this is a new cluster bootstrap.
 
-On node start up, the `kafka_run.sh` script loads the `initial.controllers` field from the node ConfigMap into an `INITIAL_CONTROLLERS` variable and determines the formatting options as follows:
+On node start up, the `kafka_run.sh` script loads the `controllers` field from the node ConfigMap into a `CONTROLLERS` variable and determines the formatting options as follows:
 
 * If the variable is empty, the cluster uses static quorum and applies the usual formatting as today.
 * If the variable is not empty, the cluster uses dynamic quorum.
@@ -246,13 +246,13 @@ On node start up, the `kafka_run.sh` script loads the `initial.controllers` fiel
   * If the node is a broker only, it formats with the `-N` option (works for both new cluster creation and broker scale-up).
   * If the node is a controller, it reads the `cluster.bootstrap` field from the ConfigMap and proceeds based on whether this is a new cluster or an existing one:
     * **New cluster**:
-      * Formats with `-I` using the initial controllers list to bootstrap the initial controller quorum.
+      * Formats with `-I` using the controllers list to bootstrap the controller quorum.
       * Exception: If metadata disk changes is detected, it formats with `-N` to generate a new random directory ID.
     * **Existing cluster**:
-      * Extracts the controller IDs from the `INITIAL_CONTROLLERS` string.
-      * Checks if the current controller's ID is in the initial controllers list:
-        * part of the initial controller list, formats with `-I` to preserve the directory ID specified in the initial controllers string. This handles rolling restarts, PVC replacements, and disaster recovery scenarios. Exception: If metadata disk changes is detected, it formats with `-N`.
-        * not part of the initial controller list, formats with `-N` because this is a new controller being added during scale-up.
+      * Extracts the controller IDs from the `CONTROLLERS` string.
+      * Checks if the current controller's ID is in the controllers list:
+        * part of the controllers list, formats with `-I` to preserve the directory ID specified in the controllers string. This handles rolling restarts, PVC replacements, and disaster recovery scenarios. Exception: If metadata disk changes is detected, it formats with `-N`.
+        * not part of the controllers list, formats with `-N` because this is a new controller being added during scale-up.
   * The `-g` (--ignore-formatted) flag is always used to ensure already-formatted storage is not reformatted.
 
 When a node has the combined role (both broker and controller), the script follows the controller formatting path since the `process.roles` includes being a controller.
@@ -267,7 +267,7 @@ This is a way to understand that the existing cluster is not new and it's using 
 In such a case the reconciliation proceed as usual:
 
 * builds the broker and controller configuration by setting the `controller.quorum.voters` field.
-* doesn't build the `controllers` status field (and so doesn't build the `initial.controllers` field for the node ConfigMap).
+* doesn't build the `controllers` status field (and so doesn't build the `controllers` field for the node ConfigMap).
 
 It means that there is no automatic migration from static to dynamic quorum.
 The Strimzi Cluster Operator will be able to detect which type of quorum (static vs dynamic) an existing cluster is using without modifying it but just going through the proper reconciliation process.
@@ -711,7 +711,7 @@ The Strimzi Cluster Operator:
 During the rolling update, when each affected node restarts:
 
 * the `kafka_run.sh` script detects the controller role in the `process.roles` property.
-* since this is an existing cluster and the node is not part of the initial controllers list, it formats the controller storage using the `-N` option but it won't be actually re-formatted.
+* since this is an existing cluster and the node is not part of the controllers list, it formats the controller storage using the `-N` option but it won't be actually re-formatted.
 * the node starts as a combined node with both broker and controller roles, joining the quorum as an observer.
 * the pod is labeled with the controller role label to indicate it has been successfully rolled as a controller.
 
@@ -1062,7 +1062,7 @@ The recovery process for dynamic quorum clusters:
 1. Manually inspect the PVCs to retrieve the `clusterId` from the `meta.properties` file on any node.
 2. For each controller, retrieve the directory ID (UUID) from the `meta.properties` file located in the metadata log directory.
 3. Edit the `Kafka` custom resource with the status field pre-populated with both the `clusterId` and the `controllers` list containing each controller's ID and directory ID.
-4. The operator will use these directory IDs to build the `initial.controllers` string for formatting, ensuring controllers start with their existing directory IDs preserved. The formatting won't happen because storages are already formatted.
+4. The operator will use these directory IDs to build the `controllers` string for formatting, ensuring controllers start with their existing directory IDs preserved. The formatting won't happen because storages are already formatted.
 5. Pods start and use the PVCs with matching directory IDs already present in the `meta.properties` files.
 6. The quorum forms successfully with the preserved directory IDs, and the status is confirmed by syncing from the actual quorum state.
 
@@ -1106,9 +1106,9 @@ The following scenario demonstrates how to recover a dynamic quorum cluster when
 
 *Reconciliation:*
 - Operator reads status: [{3:A}, {4:B}, {5:C}]
-- Builds initial.controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
+- Builds controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
 - Passes to pods via ConfigMap
-- Pods start and format with `-I` option using the initial controllers list
+- Pods start and format with `-I` option using the controllers list
 - PVCs already have matching directory IDs in their `meta.properties` files
 - Storage formatting recognizes existing format and preserves it (due to `-g` flag)
 
@@ -1168,7 +1168,7 @@ Any new Apache Kafka cluster will be deployed by using the dynamic quorum instea
 
 The official Kafka documentation describes the differentiation between formatting initial controllers in a new cluster with the `-I` option, and formatting scaled-up controllers in an existing cluster with the `-N` option.
 
-An alternative approach would be to simplify this logic by always using the `-I` option with a dynamically generated initial controllers list.
+An alternative approach would be to simplify this logic by always using the `-I` option with a dynamically generated controllers list.
 On each reconciliation, the operator would build a complete list of all "desired" controllers (both existing and newly added) and use this list when formatting any controller's storage with the `-I` option.
 This would eliminate the need to differentiate between new cluster creation and scale-up scenarios in the formatting logic.
 
