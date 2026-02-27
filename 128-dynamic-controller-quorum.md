@@ -1123,33 +1123,41 @@ This scenario demonstrates that the `controllers` status field serves a similar 
 
 Migration from static to dynamic quorum is supported starting from Apache Kafka 4.1.0.
 
-The migration procedure is available on the official Kafka documentation [here](https://kafka.apache.org/documentation/#kraft_upgrade) and it covers the following main steps:
+The migration procedure is available on the official Kafka documentation [here](https://kafka.apache.org/documentation/#kraft_upgrade) which describes the key steps:
 
-* the `kraft.version` has to be set to `1` (greater than `0` anyway).
-* the `controller.quorum.bootstrap.servers` field should be used instead of the `controller.quorum.voters`.
+* setting `kraft.version` to `1`.
+* switching from `controller.quorum.voters` to `controller.quorum.bootstrap.servers` configuration.
 
-The Strimzi Cluster Operator should be also able to build the `controllers` status field:
+The Strimzi Cluster Operator automatically migrates clusters from static to dynamic quorum.
+The migration happens during normal reconciliation and is transparent to users.
 
-* by reading the controller IDs from the `controller.quorum.voters` (they are the current controllers in the static quorum).
-* getting the corresponding directory IDs by using Kafka Admin Client API `describeMetadataQuorum` method, and extract from the `QuorumInfo` (the `ReplicaState.replicaDirectoryId()` for each node within the `voters` field).
-* creating a list of `KafkaControllerStatus` objects, each containing the controller's `id` and `directoryId`.
+During each reconciliation cycle, the operator:
 
-The `controllers` list is then saved within the `Kafka` custom resource status.
-This will trigger nodes rolling and the operator will reconfigure them with the `controller.quorum.bootstrap.servers` field for using the dynamic quorum.
+* Checks the quorum type by querying the `kraft.version` feature flag.
+* If `kraft.version=1`, the cluster is already using dynamic quorum, so no action is taken.
+* If `kraft.version=0`, the cluster is using static quorum, so the migration can proceed:
+    * Uses the Kafka Admin API to set the `kraft.version` feature to `1`, enabling dynamic quorum support in Kafka.
+    * Retrieves the controllers directory IDs by using Kafka Admin Client API `describeMetadataQuorum()` method, extracting `ReplicaState.replicaDirectoryId()` for each controller in the `voters` field.
+    * Triggers the rolling update for all nodes, controllers and brokers, with the new `controller.quorum.bootstrap.servers` configuration.
+    * Builds the list of `KafkaControllerStatus` objects and adds the `controllers` field to the Kafka CR status.
 
 It's worth adding that, retrieving the controller directory IDs as described above should be done only after upgrading the `kraft.version` to `1`.
 If this step is not done, the Kafka Admin Client API returns the `AAAAAAAAAAAAAAAAAAAAAA` value instead of the actual directory ID (from the `meta.properties` file).
 It's the Base64 encoding of UUID all zeroes used within Apache Kafka when the voters are tracked within a static quorum.
 
-Taking into account what explained above, the migration process could be automated the following way:
+#### Failure handling during migration
 
-* the user applies a `strimzi.io/kraft-quorum-migration: true` annotation on the `Kafka` custom resource of the cluster to be migrated.
-* if the cluster is already using dynamic quorum (the `controllers` field is available in the `Kafka` custom resource status), the annotation is ignored (it is up to the user to remove it).
-* if the cluster is using static quorum, the cluster operator:
-    * uses the Kafka Admin API to set the `kraft.version` feature to `1`.
-    * gets the controllers directory IDs by using Kafka Admin Client API `describeMetadataQuorum` method, and extract from the `QuorumInfo` (the `ReplicaState.replicaDirectoryId()` for each node within the `voters` field).
-    * builds the list of `KafkaControllerStatus` objects and patches the `Kafka` status by adding the `controllers` field.
-    * removes the annotation.
+The migration process is designed to be resilient to failures.
+
+If setting `kraft.version` to `1` fails for any reason, the entire reconciliation fails immediately.
+No other migration steps are attempted and the cluster remains in static quorum mode with `kraft.version=0`.
+On the next reconciliation cycle, the operator will retry the upgrade.
+
+If the operator successfully sets `kraft.version` to `1` but crashes or it is restarted before completing the migration (before updating the `controllers` field in the status or triggering the rolling update), the migration completes automatically on the next reconciliation.
+This is possible because `kraft.version=1` is already persisted in Kafka.
+When the operator restarts, it queries `kraft.version`, detects it is already set to `1`, and the `KRaftQuorumReconciler` proceeds to retrieve the controllers directory IDs.
+Also the nodes configuration change about using `controller.quorum.bootstrap.servers` will trigger the rolling of nodes and at the end, the status will be updated as well.
+The idempotent nature of the KRaft Quorum Reconciler ensures that the migration completes safely regardless of when the operator restart occurred.
 
 ## Affected/not affected projects
 
@@ -1157,12 +1165,34 @@ Only the Strimzi Cluster Operator.
 
 ## Compatibility
 
-When upgrading the Strimzi operator to a release supporting the dynamic quorum, already existing cluster using the static quorum will be reconciled as usual with no changes or distruption.
-No automatic migration to dynamic quorum is going to happen.
-The user will run the migration whenever they want with the described procedure.
-Any new Apache Kafka cluster will be deployed by using the dynamic quorum instead.
+When upgrading the Strimzi operator to a release supporting the dynamic quorum, already existing cluster using the static quorum will be automatically migrated to use dynamic quorum.
+Of course, any new Apache Kafka cluster will be also deployed by using the dynamic quorum.
+
+### Downgrade
+
+When a cluster is automatically migrated from static to dynamic quorum, Apache Kafka doesn't support to go back to static anymore.
+If the user tries to downgrade the `kraft.version` from `1` to `0`, they will get an error.
+
+What is the impact of it on downgrading the operator to a previous release where there is no support for dynamic quorum?
+
+When downgraded to an older release, the operator reconfigures the nodes with the old `controller.quorum.voters` parameter and roll them.
+The `controllers` field within the `Kafka` status is also removed.
+The `kraft.version` stays at `1` and, as already mentioned above, it cannot be set to `0` anymore (the old operator releases doesn't have the logic to do so anyway).
+In this condition, the cluster is actually using dynamic quorum, despite the nodes being configured with the `controller.quorum.voters` parameter.
+This is the way that Apache Kafka uses for backward compatibility.
+
+From a Strimzi perspective, nothing can stop the user to increase the number of controller replicas to scale up the quorum.
+The new controllers start without issues but they won't be registered as voters automatically, because the old operator doesn't have such logic.
+Potentially, the user could do it manually with the dedicated Kafka tools.
+The same could apply to scale down the KRaft quorum, on metadata disk changes and so on.
+
+The cluster is actually working with dynamic quorum enabled but all the automation provided by the new operator is not available.
+From an operator perspective there is nothing that can be really done.
 
 ## Rejected alternatives
+
+The following sections don't describe totally different rejected solutions for the overall dynamic quorum support.
+They mostly describe rejected approaches to solve specific problems within the overall dynamic quorum and controllers scaling support.
 
 ### Universal formatting via `--initial-controllers` option
 
@@ -1274,8 +1304,12 @@ kubectl patch kafka my-cluster -n myproject --type=merge --subresource=status -p
 
 Patching the `Kafka` custom resource status will trigger nodes rolling and the operator will reconfigure them with the `controller.quorum.bootstrap.servers` field for using the dynamic quorum.
 
-### Fully automated migration from static to dynamic quorum
+### Semi-automated migration from static to dynamic quorum
 
-The operator recognizes that the reconciled `Kafka` custom resource is related to a cluster still using static quorum (the `controllers` field in the status is not set) and run the migration to dynamic quorum automatically (as described in the dedicated section) without the need for the user to trigger it by applying a dedicated annotation.
-This approach was rejected because the check would run on every reconciliation instead of being triggered when needed.
-It would also be better giving the user the power to make the decision when the migration is desired instead of having all their clusters being updated right after the upgrade to the new operator.
+In this approach, the operator detects static quorum (`kraft.version=0`) but does not automatically migrate.
+The operator supports reconciling both static and dynamic quorum based clusters.
+The user triggers the migration by annotating the `Kafka` custom resource with `strimzi.io/kraft-quorum-migration: true`.
+At this point, the operator follows the same steps which are described in the proposed solution with the automatic migration.
+This approach was rejected because we don't want to support both static and dynamic quorum and we should encourage users to have dynamic quorum by default to enable controllers scaling.
+Furthermore, given the main goal of the Strimzi Cluster operator regarding the process automation of managing an Apache Kafka cluster, running the migration automatically makes more sense and copes with such a goal.
+This way, the users don't need to deal with an additional migration process like it was for the KRaft based cluster in the past.
