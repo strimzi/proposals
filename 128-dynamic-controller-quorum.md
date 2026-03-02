@@ -1119,6 +1119,122 @@ The following scenario demonstrates how to recover a dynamic quorum cluster when
 
 This scenario demonstrates that the `controllers` status field serves a similar purpose to `clusterId` for disaster recovery, both requiring manual retrieval from PVCs and pre-population in the Kafka CR status to ensure successful cluster recovery.
 
+**Scenario 6A: Disaster recovery - single controller pod and storage forcefully deleted**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- All controllers running normally
+
+*Disaster event:*
+- Controller pod 5 and its PVC are forcefully deleted
+- Pod 5 stays "Pending" until operator creates the new PVC
+- New empty PVC is created for pod 5
+
+*Reconciliation:*
+- Builds controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
+- Passes to pods via ConfigMap
+- Pods start and format with `-I` option using the controllers list, same directory ID C
+- Pod 5 starts successfully with preserved directory ID C
+- While pod 5 is starting/catching up, quorum operates with 2 voters (majority still available)
+- DescribeQuorum (during startup): voters=[3:A, 4:B, 5:C] where 5:C is catching up
+- Controller 5 catches up with metadata log and rejoins quorum as active voter
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[] (same as before)
+- Status remains: [{3:A}, {4:B}, {5:C}] (unchanged)
+
+This scenario works fine but the cluster can experience a brief period with reduced fault tolerance while controller 5 catches up.
+
+**Scenario 6B: Disaster recovery - two controller pods and storage forcefully deleted**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- All controllers running normally
+
+*Disaster event:*
+- Controller pods 4 and 5 with their PVCs are forcefully deleted
+- Pods stay "Pending" until operator creates new PVCs
+- New empty PVCs are created for pods 4 and 5
+
+*Reconciliation:*
+- Pods 4 and 5 start with new empty storage
+- Builds controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
+- Passes to pods via ConfigMap
+- Pods start and format with `-I` option using the controllers list, same directory IDs B and C
+- Pods 4 and 5 start successfully with preserved directory IDs
+- While pods 4 and 5 are starting/catching up, quorum operates with 1 voter (no majority, cluster unavailable)
+- Controllers 4 and 5 catch up with metadata log and rejoin quorum as active voters
+- Once majority restored (at least 2 voters active), quorum becomes operational again
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[] (same as before)
+- Status remains: [{3:A}, {4:B}, {5:C}] (unchanged)
+
+This scenario works but the cluster experiences downtime while waiting for controllers 4 and 5 to catch up and restore quorum majority.
+Once quorum is restored, cluster becomes available again.
+
+**Scenario 6C: Disaster recovery - all controller pods and storage forcefully deleted**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5]
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- All controllers running normally
+
+*Disaster event:*
+- All controller pods (3, 4, 5) and their PVCs are forcefully deleted, slightly apart from each other
+- All pods stay "Pending" until operator creates new PVCs
+- New empty PVCs are created for all controllers
+
+*Reconciliation:*
+- All pods 3, 4, 5 start with new empty storage
+- Builds controllers string: "3@host:9090:A,4@host:9090:B,5@host:9090:C"
+- Passes to pods via ConfigMap
+- All format with `-I` option using the same directory IDs A, B, C from controllers string
+- Pods start successfully with preserved directory IDs
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[] (appears to show correct state)
+- Status remains: [{3:A}, {4:B}, {5:C}] (unchanged)
+
+This scenario is similar to create a new cluster because of the KRaft quorum starting from scratch.
+The current brokers cannot connect anymore, because their metadata (coming from older KRaft quorum) are ahead, in terms of offset, from the new quorum.
+The only way to recover such a cluster, but with data loss, is manually deleting the metadata on the brokers.
+
+**Scenario 6D: Disaster recovery - whole controller node pool deleted and replaced with new node pool**
+
+*Initial state:*
+- Desired controllers (from spec): [3, 4, 5] from KafkaNodePool "controller"
+- Status: [{3:A}, {4:B}, {5:C}]
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[]
+- All controllers running normally
+
+*Disaster event:*
+- User deletes entire KafkaNodePool "controller" (with pods 3, 4, 5)
+- User creates new KafkaNodePool "controller-new" with 3 replicas at (roughly) the same time
+- All original controller pods and PVCs are deleted
+- New controller pods created with same IDs (3, 4, 5)
+
+*Reconciliation:*
+- Operator detects KafkaNodePool deletion and creation
+- Status still has the same controller IDs [{3:A}, {4:B}, {5:C}] but references old node pool
+- Builds controllers string: "3@my-cluster-controller-new-3.my-cluster-kafka-brokers:9090:A,4@my-cluster-controller-new-4.my-cluster-kafka-brokers:9090:B,5@my-cluster-controller-new-5.my-cluster-kafka-brokers:9090:C"
+- Passes to new pods via ConfigMap
+- All three new controllers format with `-I` option, using same directory IDs A, B, C from the controllers list
+- Pods start with the same directory IDs as the deleted controllers
+
+*Outcome:*
+- DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[] (appears to show correct state)
+- Status remains: [{3:A}, {4:B}, {5:C}] (unchanged)
+
+This scenario is similar to the previous one like creating a new cluster with a new KRaft quorum.
+The current brokers cannot connect anymore, because their metadata (coming from older KRaft quorum) are ahead, in terms of offset, from the new quorum.
+The only way to recover such a cluster, but with data loss, is manually deleting the metadata on the brokers.
+
 ### Migration from static to dynamic quorum
 
 Migration from static to dynamic quorum is supported starting from Apache Kafka 4.1.0.
