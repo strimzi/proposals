@@ -7,7 +7,7 @@
 
 This repository lists proposals for the Strimzi project. A template for new proposals can be found [here](./000-template.md).
 
-|  # | Title                                                                 |
+| #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
 | 132 | [TLS support in test-container](./130-tls-support-in-test-container.md) |
 | 131 | [In-place Pod resizing](./131-in-place-pod-resizing.md) |
