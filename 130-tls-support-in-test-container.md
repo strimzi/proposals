@@ -4,26 +4,27 @@ This proposal adds TLS support to the Strimzi [test-container](https://github.co
 
 ## Current situation
 
-The Strimzi test-container library allows running Kafka clusters in containers for integration testing.
+The Strimzi test-container library runs Kafka clusters in containers for integration testing.
 Currently, all communication (client, inter-broker, controller) uses plaintext.
-There is no mechanism for generating or managing TLS certificates within the test-container.
+There is no mechanism to generate or manage TLS certificates within the test-container.
 
 ## Motivation
 
-Projects like [test-clients](https://github.com/strimzi/test-clients) or [http-bridge](https://github.com/strimzi/strimzi-kafka-bridge) support TLS to Kafka, but there is no way to verify that within their own repositories.
-TLS is only tested in [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator) system tests, which means we have to release first and hope it works.
+Projects like [test-clients](https://github.com/strimzi/test-clients) or [http-bridge](https://github.com/strimzi/strimzi-kafka-bridge) support TLS connections to Kafka, but cannot verify TLS within their own repositories.
+TLS is currently tested only in [strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator) system tests.
+As a result, issues might not be detected until after a release.
 
 Adding TLS support to `test-container` lets us catch TLS issues early, directly in the project, without waiting for the full operator release cycle.
 
 ## Proposal
 
-TLS encryption is applied to **all listeners** (i.e., client, inter-broker, and controller) to more closely resemble production deployments.
-Each listener type gets its own keystore so that internal (i.e., inter-broker and controller) and external (i.e., client) trust domains are separated.
+TLS encryption is applied to **all listeners** (client, inter-broker, and controller) to more closely resemble production deployments.
+Each listener type gets its own keystore so that internal listeners (inter-broker and controller) and external listeners (client) trust domains are separated.
 
 Certificates are generated inside the Docker container using `keytool`, which is always available since the container ships with a JDK.
 This avoids external tool dependencies (no `openssl` or Bouncy Castle required) and keeps the implementation self-contained.
 
-Two self-signed CAs form separate trust domains:
+Two self-signed certificate authorities (CAs) define separate trust domains:
 1. **Cluster CA**, which signs the broker certificate (client-facing listener) and the internal certificate (inter-broker and controller listeners). 
 Both include SANs for `localhost`, `*.localhost`, `127.0.0.1`, and all broker network aliases (`broker-0` through `broker-{n-1}`).
 2. **Clients CA**, which signs the client certificate (provided to test code).
@@ -48,7 +49,7 @@ Certs are generated on one broker and distributed to all others.
 //  enable auto-generated CA-signed certificates
 public StrimziKafkaClusterBuilder withTls() { }
 
-// StrimziKafkaCluster expose client stores for
+// Exposes client truststore and keystore for TLS connections
 public boolean isTlsEnabled() { }
 public byte[] getClientTrustStoreBytes() { }   // client truststore (contains CA cert)
 public byte[] getClientKeyStoreBytes() { }    // client keystore
@@ -86,16 +87,16 @@ The internal `sun.security.x509` classes are encapsulated in modern JDKs and fra
 
 #### Self-signed certificates (no CA)
 
-I tried using a single self-signed broker certificate is the simplest approach but does not reflect production deployments.
+Using a single self-signed broker certificate is the simplest approach, but it does not reflect production deployments.
 There is no chain of trust, no separation between client and internal domains, and no ability to do TLS with a distinct client identity.
 
 #### Single CA for all certificates
 
-Another approach using one CA to sign both broker and client certificates is simpler than two CAs but collapses the trust domains.
+Using a single CA to sign both broker and client certificates is simpler, but it collapses the trust domains.
 Any certificate signed by the single CA would be trusted everywhere (i.e., basically a compromised client cert could impersonate a broker).
-Separate CAs (cluster CA and clients CA) mirrors more production-like deployment and keep the trust boundaries distinct.
+Separate CAs (Cluster CA and Clients CA) more closely mirror production deployments and keep trust boundaries distinct.
 
 #### TLS only on client listeners
 
 Encrypting only the client-facing listener would be sufficient for testing and slightly cheaper (i.e., performance and resource-vise).
-Applying TLS for all listeners avoid conditional per-listener and keeps the implementation simple.
+Applying TLS for all listeners avoids conditional per-listener logic and keeps the implementation simple.
