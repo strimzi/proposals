@@ -18,11 +18,11 @@ It also reduces the triage backlog by enabling continuous progress between calls
 
 > [!IMPORTANT] 
 > An issue is eligible for asynchronous triage when it is labeled `needs-triage`.
-> Anyone creating a new issue (or any maintainer) can add the `needs-triage` label to mark it for async triage.
+> All new issues should be marked with the label `needs-triage` when/after they are created.
 
 ### Voting mechanism
 
-Maintainers and component owners indicate their opinion using emoji reactions on the issue:
+Maintainers and component owners with merge rights in the given repository indicate their opinion using emoji reactions on the issue:
 
 | Reaction | Meaning                                                                         |
 |----------|---------------------------------------------------------------------------------|
@@ -30,7 +30,8 @@ Maintainers and component owners indicate their opinion using emoji reactions on
 | 👎       | We should close this issue (with an explanatory comment)                        |
 | 👀       | I saw this but want to discuss it further (ideally with an explanatory comment) |
 
-Only votes from maintainers and component owners count toward the triage decision.
+Any user is encouraged to share their opinion.
+But only votes from maintainers and component owners with merge rights in the given repository count toward the triage decision.
 
 ### Decision rules
 
