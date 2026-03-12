@@ -359,7 +359,7 @@ These methods use the following helper methods:
    - For each voter not in desired controllers:
      - Add to `toUnregister` list (handles scale-down scenarios)
 4. Execute changes via `executeQuorumChanges()` method in two phases:
-   - Phase 1: Unregister all controllers in the `toUnregister` list (stale/unwanted controllers)
+   - Phase 1: Unregister all controllers in the `toUnregister` list (stale/unwanted controllers). If one of the controller is the leader, it will be unregistered as the last one to avoid useless leader elections in between multiple controllers unregistrations.
    - Phase 2: Register all controllers in the `toRegister` list (new controllers)
 5. Read final quorum state using `describeMetadataQuorum()`
 6. Build controller statuses from voters via `buildControllerStatuses()` method and return for the `Kafka` custom resource status update
