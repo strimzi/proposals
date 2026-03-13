@@ -1305,7 +1305,7 @@ However, several issues make this approach unsuitable:
 
 - Unnecessary checkpoint file: Formatting with `--initial-controllers` creates a bootstrap snapshot/checkpoint file on the scaled-up controller's disk. This file is redundant because new controllers don't use it to discover the quorum but they fetch the `VotersRecord` from the leader's metadata log instead. This can be considered a minor issue since the file is quite small and doesn't have any impact.
 - Split quorum risk: When multiple controllers are scaled up simultaneously and formatted with `--initial-controllers` including all newly added controllers, they can form a separate competing quorum independent of the existing voters if election timeouts expire before they fetch metadata from the active quorum. This violates Raft consensus safety guarantees by creating two independent quorums operating on the same cluster.
-- Undocumented behavior: Most critically, this approach is not documented in the official Apache Kafka documentation or KIP-853. Relying on undocumented behavior creates a risk that future Kafka versions could change or break this functionality without notice.
+- Undocumented behavior: This approach is not documented in the official Apache Kafka documentation or KIP-853. Relying on undocumented behavior creates a risk that future Kafka versions could change or break this functionality without notice.
 
 For these reasons, the proposal follows the official documented approach: using `--initial-controllers` only for initial cluster bootstrap and `--no-initial-controllers` for scale-up operations.
 
