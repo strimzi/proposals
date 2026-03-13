@@ -16,13 +16,13 @@ It also reduces the triage backlog by enabling continuous progress between calls
 
 ## Proposal
 
-> [!IMPORTANT] 
-> An issue is eligible for asynchronous triage when it is labeled `needs-triage`.
-> All new issues should be marked with the label `needs-triage` when/after they are created.
+> [!IMPORTANT]
+> Issues that require triage should be marked with the label needs-triage when or after they are created. 
+> Straightforward issues (e.g., simple fixes or dependency version bumps) do not necessarily require triage and may proceed directly with a pull request.
 
 ### Voting mechanism
 
-Maintainers and component owners with merge rights in the given repository indicate their opinion using emoji reactions on the issue:
+Maintainers and component owners with merge rights in the given repository indicate their opinion using emoji reactions on the original issue post:
 
 | Reaction | Meaning                                                                         |
 |----------|---------------------------------------------------------------------------------|
@@ -35,7 +35,7 @@ But only votes from maintainers and component owners with merge rights in the gi
 
 ### Decision rules
 
-After at least **5 days** since the last major comment on the issue, the following rules apply:
+After at least **5 days** since the issue was created, the following rules apply:
 
 - **Approved (keep):** 
 No 👀 and no  👎, and at least 3 👍 reactions. 
@@ -60,7 +60,11 @@ The person marking the issue as triaged (or anyone else later) can add these lab
 ### Pre-call check
 
 Until automation is in place, the person running the community call should do a manual check of `needs-triage` issues before the call.
-This ensures that issues which reached consensus asynchronously are cleaned up, and remaining issues are queued for discussion.
+Specifically, this means:
+
+- Removing the `needs-triage` label from issues that reached consensus (approved or rejected)
+- Closing rejected issues (with an explanatory comment if not already provided)
+- Preparing the remaining unresolved issues as discussion items for the call agenda
 
 ### Future automation
 
