@@ -725,7 +725,7 @@ After unregistration completes:
 
 * the operator builds configurations of the affected nodes without controller-specific settings.
 * triggers a rolling update of the affected nodes.
-* updates the `controller.quorum.bootstrap.servers` configuration on all remaining nodes to exclude the removed controllers.
+* updates the `controller.quorum.bootstrap.servers` configuration on all remaining nodes to exclude the removed controllers, though this configuration will only be used on their next restart since nodes receive quorum membership updates dynamically via the KRaft protocol.
 
 During the rolling update, when each affected node restarts:
 
