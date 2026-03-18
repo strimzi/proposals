@@ -105,24 +105,30 @@ Finally, all `CompletableFuture`-related "async" calls will be changed in order 
 
 ### Strimzi Cluster Operator support
 
-The `KafkaBridge` custom resource needs to be extended to expose the new configuration parameters:
+The `KafkaBridge` custom resource needs to be extended to expose the new configuration parameters.
+The proposal is about adding a new `config` field to host bridge related configuration:
 
 ```yaml
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaBridge
 metadata:
   name: my-bridge
 spec:
   # ... existing fields ...
 
-  # New optional executor configuration fields
-  executorPoolSize: 20
-  executorQueueSize: 1000
+  # bridge configuration
+  config:
+    bridge.executor.pool.size: "20"
+    bridge.executor.queue.size: "1000"
 ```
 
-Both `executorPoolSize` and `executorQueueSize` are optional fields.
-If set, the Strimzi Cluster Operator will reflect their values within the corresponding properties into the `application.properties` file used for the HTTP bridge.
-If not set, the bridge will use the default values as already described.
+The `config` field accepts a map of key-value pairs using the exact property names that would appear in the `application.properties` file.
+The Strimzi Cluster Operator is just going to copy its content into the `application.properties` file.
+Unknown properties (i.e. because of a typo by the users) will be ignored by the HTTP bridge.
+
+Both `bridge.executor.pool.size` and `bridge.executor.queue.size` are optional configuration properties.
+If set, the Strimzi Cluster Operator will reflect their values into the `application.properties` file used for the HTTP bridge.
+If not set, the HTTP bridge will use the default values as already described.
 
 ### Metrics and Observability
 
@@ -173,3 +179,6 @@ We already moved away from Vert.x worker threads to use `CompletableFuture`(s) f
 
 Using virtual threads could be an improvement for the future which can't be done right now because the HTTP bridge stays on Java 17, while virtual threads require Java 21+.
 Moving to use Java 21 within the HTTP bridge is not possible right now because we decided to provide still support for Java 17 in the next future.
+It's also worth to add that virtual threads support within Java 21 has a well-known "pinning" platform thread issue.
+When synchronized block is used, as it is in the HTTP bridge codebase, the virtual thread can be pinned and not freeing the underneath platform thread.
+This was fixed only in Java 25, so an additional reason to reject this alternative.
