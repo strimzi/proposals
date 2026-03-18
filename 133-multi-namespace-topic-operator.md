@@ -60,7 +60,7 @@ The existing `spec.entityOperator.topicOperator.watchedNamespace` field is depre
 
 **Interaction rules:** When both `watchedNamespace` and `watchedNamespaces` are set, `watchedNamespaces` takes precedence and a warning is logged indicating that the singular field is being ignored. When only the singular field is set, the TO behaves exactly as it does today — watching the Kafka cluster's own namespace plus the single additional namespace specified.
 
-**Label impact:** Migrating from the singular to the plural field does **not** require any changes to `strimzi.io/cluster` labels on existing `KafkaTopic` resources. The TO accepts both the unqualified and qualified label forms regardless of which configuration field is used. However, the unqualified form is deprecated (see below) and should be migrated to the qualified `<namespace>/<name>` form.
+**Label impact:** Migrating from the singular to the plural field does **not** require any changes to `strimzi.io/cluster` labels on existing `KafkaTopic` resources. The TO accepts both the unqualified and qualified label forms regardless of which configuration field is used. However, the unqualified form is deprecated (see below) and should be migrated to the qualified `<namespace>/<name>` form, the TO will also log a warning that there is a possiblty of multiple TO watching over the topic unless its labels is updated. 
 
 #### Deprecation of unqualified `strimzi.io/cluster` label
 
@@ -333,4 +333,3 @@ Not affected:
 2. **Forces naming convention**: Encoding the namespace in the topic name forces a specific naming convention (`<namespace>.<topic>`) that may not match existing topic naming patterns or be desirable for all users.
 3. **Dual CRD confusion**: Having both `KafkaTopic` and `KafkaNamespaceTopic` with different sync semantics (the original proposal suggested unidirectional sync for the new CRD) creates confusion about which to use when.
 4. **Unnecessary complexity**: Extending the existing UTO to watch multiple namespaces achieves the same goal without introducing a new resource type, by building on the conflict resolution and lifecycle mechanisms the UTO already has.
-
