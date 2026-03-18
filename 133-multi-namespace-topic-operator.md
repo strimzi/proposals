@@ -50,7 +50,29 @@ The Topic Operator's own namespace (where the `Kafka` resource lives) is **alway
 
 For the standalone Topic Operator deployment, the existing `STRIMZI_NAMESPACE` environment variable is extended to accept a comma-separated list of namespaces or `*`, consistent with how the Cluster Operator already supports multi-namespace watching.
 
-**Deprecation of `watchedNamespace` (singular):** The existing `spec.entityOperator.topicOperator.watchedNamespace` field is deprecated in favor of `watchedNamespaces` (plural). When `watchedNamespaces` is set, `watchedNamespace` is ignored and a deprecation warning is logged. Users should migrate by converting `watchedNamespace: team-a` to `watchedNamespaces: [team-a]`.
+#### Deprecation of `watchedNamespace` (singular)
+
+The existing `spec.entityOperator.topicOperator.watchedNamespace` field is deprecated in favor of `watchedNamespaces` (plural).
+
+**Deprecation timeline:** `watchedNamespace` continues to work in its current form but logs a deprecation warning on every Cluster Operator reconciliation. It will be removed in a future major version.
+
+**Migration steps:** Convert `watchedNamespace: team-a` to `watchedNamespaces: [team-a]`. No other changes are required — no label changes, no RBAC changes, and no modifications to existing `KafkaTopic` resources.
+
+**Interaction rules:** When both `watchedNamespace` and `watchedNamespaces` are set, `watchedNamespaces` takes precedence and a warning is logged indicating that the singular field is being ignored. When only the singular field is set, the TO behaves exactly as it does today — watching the Kafka cluster's own namespace plus the single additional namespace specified.
+
+**Label impact:** Migrating from the singular to the plural field does **not** require any changes to `strimzi.io/cluster` labels on existing `KafkaTopic` resources. The TO accepts both the unqualified and qualified label forms regardless of which configuration field is used. However, the unqualified form is deprecated (see below) and should be migrated to the qualified `<namespace>/<name>` form.
+
+#### Deprecation of unqualified `strimzi.io/cluster` label
+
+The unqualified `strimzi.io/cluster` label (e.g., `my-cluster`) is deprecated in favor of the qualified `<namespace>/<name>` form (e.g., `kafka/my-cluster`).
+
+**Deprecation timeline:** The TO accepts both forms, but logs a deprecation warning for each `KafkaTopic` that uses the unqualified form on every reconciliation. The unqualified form will be removed in a future major version.
+
+**Migration steps:** Change the `strimzi.io/cluster` label value from `my-cluster` to `kafka/my-cluster` (i.e., `<kafka-namespace>/<kafka-cluster-name>`). No other changes to the `KafkaTopic` resource are required.
+
+**Rationale:** The qualified form is unambiguous by design — it eliminates any risk of misrouting when multiple Kafka clusters share the same name across different namespaces, without requiring detection logic in the TO.
+
+**Scope:** This deprecation applies only to `KafkaTopic` resources managed by the Topic Operator. Other resources that use the `strimzi.io/cluster` label (e.g., `KafkaUser` resources managed by the User Operator) are not affected and continue to use the unqualified form.
 
 ### RBAC
 
@@ -168,25 +190,23 @@ The existing `strimzi.io/managed: false` annotation continues to work as before 
 
 ### Identifying ownership via `strimzi.io/cluster`
 
-The existing `strimzi.io/cluster` label already identifies which Kafka cluster a `KafkaTopic` belongs to. This proposal extends it to eliminate ambiguity when multiple Kafka clusters share the same name across different namespaces.
+The existing `strimzi.io/cluster` label identifies which Kafka cluster a `KafkaTopic` belongs to. This proposal introduces a qualified `<namespace>/<name>` form and deprecates the existing unqualified form.
 
-**Single-namespace mode (unchanged):** Users continue to label topics with the Kafka cluster name:
+On startup, the TO computes its identity as `<namespace>/<name>` (e.g., `kafka/my-cluster`). **New deployments** should use the qualified form for the `strimzi.io/cluster` label:
 
 ```yaml
+# Qualified form (recommended):
+labels:
+  strimzi.io/cluster: kafka/my-cluster
+
+# Unqualified form (deprecated — logs a warning per resource on each reconciliation):
 labels:
   strimzi.io/cluster: my-cluster
 ```
 
-**Multi-namespace mode (new):** Users label topics with the fully-qualified `<namespace>/<name>` form:
+The TO accepts both forms — a `KafkaTopic` labeled `my-cluster` or `kafka/my-cluster` is matched by the TO for `kafka/my-cluster`. However, the unqualified form is **deprecated**: the TO logs a deprecation warning for each `KafkaTopic` that uses it, on every reconciliation. The unqualified form will be removed in a future major version.
 
-```yaml
-labels:
-  strimzi.io/cluster: kafka/my-cluster
-```
-
-The TO filters its watch using this label. In multi-namespace mode, the TO only reconciles resources whose `strimzi.io/cluster` label matches its own `<namespace>/<name>` identity (e.g., `kafka/my-cluster`). It also accepts the unqualified form `my-cluster` for backward compatibility when there is no ambiguity — but the qualified form `kafka/my-cluster` is required when multiple Kafka clusters share the same name across namespaces.
-
-Because each TO instance selects only topics carrying its own qualified identity, two TOs watching overlapping namespaces do not conflict: `kafka/my-cluster` and `staging/my-cluster` are distinct label values and each TO ignores resources labeled for the other.
+The qualified form is unambiguous by design. Two TOs watching overlapping namespaces (e.g., `kafka/my-cluster` and `staging/my-cluster`) do not conflict because their qualified identities are distinct label values, and each TO ignores resources labeled for the other. No detection logic is needed.
 
 If a `KafkaTopic` is in scope for a TO but lacks the expected `strimzi.io/cluster` label entirely (e.g., due to a misconfiguration), the TO skips it silently and logs a WARN. No status writes are performed on resources the TO does not own, which prevents reconciliation fights between competing instances.
 
@@ -228,7 +248,7 @@ spec:
         - team-b
 ```
 
-Team A creates a topic in their namespace, using the qualified `strimzi.io/cluster` label:
+Team A creates a topic in their namespace using the qualified `strimzi.io/cluster` label, which is the required form going forward (the unqualified form `my-cluster` is deprecated):
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -294,8 +314,8 @@ Not affected:
 
 - The `watchedNamespaces` field is optional with an empty default, preserving existing single-namespace behavior.
 - No changes to the `KafkaTopic` CRD spec schema.
-- `strimzi.io/cluster` label: the existing unqualified form (e.g., `my-cluster`) continues to work in single-namespace deployments. In multi-namespace mode, the qualified `<namespace>/<name>` form (e.g., `kafka/my-cluster`) is required when multiple Kafka clusters share the same name across namespaces. The TO accepts both forms for backward compatibility.
-- `watchedNamespace` (singular) is deprecated. When `watchedNamespaces` (plural) is set, the singular field is ignored with a deprecation warning logged. The migration path is: `watchedNamespace: team-a` → `watchedNamespaces: [team-a]`.
+- `strimzi.io/cluster` label: the TO accepts both the unqualified form (e.g., `my-cluster`) and the qualified `<namespace>/<name>` form (e.g., `kafka/my-cluster`), but the unqualified form is **deprecated** and logs a warning on each reconciliation. No label changes are strictly required for existing deployments to keep working, but users should migrate to the qualified form. The unqualified form will be removed in a future major version.
+- `watchedNamespace` (singular) is deprecated. When `watchedNamespaces` (plural) is set, the singular field is ignored with a deprecation warning logged. The migration path is: `watchedNamespace: team-a` → `watchedNamespaces: [team-a]` — no label, RBAC, or KafkaTopic changes needed.
 - Existing `KafkaTopic` resources continue to work without modification.
 
 ## Future work
