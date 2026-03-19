@@ -3,7 +3,8 @@
 ## Current situation
 
 In the [Strimzi Proposal #84](https://github.com/strimzi/proposals/blob/main/084-templating-host-and-advertisedHost-fields.md) we introduced the `hostTemplate` and `advertisedHostTemplate` fields.
-These fields act as alternatives to the `host` and `advertisedHost` fields that are configured on a per-broker basis and allow to provide a single template that is used to generate the (advertised) host for all brokers.
+These fields act as alternatives to the `host` and `advertisedHost` fields, which are configured on a per-broker basis.
+They allow users to provide a single template that is used to generate the (advertised) host for all brokers.
 
 However, the original proposal did not provide any simplification for configuring advertised ports.
 They still have to be configured on a per-broker basis in `advertisedPort` fields.
@@ -63,24 +64,24 @@ This has several disadvantages:
 * More complex YAML configuration.
 * Users need to know upfront what the node IDs will be in order to configure the ports for the correct nodes.
   This is especially true with KRaft and Node Pools when the node IDs are not as predictable as they used to be.
-* There is a high likelihood of typos and misconfigurations.
+* There is an increased risk of typos and misconfiguration.
 * Auto-scaling the Kafka cluster is harder because it relies on per-broker configuration.
 
-This proposal tries to remove this limitation by introducing `advertisedPortTemplate`.
+This proposal removes this limitation by introducing `advertisedPortTemplate`.
 
 ## Proposal
 
 This proposal suggests adding a new field named `advertisedPortTemplate` to the listener `configuration` section.
-The field is a string used as a template to generate port numbers.
+The field is a string template to generate port numbers.
 Unlike `advertisedHostTemplate` and `hostTemplate`, the `advertisedPortTemplate` field cannot rely on simple string substitution.
-For example, string-substitution template such as `900{nodeId}` would work well for node IDs such as `0`, `1`, or `2`.
+For example, a string-substitution template such as `900{nodeId}` would work well for node IDs such as `0`, `1`, or `2`.
 But it would not work well for node IDs such as `100`.
 
 Instead, for the port number template, this proposal suggests supporting a mathematical formula.
 For example, `9000 + {nodeId}`.
-This works much better for different node IDs, where the resulting port number is consistent regardless of whether the node ID is `1`, `100`, or `1000`.
+This approach works much better for different node IDs, where the resulting port number is consistent regardless of whether the node ID is `1`, `100`, or `1000`.
 
-The evaluation of such a formula will be done through the [Javaluator library](https://github.com/fathzer/javaluator).
+The formula is evaluated using the [Javaluator library](https://github.com/fathzer/javaluator).
 To give users more flexibility, the supported operators will be `+`, `-` and `*`.
 We will also support `(` and `)` brackets.
 The formula will support a single variable `{nodeId}`, which will represent the ID of the Kafka node for which the `advertisedPortTemplate` will be rendered.
@@ -141,12 +142,12 @@ The existing configurations with the advertised port configured per-broker will 
 Using the [exp4j library](https://github.com/fasseg/exp4j) was considered instead of the Javaluator library.
 Exp4j has more GitHub stars than Javaluator.
 But the project is not under active development anymore.
-It also does not allow to limit which operators can be used in the formulas.
+It also does not allow limiting which operators can be used in formulas.
 
 ### Allowing only to use a static port configuration
 
 Not supporting any kind of template or formula was also considered.
-We could add a central `advertisedPort` field that would allow to configure the static advertised port override only.
+We could add a central advertisedPort field to configure a static advertised port override.
 In other words, the port will be configured only once and not per-broker and the same value would be used for all brokers.
 This might be sufficient in some use cases.
 But it would not work, for example, with Gateway API TCPRoutes, where each broker often needs to use a different port number.
