@@ -1,12 +1,12 @@
 # Dedicated executor service for HTTP Bridge async Kafka-related operations
 
 This proposal aims to introduce a dedicated executor service for asynchronous Kafka-related operations in the HTTP Bridge, replacing the current usage of the default JVM's shared `ForkJoinPool.commonPool()`.
-This change prevents thread explosion when the bridge is deployed with CPU limits less than or equals to 2 cores.
+This change prevents excessive thread creation when the bridge is deployed with CPU limits less than or equal to 2 cores.
 
 ## Current situation
 
 The HTTP Bridge currently uses `CompletableFuture` async methods (i.e. `runAsync()`, `supplyAsync()`, `whenCompleteAsync()`) without an explicit `Executor` parameter.
-According to the [Java SE 17 CompletableFuture documentation](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html):
+According to the [Java SE 17 `CompletableFuture` documentation](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html):
 
 > "All async methods without an explicit Executor argument are performed using the ForkJoinPool.commonPool() (unless it does not support a parallelism level of at least two, in which case, a new Thread is created to run each task)."
 
@@ -24,19 +24,19 @@ This creates a critical problem in containerized environments, for example:
 | 2 cores | 2 | 1 | New thread per task |
 | 3+ cores | 3+ | 2+ | Uses thread pool |
 
-The impact of current behavior is the following:
+The impact of current behavior is as follows:
 
 - Thousands of threads created under load with low CPU limits.
 - Memory overhead from thread stacks (typically around 1MB per thread).
 - Performance degradation from excessive context switching.
 - Resource exhaustion risk in high-throughput scenarios.
 
-This particularly affects Kubernetes deployments with CPU limits less than or equals to 2 cores or even bare metal/virtual machines deployments with same limits.
+This particularly affects Kubernetes deployments with CPU limits less than or equal to 2 cores, or even bare metal/virtual machines deployments with same limits.
 
 ### Current workaround
 
 The only available workaround is setting the JVM system property `java.util.concurrent.ForkJoinPool.common.parallelism` globally.
-When using the `KafkaBridge` custom resource to deploy the HTTP bridge in Kubernetes via the Strimzi Cluster Operator, it means adding such system property in the `jvmOptions` section.
+When using the `KafkaBridge` custom resource to deploy the HTTP bridge in Kubernetes via the Strimzi Cluster Operator, it means adding the system property to the `jvmOptions` section.
 
 
 ```yaml
@@ -53,16 +53,16 @@ spec:
 
 ## Motivation
 
-Leveraging the `ForkJoinPool.commonPool()` works fine with more than 2 CPUs (parallelism greater than 2) but it shows a bad behavior when deployed with CPU limits less than or equal to 2 cores.
+Leveraging the `ForkJoinPool.commonPool()` works fine with more than 2 CPUs (parallelism greater than 2), but it behaves poorly when deployed with CPU limits less than or equal to 2 cores.
 In these constrained environments, the pool creates a new thread per task instead of reusing a bounded pool, leading to thread explosion, excessive memory consumption, and performance degradation.
 
 This CPU-dependent behavior creates several problems:
 
-- No control over parallelism: Users cannot tune the thread pool size for bridge async Kafka-related operations based on their specific workload characteristics. The parallelism is determined solely by the CPU limit, which may not align with the actual I/O concurrency needs of Kafka operations.
+- No control over parallelism: Users cannot tune the thread pool size for asynchronous Kafka-related operations based on their workload characteristics. The parallelism is determined solely by the CPU limit, which may not align with the actual I/O concurrency needs of Kafka operations.
 - Different behavior across environments: The bridge behaves differently between development environments (typically unlimited CPUs, using thread pool) and production deployments with CPU limits (creating unbounded threads), making it difficult to predict and test resource usage.
 - Resource exhaustion risk: In high-throughput scenarios with low CPU limits, unbounded thread creation leads to memory exhaustion and potential pod eviction.
 
-A dedicated executor service solves these issues by:
+A dedicated executor service addresses these issues by:
 
 - Providing consistent, bounded behavior regardless of CPU limits.
 - Enabling users to tune the parallelism based on their specific workload (message throughput, I/O patterns, latency requirements).
@@ -82,20 +82,20 @@ The proposal is about implementing a dedicated `ThreadPoolExecutor` instance wit
 
 Two new configuration parameters will be introduced.
 
-The `bridge.executor.pool.size` to define the size of the thread pool used by the executor service for async Kafka-related operations.
+The `bridge.executor.pool.size` defines the size of the thread pool used by the executor service for asynchronous Kafka-related operations.
 If not set, it will default to `max(4, Runtime.getRuntime().availableProcessors() * 2)` to take into account:
 
 - Kafka operations are I/O-bound (blocking on network). While threads wait for I/O, CPUs can serve other threads.
-- Ensures sufficient parallelism even with 1-2 CPUs, preventing the original thread explosion problem by using a minimum of 4 threads.
+- Ensures sufficient parallelism even with 1–2 CPUs by using a minimum of 4 threads, preventing excessive thread creation.
 
-The `bridge.executor.queue.size` to define the size of the queue for tasks waiting for an executor thread.
-When both the pool and queue are full, new requests are rejected with a proper error to the HTTP client for retry logic.
+The `bridge.executor.queue.size` defines the size of the queue for tasks waiting for an executor thread.
+When both the pool and queue are full, new requests are rejected and an appropriate error is returned to the HTTP client for retry logic.
 If not set, it will default to `1000`.
 
 ### HTTP Bridge changes
 
-A new class `HttpBridgeExecutor` is introduced to create a custom executor service.
-It creates the `ThreadPoolExecutor` as described above and implements custom `ThreadFactory` for named threads.
+A new class, `HttpBridgeExecutor`, creates the custom executor service.
+It creates the `ThreadPoolExecutor` as described and implements a custom `ThreadFactory` for named threads.
 
 The new parameters will be part of the `BridgeConfig` class in order to be set within the `application.properties` file.
 
@@ -106,7 +106,7 @@ Finally, all `CompletableFuture`-related "async" calls will be changed in order 
 ### Strimzi Cluster Operator support
 
 The `KafkaBridge` custom resource needs to be extended to expose the new configuration parameters.
-The proposal is about adding a new `config` field to host bridge related configuration:
+The proposal adds a new `config` field to host bridge-related configuration:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1
@@ -123,8 +123,8 @@ spec:
 ```
 
 The `config` field accepts a map of key-value pairs using the exact property names that would appear in the `application.properties` file.
-The Strimzi Cluster Operator is just going to copy its content into the `application.properties` file.
-Unknown properties (i.e. because of a typo by the users) will be ignored by the HTTP bridge.
+The Strimzi Cluster Operator copies these entries into the `application.properties` file.
+Unknown properties (for example, due to user typos) are ignored by the HTTP Bridge.
 
 Both `bridge.executor.pool.size` and `bridge.executor.queue.size` are optional configuration properties.
 If set, the Strimzi Cluster Operator will reflect their values into the `application.properties` file used for the HTTP bridge.
@@ -159,7 +159,7 @@ The Strimzi Cluster Operator changes are related to leveraging the new configura
 
 ## Compatibility
 
-This proposal doesn't introduce any breaking changes in the HTTP bridge and the Strimzi Cluster Operator.
+This proposal doesn't introduce any breaking changes in the HTTP bridge or the Strimzi Cluster Operator.
 Both configuration parameters are optional with well defined defaults if not explicitly set.
 
 ## Rejected alternatives
@@ -167,18 +167,18 @@ Both configuration parameters are optional with well defined defaults if not exp
 ### Document the JVM property workaround
 
 As already mentioned, it's possible to workaround the issue by setting the JVM system property `java.util.concurrent.ForkJoinPool.common.parallelism` when the CPU limits are not enough.
-It was rejected because would require more Java knowledge to understand without really fixing the root problem which is caused by the normal behavior of the `ForkJoinPool`.
-Also, in general, using the default `ForkJoinPool` seems not to be the better approach so we made a mistake to use it since the beginning instead of a custom executor service.
+This option was rejected because it requires deeper Java knowledge and does not address the root problem, which is the default behavior of the `ForkJoinPool`.
+Using the default `ForkJoinPool` is not the preferred approach. A custom executor service should have been used from the start.
 
 ### Use Vert.x worker threads
 
-The async calls could be done by using the Vert.x worker threads for blocking tasks but, of course, it would be a step back on our direction towards using Vert.x as less as possible.
-We already moved away from Vert.x worker threads to use `CompletableFuture`(s) for this reason.
+The async calls could be done by using the Vert.x worker threads for blocking tasks but, of course, it would be a step back in the project's move towards using Vert.x as little as possible.
+We already moved away from Vert.x worker threads to use `CompletableFuture` for this reason.
 
 ### Use Java virtual threads
 
-Using virtual threads could be an improvement for the future which can't be done right now because the HTTP bridge stays on Java 17, while virtual threads require Java 21+.
-Moving to use Java 21 within the HTTP bridge is not possible right now because we decided to provide still support for Java 17 in the next future.
-It's also worth to add that virtual threads support within Java 21 has a well-known "pinning" platform thread issue.
-When synchronized block is used, as it is in the HTTP bridge codebase, the virtual thread can be pinned and not freeing the underneath platform thread.
-This was fixed only in Java 25, so an additional reason to reject this alternative.
+Virtual threads could be a future improvement, but they are not currently viable because the HTTP Bridge targets Java 17, while virtual threads require Java 21 or later.
+Moving to Java 21 is not currently possible because the HTTP Bridge must continue to support Java 17 for the time being.
+Virtual threads in Java 21 also have a known platform thread "pinning" issue.
+When a synchronized block is used, as it is in the HTTP bridge codebase, the virtual thread can become pinned and not release the underlying platform thread.
+This issue is resolved only in Java 25, which is another reason to reject this option.
