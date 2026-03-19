@@ -1,11 +1,11 @@
 # Support for dynamic controller quorum and controllers scaling
 
-This proposal is about adding the support for the KRaft dynamic controller quorum within the Strimzi Cluster Operator, in order to support controllers scaling as well.
-The dynamic controller quorum was introduced since Kafka 3.9.0 via [KIP-853](https://cwiki.apache.org/confluence/display/KAFKA/KIP-853%3A+KRaft+Controller+Membership+Changes).
+This proposal introduces support for KRaft dynamic controller quorums in the Strimzi Cluster Operator to enable controller scaling.
+The dynamic controller quorum was introduced in Kafka 3.9.0 through [KIP-853](https://cwiki.apache.org/confluence/display/KAFKA/KIP-853%3A+KRaft+Controller+Membership+Changes).
 
 ## Current situation
 
-Currently, the Strimzi Cluster Operator supports the KRaft static controller quorum only, despite the Apache Kafka 4.x releases have the support for the dynamic one.
+Currently, the Strimzi Cluster Operator supports only the KRaft static controller quorum, even though Apache Kafka 4.x supports dynamic quorum.
 The static controller quorum doesn't allow scaling the controller nodes without downtime.
 It means that after the Apache Kafka cluster creation, when the controller nodes are deployed, it is not possible to add or remove controllers to/from the quorum anymore, unless accepting some downtime for the Apache Kafka cluster.
 
@@ -19,23 +19,23 @@ A possible way for scaling controllers is:
 The Strimzi Cluster Operator will be able to create the new controllers from scratch (with the updated number of replicas) and it will restart the brokers with the new controller quorum configured via the `controller.quorum.voters` property.
 Of course, right after the controllers deletion step and until the controller quorum runs again, the cluster won't be available because brokers cannot work without the KRaft controllers running.
 
-This is not parity features with ZooKeeper-based cluster where the ZooKeeper ensemble can be scaled up or down without cluster downtime.
+This does not provide feature parity with a ZooKeeper-based cluster, where the ZooKeeper ensemble can scale up or down without cluster downtime.
 
 ## Motivation
 
 KRaft dynamic controller quorum enables the controllers scaling without downtime.
 In general, this operation can be useful for increasing the number of controllers when needed (or, of course, decreasing them).
 Also, sometimes, replacing a controller because of a disk or hardware failure is something that can be done by scaling.
-Furthermore, even migration from an architecture with combined-nodes to controller dedicated nodes could be achieved by scaling the KRaft quorum.
-Finally, this would provide parity features with a ZooKeeper-based cluster with ZooKeeper nodes can be added or removed to the quorum.
+It can also support migration from combined nodes to dedicated controller nodes by scaling the KRaft quorum.
+Finally, this would provide feature parity with a ZooKeeper-based cluster, where ZooKeeper nodes can be added to or removed from the quorum.
 
 Beyond these operational benefits, dynamic quorum support is critical for Apache Kafka's strategic direction and production readiness.
 With ZooKeeper support officially removed in Apache Kafka 4.0, KRaft is now the only metadata management option for Kafka clusters.
 This makes dynamic quorum capabilities essential rather than optional and it's a fundamental requirement for KRaft to be truly production-ready and not a regression from ZooKeeper-based deployments.
 However, it's important to note that while the core dynamic quorum functionality was introduced in Kafka 3.9.0 (via KIP-853), certain bug fixes, improvements and new features like quorum migration from static to dynamic are only available starting from Apache Kafka 4.1.0.
-So it is now the right time to add support for it within Strimzi.
+This makes it the right time to add support in Strimzi.
 
-Not having such a support presents several challenges for production environments:
+Lack of this support presents several challenges:
 
 * **Operational Risk**: The manual workaround requiring controllers deletion and cluster downtime is error-prone and unacceptable for mission-critical Kafka deployments where availability is important.
 * **Cloud-Native Expectations**: Modern Kubernetes-based deployments expect zero-downtime scaling as a standard capability. Static quorum limitations prevent Kafka from meeting these expectations.
@@ -46,13 +46,13 @@ By implementing dynamic quorum support, Strimzi aligns with Apache Kafka's roadm
 
 ## Proposal
 
-This proposal is about supporting the dynamic controller quorum, thus the controllers scaling, within the Strimzi Cluster Operator, by going through three main steps:
+This proposal supports dynamic controller quorum and, as a result, controller scaling within the Strimzi Cluster Operator, by going through three main steps:
 
 * Add support for dynamic controller quorum to the Strimzi Cluster Operator and using it by default for any newly created Apache Kafka cluster.
 * Add support for controllers scaling by leveraging the dynamic controller quorum.
 * Add migration from static to dynamic controller quorum.
 
-It also take into account the main operational changes when moving from static to dynamic quorum:
+It also takes into account the main operational changes when moving from static to dynamic quorum:
 
 * Node storage formatting is impacted by this change.
 * The `controller.quorum.voters` property is now replaced by the `controller.quorum.bootstrap.servers` property on both broker and controller nodes.
@@ -62,28 +62,28 @@ By the way, regarding the last point, there is no need to set the `kraft.version
 It's being set when the controller storage is properly formatted and the quorum is configured as dynamic or static.
 The only case needing the feature to be changed is when migrating from static to dynamic quorum (so updating the value from `0` to `1`) for an existing Apache Kafka cluster, when coming from an older operator release.
 
-The following sections describes what's the idea behind the proposal and how to approach the above steps.
-As a referece, [here](http://kafka.apache.org/41/operations/kraft/#provisioning-nodes)'s the link to the official Apache Kafka documentation about using dynamic quorum.
+The following sections describe the idea behind the proposal and how to approach the above steps.
+For reference, see the [Apache Kafka documentation on provisioning nodes](http://kafka.apache.org/41/operations/kraft/#provisioning-nodes).
 
 ### Understanding Static vs Dynamic Quorum
 
-The main difference between static and dynamic quorum lies in where the voters set membership information is stored and how it can be changed.
+The main difference between static and dynamic quorum lies in where the voter set membership information is stored and how it can be changed.
 
 With **static quorum** (`kraft.version=0`), the quorum membership is hardcoded in the node configuratrion file by using the `controller.quorum.voters` property listing all the controllers which take part at the KRaft quorum.
 This membership configuration never changes during the cluster's lifetime and exists only in each node's configuration file.
-The voters set is immutable and there is no `VotersRecord` stored in the metadata log.
-When controllers start up, they read the voters set directly from their local configuration and the leader discovery/election can start immediately.
+The voter set is immutable and there is no `VotersRecord` stored in the metadata log.
+When controllers start up, they read the voter sets directly from their local configuration and the leader discovery/election can start immediately.
 
 With **dynamic quorum** (`kraft.version=1`), the quorum membership is stored in the replicated metadata log itself by using a `VotersRecord`.
 The node configuration file uses the `controller.quorum.bootstrap.servers` property instead, which only provides contact points for initial discovery.
-The voters set is mutable and can change through Raft consensus operations.
-When controllers start up, they discover the voters set by reading the `VotersRecord` from either the bootstrap snapshot (for initial controllers) or by fetching it from the leader metadata log (for newly added controllers, during a scale up).
+The voter set is mutable and can change through Raft consensus operations.
+When controllers start up, they discover the voter sets by reading the `VotersRecord` from either the bootstrap snapshot (for initial controllers) or by fetching it from the leader metadata log (for newly added controllers, during a scale up).
 
 The key differences can be summarized as:
 
 | Aspect | Static Quorum | Dynamic Quorum |
 |--------|---------------|----------------|
-| Voters set location | Configuration files | Replicated metadata log |
+| Voter set location | Configuration files | Replicated metadata log |
 | Configuration property | `controller.quorum.voters` | `controller.quorum.bootstrap.servers` |
 | Persistence | Each node's local config | Raft-replicated snapshot/log |
 | Mutability | Immutable | Mutable via Raft consensus |
@@ -93,15 +93,15 @@ The key differences can be summarized as:
 This difference in where membership is stored has significant implications for storage formatting.
 In dynamic quorum, membership is mutable state that must be replicated through Raft, which means it must exist in the replicated log from the beginning.
 This is why initial controllers must be formatted with a bootstrap snapshot containing the `VotersRecord`, while newly added controllers discover membership by replicating from the existing quorum.
-They use the `controller.quorum.bootstrap.servers` configuration to contact an existing controller from which they fetch the metadata log containing the `VotersRecord` for the voters set.
+They use the `controller.quorum.bootstrap.servers` configuration to contact an existing controller from which they fetch the metadata log containing the `VotersRecord` for the voter set.
 The `VotersRecord` contains critical information including voter IDs, directory IDs (unique UUIDs), endpoints, and supported `kraft.version` ranges.
 
-Without the bootstrap snapshot containing the `VotersRecord`, initial controllers face a deadlock: they cannot participate in elections (becoming candidates unless they know who the voters are, but the this information comes from the `VotersRecord` which must be written to the replicated log by an elected leader.
-However, no leader can exist without successful elections, and elections cannot happen without controllers knowing the voters set.
-This circular dependency means that if all controllers start without a pre-written `VotersRecord` in their bootstrap snapshot, they would all have an empty voters set, preventing any of them from becoming candidates or holding elections, leaving the cluster unable to bootstrap.
-The only way to break this deadlock is to pre-write the `VotersRecord` into the bootstrap snapshot during initial formatting using the `--initial-controllers` parameter, ensuring all initial controllers know the voters set from the beginning before the cluster even starts.
+Without the bootstrap snapshot containing the `VotersRecord`, initial controllers face a deadlock: they cannot participate in elections because they do not know who the voters are, and that information comes from the `VotersRecord` which must be written to the replicated log by an elected leader.
+However, no leader can exist without successful elections, and elections cannot happen without controllers knowing the voter set.
+This circular dependency means that if all controllers start without a pre-written `VotersRecord` in their bootstrap snapshot, they would all have an empty voter set, preventing any of them from becoming candidates or holding elections, leaving the cluster unable to bootstrap.
+The only way to break this deadlock is to pre-write the `VotersRecord` into the bootstrap snapshot during initial formatting using the `--initial-controllers` parameter, ensuring all initial controllers know the voter set from the beginning before the cluster even starts.
 
-In conclusion, for the dynamic quorum to work correctly, all nodes must have a consistent view of the initial voters set from the replicated log, not from configuration files.
+In conclusion, for the dynamic quorum to work correctly, all nodes must have a consistent view of the initial voter set from the replicated log, not from configuration files.
 This ensures consistency and allows the quorum to evolve dynamically while maintaining the strong consistency guarantees provided by the Raft consensus protocol.
 
 An alternative approach to bootstrapping a dynamic quorum cluster is to bootstrap a standalone controller first.
@@ -132,8 +132,8 @@ The `STRIMZI_CLUSTER_ID` and `METADATA_VERSION` variables are loaded from the co
 
 This works when the Apache Kafka cluster is using the static quorum during a new cluster creation, when all nodes need to be formatted from scratch at the same time, as well as on cluster scaling, when a new broker node is added but the formatting is done the same way (of course controllers scaling is not supported).
 
-The dynamic quorum works differently from the formatting perspective and it makes a clear distintion on the `kafka-storage.sh` usage when it's a new cluster creation or a node addition (both broker or controller).
-When the cluster is created, each broker can be formatted the same way we do today but the controller formatting needs the new `--initial-controllers` (or `-I`) option which specifies the controllers list.
+Dynamic quorum changes how storage formatting works and makes a clear distinction on `kafka-storage.sh` usage when it's new cluster creation or node addition (broker or controller).
+When the cluster is created, each broker can be formatted the same way as today, but the controller formatting needs the new `--initial-controllers` (or `-I`) option which specifies the controllers list.
 The controllers list is a comma-separated list of controllers in the format `node-id@dns-name:port:directory-id`, representing the controllers that will form the KRaft quorum in the new cluster.
 
 The formatting tool is then used the following way:
@@ -143,16 +143,16 @@ The formatting tool is then used the following way:
 ```
 
 The `CONTROLLERS` variable is the one containing such a controllers list.
-The issue on cluster creation is about differentiating between broker and controller to use the right options for the formatting.
+The main challenge during cluster creation is differentiating between brokers and controllers to use the right options for the formatting.
 The broker storage formatting doesn't use the `--initial-controllers` option.
 
-But when it comes to scaling up, so adding a new broker or a controller on an existing cluster, in both cases the formatting tool needs the `--no-initial-controllers` (or `-N`) option instead, which replace the `--initial-controllers` in case of a controller.
+But when it comes to scaling up, and adding a new broker or a controller on an existing cluster, in both cases, the formatting tool uses the `--no-initial-controllers` (or `-N`) option instead. For controllers, this replaces `--initial-controllers`.
 
 ```shell
 ./bin/kafka-storage.sh format -t="$STRIMZI_CLUSTER_ID" -r="$METADATA_VERSION" -c=/tmp/strimzi.properties -g -N
 ```
 
-So it means that when using the dynamic quorum, the script executed on node startup needs a way to differentiate between a new cluster creation or a node scaling in order to run the formatting with the appropriate options.
+So it means that when using the dynamic quorum, the script executed on node startup needs a way to differentiate between new cluster creation or node scaling in order to run the formatting with the appropriate options.
 
 The above scenarios can be summarized this way:
 
@@ -165,7 +165,7 @@ The above scenarios can be summarized this way:
   * Existing cluster, scale up:
     * broker and controller needs the `--no-initial-controllers` option.
 
-The proposed idea is about having the Strimzi Cluster Operator managing the list of current controllers, with their corresponding directory IDs, in the `Kafka` custom resource status.
+The proposal is for the Strimzi Cluster Operator to manage the list of current controllers, with their corresponding directory IDs, in the `Kafka` custom resource status.
 This list is stored in a new `controllers` field which contains a list of `KafkaControllerStatus` objects, each having:
 
 * `id`: The node ID of the controller.
@@ -188,12 +188,12 @@ status:
 ```
 
 This field is populated on cluster creation with dynamic quorum and maintained throughout the cluster lifecycle.
-Of course, this field is not present when the cluster already exists and it uses the static quorum instead.
+Of course, this field is not present for existing clusters that still use the static quorum.
 
 During each reconciliation, the Strimzi Cluster Operator builds a `controllers` string from the controllers list in the status and passes it through the mounted ConfigMap to the `kafka_run.sh` script.
 The string format is: `node-id@dns-name:port:directory-id,node-id@dns-name:port:directory-id,...`
 
-Importantly, the operator only includes current controllers with the corresponding `directoryId` set when building this string.
+Importantly, the operator includes only current controllers that have a corresponding `directoryId` set when building this string.
 This means that during scale-up operations, new controllers being added (which don't have a directoryId in the status yet) are excluded from the controllers string.
 These new controllers will format their storage using the `--no-initial-controllers` option and their directory IDs, automatically generated by Kafka, will be discovered later via the KRaft quorum reconciliation process (more details in the following sections).
 
@@ -208,11 +208,11 @@ After migration, static quorum is no longer supported and all clusters operate w
 
 The `controllers` field is created either at cluster creation (new clusters) or during migration (existing static clusters) and is maintained for the entire life of the cluster.
 
-More details about the controllers list management, the controllers string building, the directory IDs generation and migration from static to dynamic quorum in the following sections.
+The following sections provide more details about controller list management, controller string construction, directory ID generation, and migration from static to dynamic quorum.
 
 ### New cluster creation and reconciliation with dynamic quorum
 
-The initial cluster creation is going to use the [bootstrap with multiple controllers](https://kafka.apache.org/41/operations/kraft/#bootstrap-with-multiple-controllers) approach.
+The initial cluster creation uses the [bootstrap with multiple controllers](https://kafka.apache.org/41/operations/kraft/#bootstrap-with-multiple-controllers) approach.
 The Strimzi Cluster Operator:
 
 * builds the broker and controller configuration by setting the `controller.quorum.bootstrap.servers` field (instead of the `controller.quorum.voters` one).
@@ -220,8 +220,8 @@ The Strimzi Cluster Operator:
 * saves the `controllers` field (list of `KafkaControllerStatus` objects) within the `Kafka` custom resource status, containing the controller IDs and their corresponding directory IDs.
 * builds the controllers string from the controllers status list, and stores it as `controllers` field within the node ConfigMap, to be loaded by the `kafka_run.sh` script where it's needed for formatting the storage properly.
 
-On node start up, the `kafka_run.sh` script loads the `controllers` field from the node ConfigMap into a `CONTROLLERS` variable.
-Since all clusters use dynamic quorum (either from creation or after automatic migration), this variable is always set.
+On node startup, the `kafka_run.sh` script loads the `controllers` field from the node ConfigMap into a `CONTROLLERS` variable.
+Since all clusters use dynamic quorum (either from creation or after automatic migration logic is applied), this variable is always set.
 The script determines the formatting options as follows:
 
 * Reads the node role from the `process.roles` property in `/tmp/strimzi.properties` into a `PROCESS_ROLES` variable.
@@ -241,19 +241,19 @@ When a node has the combined role (both broker and controller), the script follo
 
 ### Reconcile an existing cluster with static quorum
 
-When the Strimzi Cluster Operator is upgraded with the latest version supporting dynamic quorum, it's going to reconcile existing `Kafka` custom resources for clusters which are using the static quorum.
+When the Strimzi Cluster Operator is upgraded to a version that supports dynamic quorum, it's going to reconcile existing `Kafka` custom resources for clusters which are using the static quorum.
 The operator detects an existing cluster is using static quorum by querying the `kraft.version` feature flag via the Kafka Admin API.
 If `kraft.version=0`, the cluster is using static quorum and the reconciliation proceeds by running an [automatic migration from static to dynamic](#migration-from-static-to-dynamic-quorum). The `controllers` field is also missing within the `Kafka` custom resource status.
 If `kraft.version=1`, the cluster is already using dynamic quorum and no migration is needed.
 
 ### KRaft quorum reconciliation
 
-The support for dynamic quorum and handling of scaling controllers are part of a broader process called "KRaft quorum reconciliation".
+The support for dynamic quorum and handling of scaling controllers is part of a broader process called "KRaft quorum reconciliation".
 Scaling controllers up or down within a KRaft quorum involves more than just spinning up new nodes or shutting down existing ones.
 When a new controller is added to the Apache Kafka cluster, it has to be registered in order to join the KRaft quorum.
 When a running controller is shut down, it has to be unregistered in order to leave the KRaft quorum.
 The KRaft quorum reconciliation is a critical process that ensures the KRaft controller quorum membership accurately reflects the desired state of the cluster.
-The main goal is reconciling the current KRaft quorum gathered from the Apache Kafka cluster with the desired controllers state requested by the users.
+The main goal is to reconcile the current KRaft quorum state from the Apache Kafka cluster with the desired controller state requested by users.
 This process handles controller registration and unregistration needed for scaling up/down operations, metadata disk changes and disaster recovery.
 It also takes part within the migration from static to dynamic quorum process.
 The proposal is to have a new dedicated `KRaftQuorumReconciler` class to manage the necessary reconciliation steps.
@@ -272,7 +272,7 @@ The KRaft quorum reconciliation fits into the `KafkaReconciler` reconciliation p
   * ... (other reconcile operations) ...
 * END RECONCILIATION
 
-The following sections provide additional details about how the KRaft quorum reconciliation works and controllers registration and unregistration are executed.
+The following sections describe how KRaft quorum reconciliation works and how controller registration and unregistration are performed.
 
 #### When it happens
 
@@ -296,7 +296,7 @@ This approach is similar to what is already used today for brokers unregistratio
 In the controllers scaling scenario, the operator handles the registration as well (not only the unregistration).
 
 In addition to handling the registration and unregistration of controllers, the Strimzi Cluster Operator has to check the health of the KRaft quorum before allowing the scale down of the controllers.
-At the beginning of the `KafkaReconciler` reconciliation process, if scaling down controllers could break the quorum (by losing the majority of voters needed for consensus), it should be blocked and reverted back by the operator.
+At the beginning of the `KafkaReconciler` reconciliation process, if scaling down controllers would break the quorum (by losing the majority of voters needed for consensus), it should be blocked and reverted back by the operator.
 A similar approach is already in place when attempting to scale down brokers that are hosting partitions, which could break HA.
 
 #### How it works
@@ -388,7 +388,7 @@ The KRaft quorum reconciliation is designed to be resilient to failures:
 - If querying the quorum state fails, the reconciliation will fail and retry in the next reconciliation cycle.
 - If reading a controller's directory ID fails (e.g., pod not ready, agent unavailable), the reconciliation fails for that controller and retries later.
 - If unregistration or registration operations fail (e.g., controller not caught up, quorum not healthy), the operation is retried in the next reconciliation cycle.
-- If the operator crashes in the middle, the reconciliation will happen on start up again.
+- If the operator crashes in the mid-process, reconciliation runs again on start up.
 - The process is idempotent: running it multiple times with the same desired state will converge to the correct result without causing issues.
 
 This reconciliation approach ensures that the KRaft quorum membership is always kept in sync with the desired cluster state, handling scale-up, scale-down, metadata disk changes and recovery scenarios transparently.
@@ -398,7 +398,7 @@ This reconciliation approach ensures that the KRaft quorum membership is always 
 When the controllers are scaled up, the Strimzi Cluster Operator:
 
 * builds the new controllers configuration by setting the `controller.quorum.bootstrap.servers` field.
-* starts up all the newly added controllers in parallel (but not running their registration explicitly when they are ready).
+* starts up all the newly added controllers in parallel. Registration is handled later by reconciliation when the controllers are ready.
 
 On node start up, within the `kafka_run.sh` script:
 
@@ -420,6 +420,7 @@ If using the `describeCluster()`, it returns the brokers only instead.
 This issue was also raised in this [discussion](https://lists.apache.org/thread/mq5n8j8w0ycg9fhd1m4zcc2ctrgfd0d4) on [KIP-1141](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=340037949).
 
 The suggestion here is to build the controller endpoint within the operator logic as it's already done within the `KafkaBrokerConfigurationBuilder`, because in the end it's the operator itself configuring the new controller so creating the advertised listeners list.
+The `addRaftVoter` method expect a `RaftVoterEndpoint` instance which will contain the control plane listener, host and port exposed by the controller to register.
 
 Within the same reconciliation, multiple controllers can be scaled up simultaneously.
 When ready, these new controllers start as observers and begin catching up with the metadata from the existing quorum voters, but they don't join the quorum yet.
@@ -444,9 +445,9 @@ Scaling up the KRaft quorum can be done in the following ways:
 
 The following scenarios demonstrate how the KRaft quorum reconciliation handles controller scale-up operations, including both the success path and failure recovery mechanisms.
 
-> Each node got from a describe quorum operation, both voter or observer, is represented as a couple `<nodeId>:<directoryId>` (i.e. `3:A`).
+> Each node returned from a describe quorum operation, both voter or observer, is represented as a pair `<nodeId>:<directoryId>` (i.e. `3:A`).
 
-> Each controller within the `Kafka` custom resource status is represented with `{<nodeId>:<directoryId>}` (i.e. `{3:A}`) to reflect the JSON nature of the the `KafkaControllerStatus` object.
+> Each controller within the `Kafka` custom resource status is represented with `{<nodeId>:<directoryId>}` (i.e. `{3:A}`) to reflect the JSON structure of the `KafkaControllerStatus` object.
 
 **Scenario 1.A: Scale up controller (success path)**
 
@@ -548,7 +549,7 @@ When the controllers are scaled down, the Strimzi Cluster Operator:
 * removes/unregisters the controllers from the quorum by using the `removeRaftVoter` method in the Kafka Admin API.
 * scales down the controllers by deleting the corresponding pods.
 
-If getting the quorum information or unregistering the controllers fails (the Apache Kafka returns an error), the reconciliation will fail to avoid the controllers, not unregistered correctly, to be shut down.
+If retrieving the quorum information or unregistering the controllers fails (that is, if Apache Kafka returns an error), the reconciliation will fail to prevent incorrectly unregistered controllers from being shut down.
 The operator will re-try the operation on the next reconciliation.
 
 The Strimzi Cluster Operator will also update the `controller.quorum.bootstrap.servers` configuration within the ConfigMap(s) for the existing brokers and remaining controllers.
@@ -571,7 +572,7 @@ Once all unregistrations complete successfully, the reconciliation can proceed w
 Scaling down the KRaft quorum can be done in the following ways:
 
 * by decreasing the number of replicas for an existing `KafkaNodePool` with the `controller` role (both combined or dedicated nodes).
-* by removing the `controller` role to an existing `KafkaNodePool` hosting combined nodes (both brokers and controllers).
+* by removing the `controller` role from an existing `KafkaNodePool` hosting combined nodes (both brokers and controllers).
 * by deleting an existing `KafkaNodePool` with `controller` role.
 
 In the last use case, the removed controllers are correctly unregistered but there is no protection against the possibility of having a non-healthy KRaft quorum because the `KafkaNodePool` custom resource deletion, done by the user, can't be blocked or reverted back.
@@ -674,7 +675,7 @@ The following scenarios demonstrate how the KRaft quorum reconciliation handles 
 
 These scenarios demonstrate the idempotent nature of the reconciliation process and how it prevents controllers from being shut down before proper unregistration, while the status automatically self-heals by syncing from the actual quorum state.
 
-### From dedicated to combined nodes (and viceversa)
+### From dedicated to combined nodes (and vice versa)
 
 The KRaft quorum reconciliation also handles scenarios where the cluster topology changes by adding or removing the controller role to/from existing nodes.
 
@@ -691,7 +692,7 @@ The Strimzi Cluster Operator:
 During the rolling update, when each affected node restarts:
 
 * the `kafka_run.sh` script detects the controller role in the `process.roles` property.
-* since this is an existing cluster and the node is not part of the controllers list, it formats the controller storage using the `--no-initial-controllers` option but it won't be actually re-formatted.
+* since this is an existing cluster and the node is not part of the controllers list, it uses the `--no-initial-controllers` option, but storage is not reformatted because it is already formatted.
 * the node starts as a combined node with both broker and controller roles, joining the quorum as an observer.
 * the pod is labeled with the `strimzi.io/controller-role` label to indicate it has been successfully rolled as a controller.
 
@@ -733,7 +734,7 @@ During the rolling update, when each affected node restarts:
 * the node starts without initializing controller storage, operating solely as a broker.
 * the `strimzi.io/controller-role` label is removed from the pod.
 
-The metadata stored on the controller's storage directory from when it was a combined node remains on disk but is no longer used or maintained.
+The metadata stored in the controller's storage directory from when it was a combined node remains on disk but is no longer used or maintained.
 
 If the reconciliation fails during the unregistration phase (e.g., Kafka returns an error), the rolling update will not proceed, preventing broker-only nodes from being restarted while still registered as voters in the quorum.
 
@@ -846,7 +847,7 @@ On the next reconciliation cycle, the full KRaft quorum reconciliation (at the e
 * Detects the multiple incarnations (if the old voter wasn't unregistered) or missing voter (if unregistration succeeded but registration failed).
 * Reads the actual directory ID from the controller pod's `meta.properties` file using the Kafka Agent.
 * Performs the necessary unregistration and registration operations to bring the controller's quorum membership in sync with its actual state.
-* If needed, the `KafkaRoller` proceeds with rolling other controllers (it depends when the error was raised and the reconciliation failed).
+* If needed, the `KafkaRoller` proceeds with rolling other controllers.
 * Updates the `controllers` field in the `Kafka` custom resource status with the current directory IDs.
 
 This recovery mechanism ensures that even if failures occur during rolling updates, the quorum membership will eventually converge to the correct state.
@@ -1042,7 +1043,7 @@ The recovery process for dynamic quorum clusters:
 
 1. Manually inspect the PVCs to retrieve the `clusterId` from the `meta.properties` file on any node.
 2. For each controller, retrieve the directory ID (UUID) from the `meta.properties` file located in the metadata log directory.
-3. Edit the `Kafka` custom resource with the status field pre-populated with both the `clusterId` and the `controllers` list containing each controller's ID and directory ID.
+3. Edit the `Kafka` custom resource with the `status` field pre-populated with both the `clusterId` and the `controllers` list containing each controller's ID and directory ID.
 4. The operator will use these directory IDs to build the `controllers` string for formatting, ensuring controllers start with their existing directory IDs preserved. The formatting won't happen because storages are already formatted.
 5. Pods start and use the PVCs with matching directory IDs already present in the `meta.properties` files.
 6. The quorum forms successfully with the preserved directory IDs, and the status is confirmed by syncing from the actual quorum state.
@@ -1182,7 +1183,7 @@ Once quorum is restored, cluster becomes available again.
 - DescribeQuorum: voters=[3:A, 4:B, 5:C], observers=[0:E, 1:F, 2:G]
 - Status remains: [{3:A}, {4:B}, {5:C}]
 
-This scenario is similar to create a new cluster because of the KRaft quorum starting from scratch.
+This scenario is similar to creating a new cluster because of the KRaft quorum starting from scratch.
 The current brokers cannot connect anymore, because their metadata (coming from older KRaft quorum) are ahead of the new quorum, in terms of offset.
 The only way to recover such a cluster, but with data loss, is manually deleting the metadata on the brokers.
 
@@ -1220,7 +1221,7 @@ The only way to recover such a cluster, but with data loss, is manually deleting
 
 Migration from static to dynamic quorum is supported starting from Apache Kafka 4.1.0.
 
-The migration procedure is available on the official Kafka documentation [here](https://kafka.apache.org/documentation/#kraft_upgrade) which describes the key steps:
+See the official Kafka documentation for the [migration procedure](https://kafka.apache.org/documentation/#kraft_upgrade), which describes the key steps:
 
 * setting `kraft.version` to `1`.
 * switching from `controller.quorum.voters` to `controller.quorum.bootstrap.servers` configuration.
@@ -1240,7 +1241,7 @@ During each reconciliation cycle, the operator:
 
 It's worth adding that, retrieving the controller directory IDs as described above should be done only after upgrading the `kraft.version` to `1`.
 If this step is not done, the Kafka Admin Client API returns the `AAAAAAAAAAAAAAAAAAAAAA` value instead of the actual directory ID (from the `meta.properties` file).
-It's the Base64 encoding of UUID all zeroes used within Apache Kafka when the voters are tracked within a static quorum.
+This is the Base64 encoding of an all-zero UUID, which is used in Apache Kafka when the voters are tracked within a static quorum.
 
 #### Failure handling during migration
 
@@ -1253,7 +1254,7 @@ On the next reconciliation cycle, the operator will retry the upgrade.
 If the operator successfully sets `kraft.version` to `1` but crashes or it is restarted before completing the migration (before updating the `controllers` field in the status or triggering the rolling update), the migration completes automatically on the next reconciliation.
 This is possible because `kraft.version=1` is already persisted in Kafka.
 When the operator restarts, it queries `kraft.version`, detects it is already set to `1`, and the `KRaftQuorumReconciler` proceeds to retrieve the controllers directory IDs.
-Also the nodes configuration change about using `controller.quorum.bootstrap.servers` will trigger the rolling of nodes and at the end, the status will be updated as well.
+The node configuration change to use `controller.quorum.bootstrap.servers` also triggers a rolling update of nodes and status update.
 The idempotent nature of the KRaft Quorum Reconciler ensures that the migration completes safely regardless of when the operator restart occurred.
 
 ## Affected/not affected projects
@@ -1262,25 +1263,25 @@ Only the Strimzi Cluster Operator.
 
 ## Compatibility
 
-When upgrading the Strimzi operator to a release supporting the dynamic quorum, already existing cluster using the static quorum will be automatically migrated to use dynamic quorum.
-Of course, any new Apache Kafka cluster will be also deployed by using the dynamic quorum.
+When upgrading the Strimzi operator to a release supporting the dynamic quorum, existing clusters that use the static quorum will be automatically migrated to use dynamic quorum.
+Of course, new Apache Kafka clusters are also deployed by using the dynamic quorum.
 
 ### Downgrade
 
-When a cluster is automatically migrated from static to dynamic quorum, Apache Kafka doesn't support to go back to static anymore.
+When a cluster is automatically migrated from static to dynamic quorum, Apache Kafka no longer supports reverting to static quorum.
 If the user tries to downgrade the `kraft.version` from `1` to `0`, they will get an error.
 
-What is the impact of it on downgrading the operator to a previous release where there is no support for dynamic quorum?
+What is the impact on downgrading the operator to a previous release where there is no support for dynamic quorum?
 
-When downgraded to an older release, the operator reconfigures the nodes with the old `controller.quorum.voters` parameter and roll them.
+When downgraded to an older release, the operator reconfigures the nodes with the old `controller.quorum.voters` parameter and rolls them.
 The `controllers` field within the `Kafka` status is also removed.
-The `kraft.version` stays at `1` and, as already mentioned above, it cannot be set to `0` anymore (the old operator releases doesn't have the logic to do so anyway).
+The `kraft.version` stays at `1` and, as already mentioned above, it cannot be set to `0` anymore (the old operator releases don't have the required logic to do so anyway).
 In this condition, the cluster is actually using dynamic quorum, despite the nodes being configured with the `controller.quorum.voters` parameter.
 This is the way that Apache Kafka uses for backward compatibility.
 
 From a Strimzi perspective, nothing can stop the user to increase the number of controller replicas to scale up the quorum.
 The new controllers start without any issues but they won't be registered as voters automatically, because the old operator doesn't have such logic.
-Potentially, the user could do it manually with the dedicated Kafka tools.
+Potentially, users could do it manually with the dedicated Kafka tools.
 The same could apply to scale down the KRaft quorum, on metadata disk changes and so on.
 
 The cluster is actually working with dynamic quorum enabled but all the automation provided by the new operator is not available.
@@ -1289,7 +1290,7 @@ From an operator perspective there is nothing that can be really done.
 ## Rejected alternatives
 
 The following sections don't describe totally different rejected solutions for the overall dynamic quorum support.
-They mostly describe rejected approaches to solve specific problems within the overall dynamic quorum and controllers scaling support.
+They mostly describe rejected approaches to solving specific problems within the overall dynamic quorum and controllers scaling support.
 
 ### Universal formatting via `--initial-controllers` option
 
@@ -1326,7 +1327,7 @@ bin/kafka-metadata-quorum.sh --bootstrap-server my-cluster-kafka-bootstrap:9092 
 ```
 
 When scaling down controllers, after having them removed (pod killed) by the Strimzi Cluster Operator, the user could use the `kafka-metadata-quorum.sh` to run the corresponding unregistration.
-It would be making the controller to come back being an observer (not voter anymore) after scaling down with the following command to execute on any node:
+This would return the controller to observer status (no longer a voter) after scaling down with the following command to execute on any node:
 
 ```shell
 bin/kafka-metadata-quorum.sh --bootstrap-server my-cluster-kafka-bootstrap:9092 remove-controller --controller-id <id> --controller-directory-id <directory-id>
@@ -1341,7 +1342,7 @@ Then checking that the controller was removed from the observers list by using t
 bin/kafka-metadata-quorum.sh --bootstrap-server my-cluster-kafka-bootstrap:9092 describe --status
 ```
 
-This process is not user friendly and really error prone due to the users running several manual commands.
+This process is not user-friendly and really error-prone due to the users running several manual commands.
 This solution was rejected because it's against the automation we want within the Strimzi Cluster operator.
 
 ### Using auto-join feature available with Apache Kafka 4.2
@@ -1351,7 +1352,7 @@ With auto-join enabled, a newly added controller starts initially as an observer
 Apache Kafka handles the burden of checking that the new controller is in sync (or not) with the other voters.
 Of course, it also means that the support for dynamic quorum and corresponding controllers scaling is available for an Apache Kafka cluster having 4.2.0 as the minimum version and such a check would be needed within the Strimzi Cluster Operator logic.
 
-Leveraging this feature was explored but the current semantic of auto-join doesn't work pretty well when scaling down a controller in a Kubernetes-based environement.
+Leveraging this feature was explored but the current semantic of auto-join doesn't work very well when scaling down a controller in a Kubernetes-based environment.
 The above KIP states that, in order to unregister a controller when auto-join is enabled, you have to:
 
 * shutdown the controller.
@@ -1361,7 +1362,7 @@ If you run the unregistration command as the first step while the controller is 
 
 It doesn't work well in a scenario where the Apache Kafka cluster has combined-nodes and we want to scale down controllers by removing the "controller" role from one or more of them.
 In this case, the node is not actually shut down and removed forever but it's rolled with a new configuration (i.e. the "controller" role is removed).
-But in a Kubernetes-based environment where the rolling of a pod is driven by the platform, there is no opportunity to execute a step (like the controller unregistration) in between the shut down and the start up.
+But in a Kubernetes-based environment where the rolling of a pod is driven by the platform, there is no opportunity to execute a step (like the controller unregistration) between the shutdown and startup.
 To overcome this issue, the best approach would be unregister the controller first and then rolling the node as broker only, but as mentioned before it would join again right after the unregistration.
 
 Changing the auto-join UX was subject of a long discussion in the Apache Kafka community and it could be changed in the future with a new KIP.
