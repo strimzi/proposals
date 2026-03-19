@@ -78,7 +78,12 @@ For example, a string-substitution template such as `900{nodeId}` would work wel
 But it would not work well for node IDs such as `100`.
 
 Instead, for the port number template, this proposal suggests supporting a mathematical formula.
-For example, `9000 + {nodeId}`.
+For example:
+* `9000+{nodeId}` _(without whitespaces)_
+* `9000 + {nodeId}` _(with whitespaces)_
+* `{nodeId} + 9000` _(order does not matter)_
+* `9000 + ({nodeId} * 10)` _(because why not 🤷‍♂️)_
+
 This approach works much better for different node IDs, where the resulting port number is consistent regardless of whether the node ID is `1`, `100`, or `1000`.
 
 The formula is evaluated using the [Javaluator library](https://github.com/fathzer/javaluator).
