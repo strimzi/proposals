@@ -100,6 +100,7 @@ listeners:
 ```
 
 `TLSRoute` resources support TLS passthrough as well as TLS termination mode.
+While the TLS mode applies to the `TLSRoute` resources, it is configured in the [Gateway Listener TLS configuration](https://gateway-api.sigs.k8s.io/reference/1.5/spec/#listenertlsconfig) in the Gateway or in ListenerSet resources.
 TLS passthrough means that the TLS connection is forwarded to Strimzi as-is, including encryption.
 In this case, the TLS connection will use the TLS certificate from the Kafka brokers and can use mTLS authentication as well.
 
@@ -116,6 +117,8 @@ But I expect it will eventually be supported.
 ![TLS Termination](./images/134-TLS-Termination.svg)
 
 To support both modes, Strimzi will support `type: tlsroute` listeners both with and without TLS encryption enabled in the Strimzi listener.
+The TLS encryption being enabled or disabled will not have any impact on how Strimzi configures the `TLSRoute` resources, as the TLs mode is configured in the Gateway.
+It will only impact on whether Strimzi configures the Kafka brokers for TLS encryption or not.
 mTLS authentication will be allowed only when TLS encryption is enabled.
 
 The actual port used by `TLSRoute` resources is configured in the `Gateway` resource.
