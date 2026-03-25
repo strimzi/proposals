@@ -13,42 +13,41 @@ Strimzi currently supports four types of external listeners:
 The Ingress-based listener (`type: ingress`) is currently deprecated.
 The main motivation for the deprecation is the [retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) of the [Ingress NGINX Controller for Kubernetes](https://github.com/kubernetes/ingress-nginx), on which this listener type was based.
 
-## Gateway API
+## Kubernetes Gateway API
 
-[Gateway API](https://gateway-api.sigs.k8s.io/) is an API specification only.
-It does not provide any implementation on its own.
+Kubernetes [Gateway API](https://gateway-api.sigs.k8s.io/) is an official Kubernetes project that defines API specifications for L4 and L7 routing.
+It does not include an implementation.
 It provides only the Custom Resource Definitions for the API.
 The API is then supported/implemented by other projects.
 A list of implementations can be found on the [Gateway API website](https://gateway-api.sigs.k8s.io/implementations/#gateway-controller-implementation-status).
 
 The Gateway API specification is versioned.
-Its versioning and release cycle is fully independent on the Kubernetes version.
+Its versioning and release cycle are fully independent of the Kubernetes version.
 Each version has two release channels: Standard and Experimental.
 The Standard channel contains stable APIs.
 The Experimental channel includes everything from the Standard channel plus additional experimental changes and APIs that might still change or be removed in the future.
 
 ## Motivation
 
-[Gateway API](https://gateway-api.sigs.k8s.io/) is an official Kubernetes project that focuses on L4 and L7 routing.
-It represents the next generation of Kubernetes Ingress.
+The [Gateway API](https://gateway-api.sigs.k8s.io/) represents the next generation of Kubernetes Ingress.
 It supports L7 routing of HTTP and gRPC traffic.
 It also supports L4 routing of TCP traffic.
 Gateway API aims to address both north-south traffic (to/from the Kubernetes cluster) and east-west traffic (within the Kubernetes cluster through a service mesh).
 For this proposal, the focus is north-south traffic routing and providing Apache Kafka access to Kafka clients running outside of the Kubernetes cluster.
 
-Our users have already been able to use Gateway API with Strimzi for some time.
+Strimzi users have already been able to use Gateway API for some time.
 They can, for example, use the `type: cluster-ip` listener designed for access within the Kubernetes cluster and manually manage the Gateway API resources and advertised hosts and ports.
 More details can be found in the [Accessing Kafka with Gateway API](https://strimzi.io/blog/2024/08/16/accessing-kafka-with-gateway-api/) blog post on the Strimzi blog.
 
-But with Gateway API becoming the _next_ Kubernetes routing standard, with the growing number of compatible Gateway API implementations, and with the deprecation of `type: ingress` due to Ingress NGINX Controller retirement, it makes sense for Strimzi to add direct support for Gateway API.
+But with Gateway API emerging as the next Kubernetes routing standard, compatible implementations continuing to grow, and `type: ingress` being deprecated following the retirement of the Ingress NGINX Controller, it’s a natural step for Strimzi to add direct Gateway API support.
 The APIs that are relevant to the Kafka protocol (`TLSRoute` and `TCPRoute`) are also finally maturing and moving to the Standard API channel.
 Direct support will simplify the configuration of Gateway API resources, as Strimzi will manage them automatically and users will no longer need to do it manually.
 It will also make it easier to combine Gateway API with other Strimzi features, such as horizontal autoscaling, which would otherwise be complicated (as users would need to create Gateway API resources when new brokers are added).
 
 ## Proposal
 
-Strimzi will implement support for Gateway API using its `TLSRoute` resources.
-In the Strimzi API, it will be added as `type: tlsroute`.
+Strimzi will implement support for Gateway API using `TLSRoute` resources.
+In the Strimzi API, this listener will be added as `type: tlsroute`.
 `TLSRoute` resources support any TLS traffic and use TLS-SNI (client-specified hostname) to decide where to route traffic.
 `TLSRoute` resources typically depend on a `Gateway`.
 The `Gateway` represents the _point of access_, and `TLSRoute` resources tell the `Gateway` how and where traffic should be routed.
@@ -99,8 +98,8 @@ listeners:
       hostTemplate: kafka-{nodeId}-broker.192.168.1.221.sslip.io
 ```
 
-`TLSRoute` resources support TLS passthrough as well as TLS termination mode.
-While the TLS mode applies to the `TLSRoute` resources, it is configured in the [Gateway Listener TLS configuration](https://gateway-api.sigs.k8s.io/reference/1.5/spec/#listenertlsconfig) in the Gateway or in ListenerSet resources.
+`TLSRoute` resources support TLS passthrough and TLS termination.
+While the TLS mode applies to the `TLSRoute` resources, it is configured in the [Gateway Listener TLS configuration](https://gateway-api.sigs.k8s.io/reference/1.5/spec/#listenertlsconfig) in the `Gateway` or in `ListenerSet` resources.
 TLS passthrough means that the TLS connection is forwarded to Strimzi as-is, including encryption.
 In this case, the TLS connection will use the TLS certificate from the Kafka brokers and can use mTLS authentication as well.
 
@@ -109,7 +108,7 @@ In this case, the TLS connection will use the TLS certificate from the Kafka bro
 TLS termination means that the TLS connection will be terminated in the gateway.
 The Kafka client will connect with encryption, but the connection will be decrypted by the Gateway.
 And from the Gateway it will continue in an unencrypted work to the Apache Kafka brokers.
-In this case, the connection will use the Gateway's TLS certificate and mTLS authentication would not be available.
+In this case, the connection will use the Gateway's TLS certificate, and mTLS authentication would not be available.
 From a Strimzi perspective, the connection will not use TLS encryption.
 Support for TLS termination mode is new, and I have not found any Gateway API implementation supporting it yet.
 But I expect it will eventually be supported.
@@ -117,8 +116,8 @@ But I expect it will eventually be supported.
 ![TLS Termination](./images/134-TLS-Termination.svg)
 
 To support both modes, Strimzi will support `type: tlsroute` listeners both with and without TLS encryption enabled in the Strimzi listener.
-The TLS encryption being enabled or disabled will not have any impact on how Strimzi configures the `TLSRoute` resources, as the TLs mode is configured in the Gateway.
-It will only impact on whether Strimzi configures the Kafka brokers for TLS encryption or not.
+TLS encryption being enabled or disabled will not have any impact on how Strimzi configures the `TLSRoute` resources, as the TLs mode is configured in the Gateway.
+It affects only whether Strimzi configures Kafka brokers to use TLS encryption.
 mTLS authentication will be allowed only when TLS encryption is enabled.
 
 The actual port used by `TLSRoute` resources is configured in the `Gateway` resource.
@@ -219,9 +218,9 @@ spec:
 After creating the `TLSRoute` resources, Strimzi will wait for the `.status` section to be updated and contain at least one parent reference.
 This indicates that the `TLSRoute` was accepted by the gateway.
 Strimzi will not perform a detailed check of which gateway is among the parent references.
-It will also not check for any other conditions and try to detect any other warnings, errors, or failures.
+It will not check for other conditions or try to detect any other warnings, errors, or failures.
 In case the `TLSRoute` does not have any parent references after the configured time limit (the Cluster Operator _reconciliation timeout_), the reconciliation will fail with a corresponding error.
-This will help provide flexibility and simplify support for different implementations, that might behave differently when it comes to exact conditions, warnings, and errors..
+This will help provide flexibility and simplify support for different implementations that handle conditions, warnings, and errors differently.
 
 ### Testing strategy
 
@@ -265,7 +264,7 @@ Strimzi will not provide any documentation documenting such a migration.
 However, users can always:
 
 1. Add a new `type: tlsroute` listener.
-2. Reconfigure their Kafka clients to use the the new listener.
+2. Reconfigure Kafka clients to use the new listener.
 3. Remove the old `type: ingress` listener.
 
 ## Affected projects
