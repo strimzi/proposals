@@ -62,6 +62,8 @@ The `v1` API is expected to be supported in version 7.7.0 of the Fabric8 Kuberne
 This proposal suggests building `tlsroute` listener support on the `v1` API.
 
 The `type: tlsroute` listener will work on the same principle as the existing `type: ingress` and `type: route` listeners.
+Strimzi will create the the bootstrap and per-broker services.
+And then it will create the `TLSRoute` resources to route the data to these services and through them to the Kafka brokers.
 
 ### Strimzi API
 
