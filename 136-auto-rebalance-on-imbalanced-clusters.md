@@ -112,9 +112,9 @@ To provide users more flexibility, they only have to configure the auto-rebalanc
 When the auto-rebalance configuration is set with `imbalance` mode enabled, the operator will trigger a partition rebalance whenever a goal violation is detected by the anomaly detector.
 For the operator to trigger the auto-rebalance, it must be aware that the cluster is imbalanced due to a goal violation anomaly.
 We will make use of the `state` endpoint of Cruise Control to do this
-This operator will use this endpoint to understand if there are any goal violations so that the operator can trigger a rebalance (see section [StrimziCruiseControlNotifier](./136-auto-rebalance-on-imbalanced-clusters.md#strimzicruisecontrolnotifier)).
+The operator will use this endpoint to understand if there are any goal violations so that the operator can trigger a rebalance (see section [KafkaAutoRebalanceReconciler using state endpoint](./136-auto-rebalance-on-imbalanced-clusters.md#kafkaautorebalancereconciler-class-using-state-endpoint)).
 With this proposal, we are only going to support auto-rebalance on imbalanced cluster.
-We also plan to implement the same for topic and metrics related issues, but it will be part of future work since their implementation require different approaches.
+We also plan to implement the same for topic and metrics related issues, but it will be part of future work since their implementation requires different approaches.
 For example, when dealing with topic related issues, it will require a coordination with topic operator and metrics issues will require coordination with the Kafka API.
 
 Here is an example of what the configured `Kafka` custom resource could look like:
@@ -164,7 +164,7 @@ spec:
   skipHardGoalCheck: true
   # ... other rebalancing related configuration
 ```
-When the `template` is set, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource (based on the template) when an anomaly is detected and notified by the `StrimziCruiseControlNotifier`
+When the `template` is set, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource (based on the template) when an anomaly is detected and notified by the `state` endpoint.
 The operator copies over goals and rebalancing options from the referenced `template` resource to the generated rebalancing one.
 If the user has not configured the anomaly detection goals in Cruise Control section of the Kafka CR then the operator would set the default goals to be used by the anomaly detector. 
 The default anomaly detection goals set by the operator are `RACK_AWARENESS_GOAL`, `MIN_TOPIC_LEADERS_PER_BROKER_GOAL`, `REPLICA_CAPACITY_GOAL`, `DISK_CAPACITY_GOAL`. 
@@ -176,7 +176,7 @@ If the goals mentioned in the templates are not a subset of the configured anoma
 The `KafkaRebalance` has 4 modes: `full`, `add-broker`, `remove-broker` and `remove-disks` mode.
 The `imbalance` mode will be mapped to the `full` mode in the generated KafkaRebalance resource which means that generated `KafkaRebalance` custom resource will have the mode set as `full` which within the Strimzi rebalancing operator means calling the Cruise Control API to run a rebalancing taking all brokers into account.
 
-The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance-<anomalyId>`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, `imbalance` refers to applying the rebalance to all the brokers, and the `<anomalyId>` would be retrieved from the notifier.
+The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance-<anomalyId>`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, `imbalance` refers to applying the rebalance to all the brokers, and the `<anomalyId>` would be retrieved from the JSON retrieved from `state` endpoint.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
