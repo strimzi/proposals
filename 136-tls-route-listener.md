@@ -105,7 +105,7 @@ While the TLS mode applies to the `TLSRoute` resources, it is configured in the 
 TLS passthrough means that the TLS connection is forwarded to Strimzi as-is, including encryption.
 In this case, the TLS connection will use the TLS certificate from the Kafka brokers and can use mTLS authentication as well.
 
-![TLS Passthrough](./images/134-TLS-Passthrough.svg)
+![TLS Passthrough](./images/136-TLS-Passthrough.svg)
 
 TLS termination means that the TLS connection will be terminated in the gateway.
 The Kafka client will connect with encryption, but the connection will be decrypted by the Gateway.
@@ -115,7 +115,7 @@ From a Strimzi perspective, the connection will not use TLS encryption.
 Support for TLS termination mode is new, and I have not found any Gateway API implementation supporting it yet.
 But I expect it will eventually be supported.
 
-![TLS Termination](./images/134-TLS-Termination.svg)
+![TLS Termination](./images/136-TLS-Termination.svg)
 
 To support both modes, Strimzi will support `type: tlsroute` listeners both with and without TLS encryption enabled in the Strimzi listener.
 TLS encryption being enabled or disabled will not have any impact on how Strimzi configures the `TLSRoute` resources, as the TLs mode is configured in the Gateway.
