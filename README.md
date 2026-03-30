@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 136 | [Gateway API-based `type: tlsroute` listener](./136-tls-route-listener.md) |
 | 135 | [Templating `advertisedPort` fields in the `Kafka` custom resource](./135-templating-advertised-port-fields.md) |
 | 134 | [Dedicated executor service for HTTP Bridge async Kafka-related operations](./134-dedicated-executor-for-kafka-bridge.md) |
 | 133 | [Asynchronous Issue Triage](./133-async-triage.md) |
