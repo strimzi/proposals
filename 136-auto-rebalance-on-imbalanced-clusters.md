@@ -573,4 +573,3 @@ Cons:
 ## Future Scope
 In the future, we plan to introduce auto-rebalance for topic and metrics related imbalances.
 As this feature evolves we can even think of having ways to fix issues like disk failure and broker failures automatically since the fix would be driven by the operator.
-If the users wants to use their own notifier can be to extend our notifier and use our alert method i.e `super.alert()` first in their `alert()` method implementation.
