@@ -3,7 +3,7 @@
 ## Current situation
 
 Currently, when users would like to renew or re-issue the `KafkaUser`'s certificate without waiting for automatic renewal, they can do so by deleting the `Secret` of the particular `KafkaUser`.
-Once User Operator then goes through the regular reconciliation, it observes that the `Secret` for the `KafkaUser` is missing, and it creates a new one.
+User Operator has watch for the `Secret`, once it gets an event that `Secret` was deleted, it creates a new one.
 
 ## Motivation
 
@@ -15,14 +15,16 @@ It would also follow the way we have for CA certificates, which can be renewed o
 
 ## Proposal
 
-This proposal suggests adding new annotation - `strimzi.io/re-issue-certificate` - that will be configurable on `Secret` resource of the `KafkaUser`.
+This proposal suggests using annotation - `strimzi.io/force-renew` - for annotating `Secret` belonging to particular `KafkaUser`.
+The annotation is already used for renewing CA certificates and it would be the same situation for `KafkaUser`'s certificate.
 Users will be able to annotate the `Secret` as follows:
 
 ```shell
-kubectl annotate secret my-user strimzi.io/re-issue-certificate="true" -n my-namespace
+kubectl annotate secret my-user strimzi.io/force-renew="true" -n my-namespace
 ```
 
-The annotation accepts a boolean value and if the user annotates the `Secret` with `strimzi.io/re-issue-certificate: true`, on the next reconciliation User Operator will renew the certificate of the `KafkaUser`.
+The annotation takes a String value, and it reacts to `true` in case-insensitive way. 
+That means if the user annotates the `Secret` with `strimzi.io/force-renew: true`, on the next reconciliation User Operator will renew the certificate of the `KafkaUser`.
 
 That will be handled in the `KafkaUserModel#maybeGenerateCertificates()`, where we will check if the existing `Secret` contains this annotation and if it is set to `true`.
 If yes, it will trigger the renewal by using the `generateNewCertificate(reconciliation, clientsCa);`.
@@ -49,7 +51,12 @@ Lastly, in case that we would handle the annotation on `KafkaUser` level, GitOps
 
 ### Configure date inside the annotation instead of boolean value
 
-Configuring date in value field of the annotation was considered as well.
-It would again differ from the way we picked for CA renewal - where we are using boolean value.
-Other than that, it would make handling of the re-issue a bit more complicated - we would have to implement a way how to handle date, time, and also provide template in which users can specify the date, together with checks if the date is correct, and many more.
-Finally, it would complicate users lives in case that they would like to re-issue the certificate immediately - which would be the most common case.
+The idea - suggested in the [issue](https://github.com/strimzi/strimzi-kafka-operator/issues/12337) - was to have a date specified inside the annotation.
+That would mean users can "schedule" this renewal.
+However, it has a few issues:
+
+- It differs from the way we picked for CA renewal
+- Handling of this would be complicated - we would have to specify a format how to handle the date and time, where parsing would be complicated
+- It would be complication for users wanting to just renew the certificate immediately.
+
+Because of these issues, I decided to not go this way and use the already present annotation with boolean value.
