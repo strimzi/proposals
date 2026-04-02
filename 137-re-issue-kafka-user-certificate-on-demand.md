@@ -33,6 +33,11 @@ Otherwise, the behavior will not change, it will go through the checks as before
 After the certificate is renewed, the annotation will be automatically removed from the `Secret` - as we will create a new `Secret` replacing the current one.
 There will be no special handling needed.
 
+### Documentation
+
+The renewal of the certificate will not invalidate the previous certificate.
+It is important to document this behavior in our documentation, as part of the implementation PR.
+
 ## Affected/not affected projects
 
 The only affected project is the `strimzi-kafka-operator` repository - especially User Operator part of the code.
