@@ -30,8 +30,13 @@ That will be handled in the `KafkaUserModel#maybeGenerateCertificates()`, where 
 If yes, it will trigger the renewal by using the `generateNewCertificate(reconciliation, clientsCa);`.
 Otherwise, the behavior will not change, it will go through the checks as before - if the keys are from same CA, if it's not expired, etc.
 
-After the certificate is renewed, the annotation will be automatically removed from the `Secret` - as we will create a new `Secret` replacing the current one.
-There will be no special handling needed.
+After the certificate is renewed, the annotation will be automatically removed from the `Secret` - as we will create a new `Secret` internally in the code and the current one present on the cluster will be updated accordingly.
+There will be no special handling needed and there will be no deletion of the current `Secret`.
+
+### Documentation
+
+The renewal of the certificate will not invalidate the previous certificate.
+It is important to document this behavior in our documentation, as part of the implementation PR.
 
 ## Affected/not affected projects
 
