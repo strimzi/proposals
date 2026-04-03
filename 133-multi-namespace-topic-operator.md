@@ -6,7 +6,7 @@ Issue [#1206](https://github.com/strimzi/strimzi-kafka-operator/issues/1206)
 
 The Unidirectional Topic Operator (UTO, [proposal 051](https://github.com/strimzi/proposals/blob/main/051-unidirectional-topic-operator.md)) watches `KafkaTopic` resources in a single namespace — typically the namespace where the `Kafka` resource is deployed. The UTO reconciles topic state unidirectionally from Kubernetes to Kafka, uses `creationTimestamp`-based conflict resolution when multiple `KafkaTopic` CRs reference the same Kafka topic, and employs finalizer-based deletion.
 
-The UTO is deployed as a container within the Entity Operator pod, which the Cluster Operator manages. The `STRIMZI_NAMESPACE` environment variable controls which namespace the UTO watches.
+The UTO is deployed as a container within the Entity Operator pod, which the Cluster Operator manages. The `STRIMZI_NAMESPACE` environment variable controls which namespace the UTO watches, or a standalone deployment.
 
 ## Motivation
 
@@ -60,7 +60,7 @@ The existing `spec.entityOperator.topicOperator.watchedNamespace` field is depre
 
 **Interaction rules:** When both `watchedNamespace` and `watchedNamespaces` are set, `watchedNamespaces` takes precedence and a warning is logged indicating that the singular field is being ignored. When only the singular field is set, the TO behaves exactly as it does today — watching the Kafka cluster's own namespace plus the single additional namespace specified.
 
-**Label impact:** Migrating from the singular to the plural field does **not** require any changes to `strimzi.io/cluster` labels on existing `KafkaTopic` resources. The TO accepts both the unqualified and qualified label forms regardless of which configuration field is used. However, the unqualified form is deprecated (see below) and should be migrated to the qualified `<namespace>/<name>` form, the TO will also log a warning that there is a possiblty of multiple TO watching over the topic unless its labels is updated. 
+**Label impact:** Migrating from the singular to the plural field does **not** require any changes to `strimzi.io/cluster` labels on existing `KafkaTopic` resources. The TO accepts both the unqualified and qualified label forms regardless of which configuration field is used. However, the unqualified form is deprecated (see below) and should be migrated to the qualified `<namespace>/<name>` form, the TO will also log a warning that there is a possibility of multiple TO watching over the topic unless its labels are updated. 
 
 #### Deprecation of unqualified `strimzi.io/cluster` label
 
@@ -91,7 +91,7 @@ metadata:
   name: strimzi-topic-operator-kafka-my-cluster
   namespace: team-a
   labels:
-    strimzi.io/cluster: my-cluster
+    strimzi.io/cluster: team-a/my-cluster
 rules:
   - apiGroups: ["kafka.strimzi.io"]
     resources: ["kafkatopics", "kafkatopics/status"]
@@ -103,7 +103,7 @@ metadata:
   name: strimzi-topic-operator-kafka-my-cluster
   namespace: team-a
   labels:
-    strimzi.io/cluster: my-cluster
+    strimzi.io/cluster: team-a/my-cluster
 subjects:
   - kind: ServiceAccount
     name: my-cluster-entity-operator
@@ -307,7 +307,7 @@ Affected:
 - **Cluster Operator**: Creates RBAC resources for watched namespaces, passes `watchedNamespaces` configuration to the Entity Operator
 
 Not affected:
-- User Operator, Kafka Connect operator, Kafka MirrorMaker operator
+- `strimzi.io/cluster` remains the same for all other resources
 - KafkaTopic CRD schema (no changes to spec fields)
 
 ## Compatibility
