@@ -31,8 +31,8 @@ The use of background deletion propagation for Pods will be gated behind a featu
 | Phase | Strimzi versions       | Default state                                          |
 |:------|:-----------------------|:-------------------------------------------------------|
 | Alpha | 1.1.0 - 1.2.0          | Disabled by default                                    |
-| Beta  | 1.3.0 - 1.4.0          | Enabled by default                                     |
-| GA    | 1.5.0 and newer         | Enabled by default (without possibility to disable it) |
+| Beta  | 1.3.0 - 1.6.0          | Enabled by default                                     |
+| GA    | 1.7.0 and newer         | Enabled by default (without possibility to disable it) |
 
 When this feature gate is enabled, the `PodOperator` will utilize `Background` deletion propagation for Pod deletion operations performed during rolling updates.
 By using the `Background` strategy, Kubernetes ensures that the Pod enters the `Terminating` state while leaving child resources—specifically network-related objects like the `CiliumEndpoint`—intact until the Pod's containers have fully exited.
@@ -53,13 +53,19 @@ The only affected project is the `strimzi-kafka-operator` repository, particular
 - `FeatureGates`
 - `PodOperator`
 - `KafkaRoller`
+- `KafkaConnectRoller`
 
 Other projects in the Strimzi organization are not affected.
 
 ## Compatibility
 
-This proposal is fully backwards compatible.
-The default behavior of the operator will remain unchanged (using `Foreground` deletion) unless the `UseBackgroundPodDeletion` feature gate is explicitly enabled by the user.
+This proposal is fully backwards compatible and safe for all users.
+The transition from `Foreground` to `Background` deletion propagation for Pods is expected to:
+- Help Cilium users by ensuring network connectivity remains available during the broker's graceful shutdown.
+- Not break functionality for users on other CNIs, as the change only affects the timing of API object removal and does not impact the actual shutdown process of the broker containers.
+
+Since the `StrimziPodSet` controller already uses `Background` deletion, this change brings consistency to how the operator manages Pod lifecycles across different components.
+The `UseBackgroundPodDeletion` feature gate is used to verify this assumption and confirm the fix for Cilium users across various environments before it transitions to the **Beta** phase and is enabled by default.
 
 ## Rejected alternatives
 
