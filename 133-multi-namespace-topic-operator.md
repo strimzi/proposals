@@ -10,7 +10,7 @@ The Topic Operator is deployed as a container within the Entity Operator pod, wh
 
 ## Motivation
 
-In Kubernetes clusters, it is common practice to isolate applications in separate namespaces. When a Kafka cluster is shared among multiple applications or teams, each application typically lives in its own namespace. Currently, all `KafkaTopic` resources must be created in the Kafka cluster's namespace, which creates several problems:
+In Kubernetes clusters, it is common practice to isolate applications in separate namespaces. When a Kafka cluster is shared among multiple applications or teams, each application typically lives in its own namespace. Currently, the Topic Operator watches a single namespace, either the Kafka cluster's own namespace (default) or one alternative namespace configured via watchedNamespace field or STRIMZI_NAMESPACE environment variable. which can creates several problems:
 
 - **Access control**: Teams that need to create topics must have RBAC permissions in the Kafka namespace, which may also grant access to other infrastructure resources they should not touch.
 - **Resource management**: Kubernetes namespace-level quotas, and RBAC cannot be used to separate topic ownership per team.
@@ -68,7 +68,7 @@ The existing `spec.entityOperator.topicOperator.watchedNamespace` field is depre
 
 **Migration steps:** Convert `watchedNamespace: team-a` to `watchedNamespaces: [team-a]`. Because switching to `watchedNamespaces` enables multi-namespace mode, the `STRIMZI_RESOURCE_LABELS` selector will now require both `strimzi.io/cluster` and `strimzi.io/cluster-namespace` labels. Before making this change, add the `strimzi.io/cluster-namespace` label to all existing `KafkaTopic` resources (see the migration example below). No RBAC changes are required — the Cluster Operator handles RBAC automatically.
 
-**Interaction rules:** Setting both `watchedNamespace` and `watchedNamespaces` simultaneously is rejected at admission time via a CEL validation rule on the `Kafka` CRD. Users must migrate to `watchedNamespaces` before adding additional namespaces. When only the singular field is set, the TO behaves exactly as it does today — watching the Kafka cluster's own namespace plus the single additional namespace specified.
+**Interaction rules:** Setting both `watchedNamespace` and `watchedNamespaces` simultaneously is rejected at admission time via a CEL validation rule on the `Kafka` CRD. Users must migrate to `watchedNamespaces` before adding additional namespaces. When only the singular field is set, the TO behaves exactly the same as before.
 
 **Label impact:** Migrating from the singular to the plural field does **not** require any changes to existing `strimzi.io/cluster` labels on `KafkaTopic` resources. The `strimzi.io/cluster` label value remains unchanged (e.g., `my-cluster`). When `watchedNamespaces` is configured, a new `strimzi.io/cluster-namespace` label is introduced to disambiguate cluster identity (see below).
 
@@ -109,7 +109,7 @@ Watching additional namespaces requires the Topic Operator to have Kubernetes RB
 
 **For explicit namespace list:**
 
-The Cluster Operator creates a `Role` and `RoleBinding` in each watched namespace, granting the Entity Operator's `ServiceAccount` permissions to watch, list, get, and update `KafkaTopic` resources and their status.
+The Cluster Operator creates a `Role` and `RoleBinding` in each watched namespace, granting the Entity Operator's `ServiceAccount` permissions to watch, list, get, and update `KafkaTopic` resources and their status, for standalone deployments, the user needs to create the `Role` and `RoleBinding` themselves in each namespace
 
 The Role and RoleBinding names include the Kafka cluster's namespace and name to ensure uniqueness: `strimzi-topic-operator-<kafka-namespace>-<kafka-name>`. This prevents two Kafka clusters watching the same tenant namespace from overwriting each other's RBAC resources.
 
@@ -159,8 +159,14 @@ metadata:
     strimzi.io/cluster-namespace: kafka
 rules:
   - apiGroups: ["kafka.strimzi.io"]
-    resources: ["kafkatopics", "kafkatopics/status"]
+    resources: ["kafkatopics"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["kafka.strimzi.io"]
+    resources: [""kafkatopics/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["kafka.strimzi.io"]
+    resources: ["kafkatopics/finalizers"]
+    verbs: ["delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -175,7 +181,7 @@ subjects:
     namespace: kafka
 roleRef:
   kind: ClusterRole
-  name: strimzi-topic-operator-kafka-my-cluster
+  name: strimzi-topic-operator
   apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -201,7 +207,7 @@ status:
   - type: Ready
     status: "False"
     reason: ResourceConflict
-    message: "Managed by team-a/my-topic"
+    message: "Already managed by another topic operator"
     lastTransitionTime: "2024-11-24T17:00:00Z"
 ```
 
@@ -209,15 +215,15 @@ This is identical to how the Topic Operator handles conflicts within a single na
 
 **Topic name isolation:** Conflict detection is the mechanism for preventing two teams from accidentally managing the same Kafka topic. It is intentionally reactive rather than preventive — teams *can* share a topic across namespaces (one namespace owns it, others receive a `ResourceConflict` status). For use cases that require strict naming isolation between teams, the recommended approach is to run separate Topic Operator instances per team rather than a shared one.
 
-**Event starvation:** A single Topic Operator instance reconciling events across many namespaces may be starved if one namespace generates a very high volume of events, delaying reconciliation for other namespaces. In high-traffic environments, operators should consider running separate Topic Operator instances per team or per namespace group, rather than a single shared instance, to bound the blast radius of event load. Future work may introduce per-namespace reconciliation queues to mitigate this.
+**Event starvation:** A single Topic Operator instance reconciling events across many namespaces may be starved if one namespace generates a very high volume of events, delaying reconciliation for other namespaces, to address this we would also implement er-namespace reconciliation queues
 
 ### Deletion semantics
 
-The Topic Operator uses Kubernetes finalizers to ensure that deleting a `KafkaTopic` also deletes the corresponding Kafka topic. The `strimzi.io/topic-operator` finalizer is added and managed exclusively by the Topic Operator — not the Cluster Operator. Users who do not want finalizer-based topic deletion can opt out by setting `spec.topicDeletion: false` on the `KafkaTopic` resource, in which case deleting the CR leaves the Kafka topic intact. This behavior is unchanged in the multi-namespace case.
+The Topic Operator uses Kubernetes finalizers to ensure that deleting a `KafkaTopic` also deletes the corresponding Kafka topic. The `strimzi.io/topic-operator` finalizer is added and managed exclusively by the Topic Operator.
 
 When the **owning** `KafkaTopic` (the oldest one) is deleted:
 1. The finalizer logic deletes the Kafka topic from the Kafka cluster.
-2. Any other `KafkaTopic` CRs in other namespaces that referenced the same Kafka topic will have their status updated to reflect that the topic no longer exists. They can then be cleaned up by their respective namespace owners, or if left in place, they will attempt to recreate the topic on their next reconciliation (becoming the new owner since no conflict exists).
+2. Any other `KafkaTopic` CRs in other namespaces that referenced the same Kafka topic will be recreated by the topic operator on their next reconciliation (becoming the new owner since no conflict exists).
 
 When a **non-owning** `KafkaTopic` (one with `ResourceConflict` status) is deleted:
 1. The finalizer is removed without deleting the Kafka topic (same as existing Topic Operator behavior for conflicting resources).
@@ -270,14 +276,9 @@ The Cluster Operator creates RBAC resources in the new namespace and restarts/re
 **Removing a namespace from `watchedNamespaces`:**
 The Cluster Operator must follow this sequence to ensure finalizers can be cleaned up before RBAC is revoked:
 
-1. While RBAC still exists, the CO removes the `strimzi.io/topic-operator` finalizer from all `KafkaTopic` resources in the namespace being removed.
+1. While RBAC still exists, the Topic operator removes the `strimzi.io/topic-operator` finalizer from all `KafkaTopic` resources in the namespace being removed.
 2. The CO updates the TO configuration to remove the namespace from `watchedNamespaces`.
 3. The CO deletes the RBAC resources (`Role`/`RoleBinding`) for that namespace.
-
-This ordering is critical: deleting RBAC before removing finalizers would leave the TO unable to reach the `KafkaTopic` resources, causing finalizers to block any subsequent namespace deletion.
-
-**Watched namespace is deleted:**
-If the TO is running, it processes the finalizers normally — deleting Kafka topics as appropriate. If the TO is not running (or the namespace was already removed from the watch list), `KafkaTopic` resources with finalizers will block namespace deletion. In this case, manual finalizer removal is necessary (e.g., `kubectl patch kafkatopic <name> -n <ns> --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'`). This is an existing limitation of the Topic Operator that applies equally to the single-namespace case, and should be documented as operational guidance.
 
 **Topic Operator restart:**
 On startup, the Topic Operator scans all watched namespaces to rebuild its in-memory conflict resolution map before beginning reconciliation. This is the same process used today for a single namespace, extended to multiple namespaces. Startup time increases linearly with the number of watched namespaces and `KafkaTopic` resources.
@@ -480,7 +481,7 @@ Not affected:
 
 ## Compatibility
 
-- The `watchedNamespaces` field is optional with an empty default, preserving existing single-namespace behavior.
+- The `watchedNamespaces` field is optional with an empty default, preserving existing single-namespace behavior (the Kafka cluster namespace when deployed as part of the CO, or the TO namespace when deployed as standalone)
 - No changes to the `KafkaTopic` CRD spec schema.
 - `strimzi.io/cluster` label: unchanged. The label value remains the cluster name (e.g., `my-cluster`). No deprecation, no migration required for existing deployments.
 - `strimzi.io/cluster-namespace` label: new, only required when `watchedNamespaces` is configured. Single-namespace deployments are not affected. In Kafka-managed mode, the Cluster Operator handles the `STRIMZI_RESOURCE_LABELS` configuration automatically.
@@ -490,7 +491,6 @@ Not affected:
 ## Future work
 
 - Multi-namespace support for the User Operator (`KafkaUser` resources) — this will require a separate proposal addressing the security implications of cross-namespace ACL management (see [PR #137 discussion](https://github.com/strimzi/proposals/pull/137)).
-- **Per-namespace reconciliation queues:** To address the event starvation risk described above, future work may introduce separate reconciliation queues per namespace so that a high-traffic namespace cannot starve reconciliation for others in the same Topic Operator instance.
 - Namespace-level policies to restrict which topic configurations can be set from a given namespace (e.g., allowing infra teams to retain control over certain topic-level configs, mandatory topic name prefixes, maximum partition counts).
 
 ## Rejected alternatives
