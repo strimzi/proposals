@@ -9,6 +9,13 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 136 | [Gateway API-based `type: tlsroute` listener](./136-tls-route-listener.md) |
+| 135 | [Templating `advertisedPort` fields in the `Kafka` custom resource](./135-templating-advertised-port-fields.md) |
+| 134 | [Dedicated executor service for HTTP Bridge async Kafka-related operations](./134-dedicated-executor-for-kafka-bridge.md) |
+| 133 | [Asynchronous Issue Triage](./133-async-triage.md) |
+| 132 | [TLS support in test-container](./132-tls-support-in-test-container.md) |
+| 131 | [In-place Pod resizing](./131-in-place-pod-resizing.md) |
+| 130 | [Publishing Test-Clients to Maven](./130-publishing-test-clients-to-maven.md) |
 | 129 | [Deprecate `type: ingress` listeners](./129-deprecate-type-ingress-listeners.md) |
 | 128 | [Kafka Node Pool rack IDs from environment variables](./128-rack-ids-from-environment-variables.md) |
 | 127 | [Add support for Linux user namespaces in Strimzi Pods](./127-add-support-for-linux-user-namespaces-in-strimzi-pods.md) |
