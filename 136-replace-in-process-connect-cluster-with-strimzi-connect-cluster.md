@@ -14,8 +14,9 @@ These classes require three test-scoped dependencies:
 - `org.apache.kafka:connect-file`
 - `org.apache.kafka:connect-api`
 
-The `connect-runtime` dependency, in particular, pulls in a large transitive dependency tree.
-This has repeatedly caused issues within CVEs (one of them might be https://github.com/strimzi/strimzi-kafka-operator/pull/12494).
+The `connect-runtime` dependency, in particular, pulls in a large transitive dependency tree that includes libraries such as Jetty.
+These transitive dependencies can conflict with the versions used by the operator itself, blocking CVE fixes.
+For example, [updating Jetty to address CVEs](https://github.com/strimzi/strimzi-kafka-operator/pull/12494) was blocked because the operator Jetty upgrade clashed with the version pulled in by `connect-runtime`, and there was no simple override to resolve it.
 
 Since [Strimzi Proposal #91](091-add-connect-to-test-container.md), the test-container project already provides `StrimziConnectCluster`, a containerized Kafka Connect cluster.
 The operator can use this directly instead of maintaining its own in-process implementation.
