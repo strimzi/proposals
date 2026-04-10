@@ -43,10 +43,13 @@ spec:
 When set, these values override the cluster-level defaults from the `Kafka` resource for that specific user.
 When omitted, the cluster-level defaults continue to apply.
 
+If `validityDays` is set or reduced on an existing `KafkaUser` whose current certificate would already be expired or would exceed the new validity period, the User Operator must renew the certificate immediately on the next reconciliation rather than waiting for the natural renewal window.
+
 The User Operator must enforce that `renewalDays` < `validityDays`.
 If this constraint is violated, the `KafkaUser` reconciliation must fail with a descriptive status condition.
 
-These fields only apply when using `spec.authentication.type: tls` and must be rejected by schema validation for other authentication types as this indicates a misconfiguration.
+These fields only apply when using `spec.authentication.type: tls`.
+Since the OpenAPI schema cannot enforce cross-field constraints, a CEL validation rule will be used to reject these fields when `type` is not `tls`, ensuring a misconfiguration is caught at admission time.
 
 ## Affected/not affected projects
 
@@ -71,8 +74,8 @@ metadata:
   name: my-user
   namespace: my-kafka
   annotations:
-    strimzi.io/validityDays: 7d
-    strimzi.io/renewalDays: 36h
+    strimzi.io/validityDays: 7
+    strimzi.io/renewalDays: 2
 spec:
   ...
 ```
