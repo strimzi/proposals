@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 138 | [Configurable `validityDays` and `renewalDays` per `KafkaUser`](./138-configurable-validitydays-and-renewaldays-per-kafkauser.md) |
 | 137 | [Re-issue KafkaUser's certificate on demand](./137-re-issue-kafka-user-certificate-on-demand.md) |
 | 136 | [Gateway API-based `type: tlsroute` listener](./136-tls-route-listener.md) |
 | 135 | [Templating `advertisedPort` fields in the `Kafka` custom resource](./135-templating-advertised-port-fields.md) |
