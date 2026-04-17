@@ -29,20 +29,22 @@ Other already mentioned point is that also shrinks the dependency tree and elimi
 
 ## Proposal
 
-### Changes in test-container
+### New repository: strimzi/test-connectors
 
-Add a built-in testing connector to the test-container project so consumers can use it without depending on Kafka Connect libraries.
+Create a new repository under the Strimzi organization [`strimzi/test-connectors`](https://github.com/strimzi/test-connectors) to host Kafka Connect connectors used for testing purposes.
+This repository (i.) own independent release lifecycle (ii.) produces connector JARs as release artifacts and 
+(iii.) can host multiple test connectors in the future (e.g., source and sink connectors with different testing behaviors).
 
 #### StrimziTestingConnector
 
-A source connector (moved from the operators `TestingConnector`) with configurable behavior:
+The initial connector is a source connector (moved from the operators `TestingConnector`) with configurable behavior:
 
 - Configurable startup/shutdown delays (`start.time.ms`, `stop.time.ms`, `task.start.time.ms`, `task.stop.time.ms`)
 - Configurable task poll behavior (`task.poll.time.ms`, `task.poll.records`)
 - Configurable failures (`fail.on.start`, `task.fail.on.start`)
 - Configurable topic and partition count (`topic.name`, `num.partitions`)
 
-This class depends on `connect-api` (with `provided` scope).
+This class depends on `org.apache.kafka:connect-api`.
 
 #### StrimziTestingConnectorConfig
 
@@ -50,36 +52,50 @@ A constants-only class that exposes the connectors configuration keys and class 
 
 ```java
 public final class StrimziTestingConnectorConfig {
-    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.container.StrimziTestingConnector";
+    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.connectors.StrimziTestingConnector";
     public static final String FAIL_ON_START = "fail.on.start";
     public static final String TASK_FAIL_ON_START = "task.fail.on.start";
     public static final String START_TIME_MS = "start.time.ms";
     public static final String STOP_TIME_MS = "stop.time.ms";
-    // ... 
+    // ...
 }
 ```
 
 This allows consumers (like the operator) to reference connector configuration without adding `connect-api` to their classpath.
 
+### Changes in test-container-images
+
+The built connector JARs from `strimzi/test-connectors` are bundled into the Kafka Connect test container images at build time.
+The JAR is placed at `/opt/kafka/plugins/<name>/` inside the image.
+
+### Changes in test-container
+
 #### StrimziConnectCluster builder addition
 
-A new builder method enables the testing connector:
+Two new builder methods enable testing connectors:
 
 ```java
 public StrimziConnectClusterBuilder withTestingConnector() { }
+public StrimziConnectClusterBuilder withTestingConnector(String name) { }
 ```
 
-When enabled, the connector JAR is automatically built and copied into the container at `/opt/kafka/plugins/strimzi-testing-connector/`, and `plugin.path` is configured accordingly.
+The no-arg overload defaults to the `StrimziTestingConnector` (i.e., source connector).
+The `String name` overload allows selecting a specific connector by name, which supports adding more connectors to `strimzi/test-connectors` in the future (e.g., a sink connector) without changing the builder API.
+
+When enabled, the `plugin.path` is configured to include `/opt/kafka/plugins/<connector-name>/`, where the pre-built connector JAR is already present in the image.
 
 ### Changes in strimzi-kafka-operator
 
-The main changes are removal of `ConnectCluster.java` and `TestingConnector.java`, which would be moved to the test-container.
-With that we would remove `org.apache.kafka:connect-runtime`, `org.apache.kafka:connect-file` and `org.apache.kafka:connect-api` from the operator repo.
-And eventually we update integration test where we replace in-process with new one (i.e., inside test-container).
+These changes happen after the test-connectors repo, test-container-images, and test-container changes are in place:
+
+1. Remove `ConnectCluster.java` and `TestingConnector.java` from the operator.
+2. Remove `org.apache.kafka:connect-runtime`, `org.apache.kafka:connect-file`, and `org.apache.kafka:connect-api` dependencies.
+3. Add a dependency on `strimzi/test-connectors` (just for `StrimziTestingConnectorConfig` and there will be no `connect-api` transitive dependency).
+4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withTestingConnector()`.
 
 ## Compatibility
 
-This adds new public API surface to test-container (`StrimziTestingConnector`, `StrimziTestingConnectorConfig`, and `withTestingConnector()` builder method), but it is strictly opt-in.
+This adds new public API surface to test-container (the `withTestingConnector()` builder method), but it is strictly opt-in.
 The testing connector is only included when the user explicitly calls `.withTestingConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
 
 On the operator side, the changes are test-only and do not affect any public APIs.
@@ -90,8 +106,23 @@ On the operator side, the changes are test-only and do not affect any public API
 
 The current approach works, but it introduces unnecessary dependencies that have already caused issues with CVEs.
 
+### Build the connector JAR at runtime
+
+An approach where the connector classes are extracted and assembled into a JAR at container startup (inside `containerIsStarting`) was prototyped.
+While functional, this requires hardcoding class file paths or implementing dynamic class matching rules, making it fragile and harder to maintain.
+Pre-building the JAR as part of a proper release lifecycle and bundling it into the image is cleaner.
+
+### Adopt the echo-sink connector
+
+The existing [echo-sink connector](https://github.com/scholzj/echo-sink) could be moved under the Strimzi organization.
+However, it would need delay and failure simulation features added to match the current `TestingConnector` capabilities.
+
+### Embed connector code in test-container
+
+Placing the connector source code directly in the test-container project would require building the connector JAR at runtime, since test-container does not produce container images itself.
+It is cleaner to keep the connector in a separate repository and bundle the pre-built JAR during the test-container-images build process instead.
+
 ### Add connect-api as a compile dependency in test-container
 
-The `StrimziTestingConnector` needs the Connect API to implement the `SourceConnector` interface.
-Making it a compile dependency would force all test-container consumers to pull in the Connect API even if they don't use it.
-Using `provided` scope keeps it optional, and `StrimziTestingConnectorConfig` gives consumers access to configuration constants without the dependency.
+Making `connect-api` a compile dependency would force all test-container consumers to pull in the Connect API even if they don't use it.
+A separate repository avoids this entirely.
