@@ -66,7 +66,7 @@ This allows consumers (like the operator) to reference connector configuration w
 ### Changes in test-container-images
 
 The built connector JARs from `strimzi/test-connectors` are bundled into the Kafka Connect test container images at build time.
-The JAR is placed at `/opt/kafka/plugins/<name>/` inside the image.
+The JAR is placed at `/opt/kafka/plugins/<connector-name>/` inside the image.
 
 ### Changes in test-container
 
