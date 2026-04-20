@@ -32,12 +32,15 @@ Other already mentioned point is that also shrinks the dependency tree and elimi
 ### New repository: strimzi/test-connectors
 
 Create a new repository under the Strimzi organization [`strimzi/test-connectors`](https://github.com/strimzi/test-connectors) to host Kafka Connect connectors used for testing purposes.
-This repository (i.) own independent release lifecycle (ii.) produces connector JARs as release artifacts and 
-(iii.) can host multiple test connectors in the future (e.g., source and sink connectors with different testing behaviors).
+This repository:
 
-#### StrimziTestingConnector
+- Owns an independent release lifecycle
+- Produces connector JARs as release artifacts
+- Can host multiple test connectors in the future (e.g., source and sink connectors with different testing behaviors)
 
-The initial connector is a source connector (moved from the operators `TestingConnector`) with configurable behavior:
+#### StrimziTestSourceConnector
+
+The initial connector is a source connector (moved from the operator's `TestingConnector`) with configurable fault-injection behavior:
 
 - Configurable startup/shutdown delays (`start.time.ms`, `stop.time.ms`, `task.start.time.ms`, `task.stop.time.ms`)
 - Configurable task poll behavior (`task.poll.time.ms`, `task.poll.records`)
@@ -46,13 +49,13 @@ The initial connector is a source connector (moved from the operators `TestingCo
 
 This class depends on `org.apache.kafka:connect-api`.
 
-#### StrimziTestingConnectorConfig
+#### StrimziTestSourceConnectorConfig
 
-A constants-only class that exposes the connectors configuration keys and class name **without** depending on the Kafka Connect API:
+A constants-only class that exposes the connector's configuration keys and class name **without** depending on the Kafka Connect API:
 
 ```java
-public final class StrimziTestingConnectorConfig {
-    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.connectors.StrimziTestingConnector";
+public final class StrimziTestSourceConnectorConfig {
+    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.connectors.StrimziTestSourceConnector";
     public static final String FAIL_ON_START = "fail.on.start";
     public static final String TASK_FAIL_ON_START = "task.fail.on.start";
     public static final String START_TIME_MS = "start.time.ms";
@@ -75,11 +78,11 @@ The JAR is placed at `/opt/kafka/plugins/<connector-name>/` inside the image.
 Two new builder methods enable testing connectors:
 
 ```java
-public StrimziConnectClusterBuilder withTestingConnector() { }
-public StrimziConnectClusterBuilder withTestingConnector(String name) { }
+public StrimziConnectClusterBuilder withTestConnector() { }
+public StrimziConnectClusterBuilder withTestConnector(String name) { }
 ```
 
-The no-arg overload defaults to the `StrimziTestingConnector` (i.e., source connector).
+The no-arg overload defaults to the `StrimziTestSourceConnector`.
 The `String name` overload allows selecting a specific connector by name, which supports adding more connectors to `strimzi/test-connectors` in the future (e.g., a sink connector) without changing the builder API.
 
 When enabled, the `plugin.path` is configured to include `/opt/kafka/plugins/<connector-name>/`, where the pre-built connector JAR is already present in the image.
@@ -90,13 +93,13 @@ These changes happen after the test-connectors repo, test-container-images, and 
 
 1. Remove `ConnectCluster.java` and `TestingConnector.java` from the operator.
 2. Remove `org.apache.kafka:connect-runtime`, `org.apache.kafka:connect-file`, and `org.apache.kafka:connect-api` dependencies.
-3. Add a dependency on `strimzi/test-connectors` (just for `StrimziTestingConnectorConfig` and there will be no `connect-api` transitive dependency).
-4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withTestingConnector()`.
+3. Add a dependency on `strimzi/test-connectors` (just for `StrimziTestSourceConnectorConfig` and there will be no `connect-api` transitive dependency).
+4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withTestConnector()`.
 
 ## Compatibility
 
-This adds new public API surface to test-container (the `withTestingConnector()` builder method), but it is strictly opt-in.
-The testing connector is only included when the user explicitly calls `.withTestingConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
+This adds new public API surface to test-container (the `withTestConnector()` builder method), but it is strictly opt-in.
+The testing connector is only included when the user explicitly calls `.withTestConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
 
 On the operator side, the changes are test-only and do not affect any public APIs.
 
