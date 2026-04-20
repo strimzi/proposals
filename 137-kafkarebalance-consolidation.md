@@ -11,7 +11,7 @@ The `KafkaRebalance` resource currently supports four distinct modes:
 - `full` - Rebalances across all brokers in the cluster.
 - `add-brokers` - Moves replicas to newly added brokers.
 - `remove-brokers` - Moves replicas out of brokers to be removed.
-- `remove-disks` - Moves data between JBOD volumes within the same broker.
+- `remove-disks` - Moves replicas off specified JBOD volumes of specified brokers so those volumes can be removed.
 
 Over time as new modes have been added the API has accumulated an increasing number of top-level fields, many of which are only applicable to specific modes. 
 The following table shows which `KafkaRebalanceSpec` parameters are supported by each mode based on the current operator implementation:
@@ -53,7 +53,7 @@ The motivation for this proposal stems from several factors:
 
 1. **Prevent API Debt**: As discussed in planning for future modes (like broker demotion support) we should not continue adding primitive fields to the top-level spec for every new mode.
 
-2. **Improve User Experience**: Users should be able to distinguish at a glance between what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoint or "modes" are tuned.
+2. **Improve User Experience**: Users should be able to distinguish at a glance between what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
 
 3. **Maintain Long-term API Sustainability**: The current trajectory will lead to a bloated and confusing API that becomes increasingly difficult to maintain and extend.
 
@@ -141,6 +141,9 @@ With the new structure, validation is split across two layers:
    - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `brokers` or `volumes` are provided but irrelevant to the selected mode.
 
 2. **Parameter field validation**:
+   - Strimzi does not pre-validate parameters entries.
+   They are passed as-is to the Cruise Control REST API.
+   If Cruise Control returns an error for an invalid or unsupported parameter, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and write a warning condition containing the error returned by Cruise Control.
    - Strimzi will write the error returned from Cruise Control REST API to the `KafkaRebalance` status when an invalid configuration parameter is used in conjunction with a specific rebalance "mode".
 
 ### Example Configurations
