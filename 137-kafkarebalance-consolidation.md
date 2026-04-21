@@ -1,9 +1,9 @@
 # Consolidating the KafkaRebalance API for extensibility
 
  This proposal addresses the increasing complexity and limited extensibility of the `KafkaRebalance` custom resource API. 
- It introduces a `spec.parameters` map that replaces mode-specific primitive fields with their upstream Cruise Control key-value equivalents allowing users to consult Cruise Control documentation directly and enabling support for new parameters without Strimzi API changes. 
+ It introduces a `spec.config` map that replaces mode-specific primitive fields with their upstream Cruise Control key-value equivalents allowing users to consult Cruise Control documentation directly and enabling support for new parameters without Strimzi API changes.
  It also replaces the action-specific `moveReplicasOffVolumes` field with a generic `volumes` field reusable by any mode that targets specific volumes on specific brokers. 
- These changes establish a clear separation between rebalance mode selection and tuning configuration preventing API sprawl as new modes are introduced. 
+ These changes establish a clear separation between rebalance mode selection and tuning configuration preventing API sprawl as new modes are introduced.
 
 ## Current situation
 
@@ -64,15 +64,15 @@ A generic `volumes` field allows these modes to reuse the existing targeting mec
 
 ### API Structure Redesign
 
-Consolidate auxiliary configuration fields into a new `spec.parameters` map keeping `mode`, `brokers`, and add a new `volumes` field at the top level of `spec`:
+Consolidate auxiliary configuration fields into a new `spec.config` map keeping `mode`, `brokers`, and add a new `volumes` field at the top level of `spec`:
 
 - `mode`: A string representing the rebalancing operation (e.g. `full`, `add-brokers`, `remove-brokers`, `remove-disks`)
 - `brokers`: a list of integers identifying the brokers the operation targets.
 - `volumes`: a list of objects, each containing a `brokerId` (integer) and `volumeIds` (list of integers), identifying the volumes the operation targets. 
 Replaces the current `moveReplicasOffVolumes` with an generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
-- `parameters`: a map replacing the existing primitive fields (`skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `goals`, `replicaMovementStrategies`) with their upstream Cruise Control key-value equivalents. 
-These primitive fields are the primary source of API sprawl. 
-Instead of maintaining Strimzi-specific field names, `parameters` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly. 
+- `config`: a map replacing the existing primitive fields (`skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `goals`, `replicaMovementStrategies`) with their upstream Cruise Control key-value equivalents.
+These primitive fields are the primary source of API sprawl.
+Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
 This eliminates the translation layer between Strimzi field names and Cruise Control parameters allowing users to consult Cruise Control documentation directly and allows new Cruise Control parameters to be supported without changes to the Strimzi API.
 
 #### Proposed API Structure
@@ -90,8 +90,8 @@ spec:
     - brokerId: 2
       volumeIds: [1]
 
-  # All auxiliary configurations consolidated under parameters
-  parameters:
+  # All auxiliary configurations consolidated under config
+  config:
     stop_ongoing_execution: "false"
 ```
 
@@ -105,8 +105,8 @@ For the case where this operand is used in conjunction with the `remove-disks` m
 This distinction will be documented as well.
 - `volumes` - List of broker/volume ID mappings for `remove-disks` and future volume-targeting modes (replaces `moveReplicasOffVolumes`)
 When this operand is used for modes where it is not relevant (e.g. `full`, `add-brokers`, or `remove-brokers`) an error is written in the status of the `KafkaRebalance` resource and warning is logged.
-- `parameters` - A map using upstream parameter names as specified by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs). 
-Here is a list of the parameters names that will replace the existing primitive fields that are used in the `KafkaRebalance` API today:
+- `config` - A map using upstream parameter names as specified by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs).
+Here is a list of the config keys that will replace the existing primitive fields that are used in the `KafkaRebalance` API today:
   - `goals` - Optimization goals (comma-separated string)
   - `skip_hard_goal_check` - Whether to skip hard goal checks
   - `excluded_topics` - Regex pattern for topics to exclude
@@ -119,8 +119,8 @@ Here is a list of the parameters names that will replace the existing primitive 
 
 ### Implementation Strategy
 
-1. **Introduce the new `parameters` map and `volumes` field** while maintaining backward compatibility:
-   - Accept both old top-level primitive fields and new `parameters` map.
+1. **Introduce the new `config` map and `volumes` field** while maintaining backward compatibility:
+   - Accept both old top-level primitive fields and new `config` map.
    - Accept both `moveReplicasOffVolumes` and `volumes` (mapped to the same internal representation)
    - If both old and new forms are provided, the new form takes precedence
    - Log deprecation warnings when old top-level primitive fields or `moveReplicasOffVolumes` are used
@@ -130,6 +130,10 @@ Here is a list of the parameters names that will replace the existing primitive 
 3. **Update examples** to show the usage of the deprecated and the new structure.
 
 4. **Add validation** that warns about mixing old and new structures.
+
+5. **Deprecate old fields and plan removal** Mark the old top-level primitive fields: `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`,
+  `replicationThrottle`, `replicaMovementStrategies` and `moveReplicasOffVolumes` as deprecated in the current API version.
+  These fields will be removed in the next API version.
 
 ### Validation Improvements
 
@@ -141,8 +145,8 @@ With the new structure, validation is split across two layers:
    - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `brokers` or `volumes` are provided but irrelevant to the selected mode.
 
 2. **Parameter field validation**:
-   - Strimzi does not pre-validate parameters entries.
-   They are passed as-is to the Cruise Control REST API.
+   - Strimzi won't pre-validate new config parameter entries.
+   Strimzi will pass the config parameters as-is to the Cruise Control REST API.
    If Cruise Control returns an error for an invalid or unsupported parameter, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and write a warning condition containing the error returned by Cruise Control.
    - Strimzi will write the error returned from Cruise Control REST API to the `KafkaRebalance` status when an invalid configuration parameter is used in conjunction with a specific rebalance "mode".
 
@@ -156,7 +160,7 @@ metadata:
   name: full-rebalance
 spec:
   mode: full
-  parameters:
+  config:
     goals: "CpuCapacityGoal, NetworkInboundCapacityGoal, DiskCapacityGoal"
     max_partition_movements_in_cluster: "100"
     concurrent_partition_movements_per_broker: "10"
@@ -169,7 +173,7 @@ metadata:
   name: full-rebalance
 spec:
   mode: full
-  parameters:
+  config:
     rebalance_disk: "true"
     goals: "IntraBrokerDiskCapacityGoal, IntraBrokerDiskUsageDistributionGoal"
     concurrent_intra_broker_partition_movements: "2"
@@ -184,7 +188,7 @@ metadata:
 spec:
   mode: add-brokers
   brokers: [3, 4]
-  parameters:
+  config:
     goals: "RackAwareGoal, ReplicaCapacityGoal"
     concurrent_partition_movements_per_broker: "10"
     replication_throttle: "20971520"
@@ -203,7 +207,7 @@ spec:
       volumeIds: [1, 2]
     - brokerId: 2
       volumeIds: [1]
-  parameters:
+  config:
     stop_ongoing_execution: "false"
 ```
 
@@ -224,12 +228,12 @@ The proposal maintains strict backward compatibility.
 Both old and new structures are supported:
 - Old top-level primitive fields reads as before, with deprecation warnings
 - `moveReplicasOffVolumes` is mapped internally to `volumes`
-- New `parameters` map and `volumes` field is used when present.
-- The `parameters` field takes precedence over deprecated top-level fields if both are present.
+- New `config` map and `volumes` field is used when present.
+- The `config` field takes precedence over deprecated top-level fields if both are present.
 
 ### Migration Examples
 
-**Tuning parameters move into `parameters` using upstream Cruise Control keys:**
+**Tuning parameters move into `config` using upstream Cruise Control keys:**
 ```yaml
 # Before (deprecated but supported)
 spec:
@@ -243,7 +247,7 @@ spec:
 spec:
   mode: add-brokers
   brokers: [3, 4]
-  parameters:
+  config:
     goals: "RackAwareGoal"
     concurrent_partition_movements_per_broker: "10"
 ```
@@ -273,4 +277,3 @@ spec:
 - Continues the problematic pattern
 - Makes the API increasingly difficult to understand and maintain
 - Does not scale well as more modes are added
-
