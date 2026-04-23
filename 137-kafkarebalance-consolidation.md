@@ -145,10 +145,19 @@ With the new structure, validation is split across two layers:
    - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `brokers` or `volumes` are provided but irrelevant to the selected mode.
 
 2. **Parameter field validation**:
-   - Strimzi won't pre-validate new config parameter entries.
-   Strimzi will pass the config parameters as-is to the Cruise Control REST API.
-   If Cruise Control returns an error for an invalid or unsupported parameter, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and write a warning condition containing the error returned by Cruise Control.
-   - Strimzi will write the error returned from Cruise Control REST API to the `KafkaRebalance` status when an invalid configuration parameter is used in conjunction with a specific rebalance "mode".
+   - Strimzi will filter config parameters that conflict with operator-managed functionality (e.g., `dryrun`, `json`, or `verbose`, check the [Filtered Parameters](#filtered-parameters) section below for an exhaustive list) in the same fashion it filters config options with "FORBIDDEN_PREFIXES" in other Strimzi CRDs, the parameter will be ignored and a warning will be logged.
+Supported config parameters will be passed as-is to the Cruise Control REST API.
+   - If Cruise Control returns an error for a config parameter whether due to an invalid value or an unknown key, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and surface the error in a warning condition on the resource's status.
+
+#### Filtered Parameters
+  | Parameter             | Why it is filtered |
+  |-----------------------|--------------------|
+  | `dryrun`              | Strimzi controls this via the rebalance state machine. Proposal generation vs. execution are separate states(`ProposalReady` -> `Rebalancing`) |
+  | `json`                | Hardcoded to `true` by Strimzi. Changing this would break response parsing. |
+  | `verbose`             | Changing verbosity could break status reporting. |
+  | `super_verbose`       | Same as `verbose`  |
+  | `brokerid`            | Managed via `spec.brokers` top-level field. |
+  | `brokerid_and_logdirs` | Managed via `spec.volumes` top-level field.|
 
 ### Example Configurations
 
