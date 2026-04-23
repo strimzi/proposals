@@ -75,17 +75,20 @@ The JAR is placed at `/opt/kafka/plugins/<connector-name>/` inside the image.
 
 #### StrimziConnectCluster builder addition
 
-Two new builder methods enable testing connectors:
+A dedicated builder method for each test connector:
 
 ```java
-public StrimziConnectClusterBuilder withTestConnector() { }
-public StrimziConnectClusterBuilder withTestConnector(String name) { }
+public StrimziConnectClusterBuilder withStrimziTestSourceConnector() { }
 ```
 
-The no-arg overload defaults to the `StrimziTestSourceConnector`.
-The `String name` overload allows selecting a specific connector by name, which supports adding more connectors to `strimzi/test-connectors` in the future (e.g., a sink connector) without changing the builder API.
+When a sink test connector is added in the future, a corresponding method is added:
+
+```java
+public StrimziConnectClusterBuilder withStrimziTestSinkConnector() { }
+```
 
 When enabled, the `plugin.path` is configured to include `/opt/kafka/plugins/<connector-name>/`, where the pre-built connector JAR is already present in the image.
+If in the future we need to support users plugging in their own custom connectors, a generic `withConnector(String name)` method could be added instead, but for the known set of Strimzi test connectors, dedicated methods are simpler and safer.
 
 ### Changes in strimzi-kafka-operator
 
@@ -94,12 +97,12 @@ These changes happen after the test-connectors repo, test-container-images, and 
 1. Remove `ConnectCluster.java` and `TestingConnector.java` from the operator.
 2. Remove `org.apache.kafka:connect-runtime`, `org.apache.kafka:connect-file`, and `org.apache.kafka:connect-api` dependencies.
 3. Add a dependency on `strimzi/test-connectors` (just for `StrimziTestSourceConnectorConfig` and there will be no `connect-api` transitive dependency).
-4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withTestConnector()`.
+4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withStrimziTestSourceConnector()`.
 
 ## Compatibility
 
-This adds new public API surface to test-container (the `withTestConnector()` builder method), but it is strictly opt-in.
-The testing connector is only included when the user explicitly calls `.withTestConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
+This adds new public API surface to test-container (the `withStrimziTestSourceConnector()` builder method), but it is strictly opt-in.
+The testing connector is only included when the user explicitly calls `.withStrimziTestSourceConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
 
 On the operator side, the changes are test-only and do not affect any public APIs.
 
