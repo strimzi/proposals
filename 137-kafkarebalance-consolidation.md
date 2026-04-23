@@ -1,9 +1,9 @@
 # Consolidating the KafkaRebalance API for extensibility
 
  This proposal addresses the increasing complexity and limited extensibility of the `KafkaRebalance` custom resource API. 
- It introduces a `spec.config` map that replaces mode-specific primitive fields with their upstream Cruise Control key-value equivalents allowing users to consult Cruise Control documentation directly and enabling support for new parameters without Strimzi API changes.
+ It introduces a `spec.config` map that replaces mode-specific primitive fields with their upstream Cruise Control key-value equivalents, allowing users to consult Cruise Control documentation directly and enabling support for new parameters without Strimzi API changes.
  It also replaces the action-specific `moveReplicasOffVolumes` field with a generic `volumes` field reusable by any mode that targets specific volumes on specific brokers. 
- These changes establish a clear separation between rebalance mode selection and tuning configuration preventing API sprawl as new modes are introduced.
+ These changes establish a clear separation between rebalance mode selection and tuning configuration, preventing API sprawl as new modes are introduced.
 
 ## Current situation
 
@@ -13,7 +13,7 @@ The `KafkaRebalance` resource currently supports four distinct modes:
 - `remove-brokers` - Moves replicas out of brokers to be removed.
 - `remove-disks` - Moves replicas off specified JBOD volumes of specified brokers so those volumes can be removed.
 
-Over time as new modes have been added the API has accumulated an increasing number of top-level fields, many of which are only applicable to specific modes. 
+Over time, as new modes have been added, the API has accumulated an increasing number of top-level fields, many of which are only applicable to specific modes. 
 The following table shows which `KafkaRebalanceSpec` parameters are supported by each mode based on the current operator implementation:
 
 | Parameter | `full` | `add-brokers` | `remove-brokers` | `remove-disks` | Notes                                       |
@@ -36,24 +36,24 @@ This information is only enforced at runtime in `KafkaRebalanceAssemblyOperator`
 
 ### Problems with the current approach
 
-1. **API Sprawl**: Each new mode requires adding new top-level fields making the API increasingly difficult to understand and maintain.
+1. **API Sprawl**: Each new mode requires adding new top-level fields, making the API increasingly difficult to understand and maintain.
 
-2. **Poor Field Organization**: Mode-specific and common fields are intermixed at the same level, making it unclear which fields apply to which mode without consulting documentation or implementation code.
+2. **Poor Field Organization**: Mode-specific and common fields are mixed at the same level, making it unclear which fields apply to which mode without consulting documentation or implementation code.
 
 3. **Documentation Burden**: As more modes are added, the documentation must explain increasingly complex field interdependencies and conditional requirements.
 
 4. **Future Mode Constraints**: Adding new modes becomes increasingly difficult as the top-level namespace becomes crowded with mode-specific fields.
 
-5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name making it unsuitable for reuse by future modes that target volumes for different purposes (e.g., broker demotion). 
+5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name, making it unsuitable for reuse by future modes that target volumes for different purposes (e.g., broker demotion). 
 This forces each new volume-related mode to introduce its own field.
 
 ## Motivation
 
 The motivation for this proposal stems from several factors:
 
-1. **Prevent API Debt**: As discussed in planning for future modes (like broker demotion support) we should not continue adding primitive fields to the top-level spec for every new mode.
+1. **Prevent API Debt**: As discussed in planning for future modes (like broker demotion support), we should not continue adding primitive fields to the top-level spec for every new mode.
 
-2. **Improve User Experience**: Users should be able to distinguish at a glance between what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
+2. **Improve User Experience**: Users should be able to distinguish at a glance what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
 
 3. **Maintain Long-term API Sustainability**: The current trajectory will lead to a bloated and confusing API that becomes increasingly difficult to maintain and extend.
 
@@ -64,16 +64,16 @@ A generic `volumes` field allows these modes to reuse the existing targeting mec
 
 ### API Structure Redesign
 
-Consolidate auxiliary configuration fields into a new `spec.config` map keeping `mode`, `brokers`, and add a new `volumes` field at the top level of `spec`:
+Consolidate auxiliary configuration fields into a new `spec.config` map, keeping `mode`, `brokers`, and adding a new `volumes` field at the top level of `spec`:
 
 - `mode`: A string representing the rebalancing operation (e.g. `full`, `add-brokers`, `remove-brokers`, `remove-disks`)
-- `brokers`: a list of integers identifying the brokers the operation targets.
-- `volumes`: a list of objects, each containing a `brokerId` (integer) and `volumeIds` (list of integers), identifying the volumes the operation targets. 
-Replaces the current `moveReplicasOffVolumes` with an generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
+- `brokers`: A list of integers identifying the brokers the operation targets.
+- `volumes`: A list of objects, each containing a `brokerId` (integer) and `volumeIds` (list of integers), identifying the volumes the operation targets. 
+Replaces the current `moveReplicasOffVolumes` field with a generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
 - `config`: a map replacing the existing primitive fields (`skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `goals`, `replicaMovementStrategies`) with their upstream Cruise Control key-value equivalents.
 These primitive fields are the primary source of API sprawl.
 Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
-This eliminates the translation layer between Strimzi field names and Cruise Control parameters allowing users to consult Cruise Control documentation directly and allows new Cruise Control parameters to be supported without changes to the Strimzi API.
+This removes the translation layer between Strimzi field names and Cruise Control parameters, allowing users to consult Cruise Control documentation directly and new Cruise Control parameters to be supported without changes to the Strimzi API.
 
 #### Proposed API Structure
 
@@ -100,13 +100,13 @@ spec:
 **Top-level `spec` fields** (mode selector, operands, and optimization configuration):
 - `mode` - The rebalancing mode (unchanged)
 - `brokers` - List of broker IDs for `add-brokers` and `remove-brokers` modes (unchanged).
-When this operand is used for modes where it is not relevant (e.g. `full` or `remove-disks`) an error is written in the status of the `KafkaRebalance` resource and warning is logged.
-For the case where this operand is used in conjunction with the `remove-disks` mode, where a brokers list could be relevant, the operator will note to use `volumes` instead in the error and log message.
+When this operand is used for modes where it is not relevant (e.g. `full` or `remove-disks`), an error is written in the status of the `KafkaRebalance` resource and a warning is logged.
+When this operand is used with the `remove-disks` mode, where a brokers list could be relevant, the operator will note to use `volumes` instead in the error and log message.
 This distinction will be documented as well.
 - `volumes` - List of broker/volume ID mappings for `remove-disks` and future volume-targeting modes (replaces `moveReplicasOffVolumes`)
-When this operand is used for modes where it is not relevant (e.g. `full`, `add-brokers`, or `remove-brokers`) an error is written in the status of the `KafkaRebalance` resource and warning is logged.
+When this operand is used for modes where it is not relevant (e.g. `full`, `add-brokers`, or `remove-brokers`), an error is written in the status of the `KafkaRebalance` resource and warning is logged.
 - `config` - A map using upstream parameter names as specified by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs).
-Here is a list of the config keys that will replace the existing primitive fields that are used in the `KafkaRebalance` API today:
+The following config keys will replace the primitive fields that are currently used in the `KafkaRebalance` API:
   - `goals` - Optimization goals (comma-separated string)
   - `skip_hard_goal_check` - Whether to skip hard goal checks
   - `excluded_topics` - Regex pattern for topics to exclude
@@ -152,7 +152,7 @@ With the new structure, validation is split across two layers:
 
 ### Example Configurations
 
-#### Example of a `full` inter-broker Rebalance
+#### Example of a `full` inter-broker rebalance
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -165,7 +165,7 @@ spec:
     max_partition_movements_in_cluster: "100"
     concurrent_partition_movements_per_broker: "10"
 ```
-#### Example of a `full` intra-broker (Disk) Rebalance
+#### Example of a `full` intra-broker (Disk) rebalance
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -179,7 +179,7 @@ spec:
     concurrent_intra_broker_partition_movements: "2"
 ```
 
-#### Example of an `add-brokers` Rebalance
+#### Example of an `add-brokers` rebalance
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -194,7 +194,7 @@ spec:
     replication_throttle: "20971520"
 ```
 
-#### Example of a `remove-disks` Rebalance
+#### Example of a `remove-disks` rebalance
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -226,9 +226,9 @@ This proposal affects only the Strimzi Cluster Operator.
 
 The proposal maintains strict backward compatibility. 
 Both old and new structures are supported:
-- Old top-level primitive fields reads as before, with deprecation warnings
+- Old top-level primitive fields read as before, with deprecation warnings
 - `moveReplicasOffVolumes` is mapped internally to `volumes`
-- New `config` map and `volumes` field is used when present.
+- The new `config` map and `volumes` field are used when present.
 - The `config` field takes precedence over deprecated top-level fields if both are present.
 
 ### Migration Examples
