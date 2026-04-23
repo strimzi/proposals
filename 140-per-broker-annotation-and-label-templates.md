@@ -1,6 +1,6 @@
 # Per-broker annotation and label templates for Kafka listeners
 
-This proposal adds listener-level templates for generating per-broker annotations and labels on Services, Routes, and Ingresses created for Kafka listeners.
+This proposal adds listener-level templates for generating per-broker annotations and labels on Services, Routes, Ingresses, and other per-broker listener resources created for Kafka listeners.
 
 ## Current situation
 
@@ -53,7 +53,7 @@ Examples include:
 
 * `external-dns.alpha.kubernetes.io/hostname: kafka-{nodeId}.example.com.`
 * `my-company.io/pod-name: {nodePodName}`
-* `topology.strimzi.io/broker-id: {nodeId}`
+* `my-company.io/broker-id: {nodeId}`
 
 Requiring users to repeat these values broker by broker has several drawbacks:
 
@@ -61,20 +61,21 @@ Requiring users to repeat these values broker by broker has several drawbacks:
 * copy-paste mistakes are easy to make
 * scaling up requires editing the listener configuration first
 * gaps in broker IDs make manual maintenance harder
-* users cannot express “same pattern for all brokers, override only one broker if needed” cleanly
+* users cannot express common per-broker defaults cleanly
 
-Strimzi already solved this problem for hostnames through `hostTemplate` and `advertisedHostTemplate`.
+Strimzi already solved a similar problem for hostnames through `hostTemplate` and `advertisedHostTemplate`.
 The same approach fits per-broker annotations and labels well.
 
 ## Proposal
 
 This proposal suggests adding two new listener-level fields under `spec.kafka.listeners[].configuration`:
 
-* `annotationsTemplate`
-* `labelsTemplate`
+* `perBrokerAnnotationsTemplate`
+* `perBrokerLabelsTemplate`
 
 Both fields will be maps of string keys to string values.
 They define default per-broker metadata that Strimzi renders for each broker resource.
+The `perBroker` prefix makes it clear that these templates do not apply to bootstrap resources.
 
 ### Template variables
 
@@ -97,12 +98,12 @@ spec:
         type: loadbalancer
         tls: true
         configuration:
-          annotationsTemplate:
+          perBrokerAnnotationsTemplate:
             external-dns.alpha.kubernetes.io/hostname: kafka-{nodeId}.example.com.
             my-company.io/pod-name: "{nodePodName}"
-          labelsTemplate:
-            strimzi.io/node-id: "{nodeId}"
-            strimzi.io/pod-name: "{nodePodName}"
+          perBrokerLabelsTemplate:
+            example.com/node-id: "{nodeId}"
+            example.com/pod-name: "{nodePodName}"
 ```
 
 For a node with ID `12` and pod name `my-cluster-brokers-12`, Strimzi would render:
@@ -112,8 +113,8 @@ annotations:
   external-dns.alpha.kubernetes.io/hostname: kafka-12.example.com.
   my-company.io/pod-name: my-cluster-brokers-12
 labels:
-  strimzi.io/node-id: "12"
-  strimzi.io/pod-name: my-cluster-brokers-12
+  example.com/node-id: "12"
+  example.com/pod-name: my-cluster-brokers-12
 ```
 
 ### Where the templates apply
@@ -123,22 +124,24 @@ They do not affect bootstrap resources.
 
 They should be used everywhere Strimzi currently consumes per-broker annotations and labels from listener configuration, namely:
 
-* per-broker `Service` resources
+* per-broker `Service` resources created for `loadbalancer`, `nodeport`, and `cluster-ip` listeners
 * per-broker `Route` resources
 * per-broker `Ingress` resources
+* per-broker `TLSRoute` resources, when that support is implemented
 
 Bootstrap metadata remains configured explicitly through `configuration.bootstrap.annotations` and `configuration.bootstrap.labels`.
 
 ### Conflict handling and precedence
 
-Users should be able to set a default pattern and still override specific brokers.
-So the precedence should be:
+Users should be able to define a common default while also having a simple way to fully customize specific brokers.
+To keep the behavior predictable and to allow users to omit values coming from the template, the precedence should be:
 
-1. render `annotationsTemplate` / `labelsTemplate`
-2. overlay `configuration.brokers[].annotations` / `configuration.brokers[].labels`
-3. use the merged result on the generated resource
+1. if `configuration.brokers[].annotations` is set for a broker, use it as the full annotation map for that broker
+2. otherwise, if `configuration.perBrokerAnnotationsTemplate` is set, render it for that broker
+3. if neither is set, use no broker annotations
+4. the same rule applies independently to labels using `configuration.brokers[].labels` and `configuration.perBrokerLabelsTemplate`
 
-This means broker-specific values always win over template-generated values.
+This avoids implicit merging behavior and gives users a clean escape hatch when a broker needs a completely different set of annotations or labels.
 
 For example:
 
@@ -151,12 +154,12 @@ spec:
         type: loadbalancer
         tls: true
         configuration:
-          annotationsTemplate:
+          perBrokerAnnotationsTemplate:
             external-dns.alpha.kubernetes.io/hostname: kafka-{nodeId}.example.com.
             external-dns.alpha.kubernetes.io/ttl: "60"
-          labelsTemplate:
+          perBrokerLabelsTemplate:
             dns.zone: primary
-            strimzi.io/node-id: "{nodeId}"
+            example.com/node-id: "{nodeId}"
           brokers:
             - broker: 1
               annotations:
@@ -175,7 +178,7 @@ annotations:
   external-dns.alpha.kubernetes.io/ttl: "60"
 labels:
   dns.zone: primary
-  strimzi.io/node-id: "0"
+  example.com/node-id: "0"
 ```
 
 * broker `1`
@@ -183,13 +186,12 @@ labels:
 ```yaml
 annotations:
   external-dns.alpha.kubernetes.io/hostname: special-broker.example.com.
-  external-dns.alpha.kubernetes.io/ttl: "60"
 labels:
   dns.zone: secondary
-  strimzi.io/node-id: "1"
 ```
 
-This behavior is more flexible than using the template only when the per-broker map is completely absent.
+In this model, broker `1` does not inherit the template-generated TTL annotation or `example.com/node-id` label because the broker-specific maps are treated as the complete configuration for that broker.
+This makes it possible to omit values that would otherwise be inherited from the template.
 
 ### API and implementation details
 
@@ -199,8 +201,8 @@ The implementation would be additive and aligned with the existing listener temp
 
 In `GenericKafkaListenerConfiguration`, add:
 
-* `Map<String, String> annotationsTemplate`
-* `Map<String, String> labelsTemplate`
+* `Map<String, String> perBrokerAnnotationsTemplate`
+* `Map<String, String> perBrokerLabelsTemplate`
 
 These fields should be documented similarly to `hostTemplate` and `advertisedHostTemplate`, including the supported placeholders.
 
@@ -210,8 +212,8 @@ These fields should be documented similarly to `hostTemplate` and `advertisedHos
 These helpers should be extended to:
 
 * render the template maps for the current `NodeRef`
-* merge rendered template values with explicit broker values
-* keep explicit broker values as the winner on key conflicts
+* return explicit broker-level annotations or labels when they are configured
+* fall back to the rendered template only when the broker-specific map is absent
 
 A practical implementation would:
 
@@ -227,9 +229,10 @@ Therefore the feature can be implemented centrally without duplicating logic in 
 
 The affected generated resources are:
 
-* per-broker external services
+* per-broker services for external and `cluster-ip` listeners
 * per-broker routes
 * per-broker ingresses
+* per-broker TLSRoutes when implemented
 
 #### Validation changes
 
@@ -241,7 +244,7 @@ Unknown placeholder text can remain unchanged.
 
 ### Examples
 
-#### Example 1: LoadBalancer listener with annotation and label templates
+#### Example 1: LoadBalancer listener with per-broker annotation and label templates
 
 ```yaml
 spec:
@@ -255,12 +258,12 @@ spec:
           bootstrap:
             annotations:
               external-dns.alpha.kubernetes.io/hostname: kafka-bootstrap.example.com.
-          annotationsTemplate:
+          perBrokerAnnotationsTemplate:
             external-dns.alpha.kubernetes.io/hostname: kafka-{nodeId}.example.com.
             external-dns.alpha.kubernetes.io/ttl: "60"
-          labelsTemplate:
+          perBrokerLabelsTemplate:
             app.kubernetes.io/component: kafka-broker-lb
-            strimzi.io/node-id: "{nodeId}"
+            example.com/node-id: "{nodeId}"
 ```
 
 This removes the need to list every broker separately while keeping bootstrap configuration explicit.
@@ -280,15 +283,15 @@ spec:
             secretName: my-certificate
             certificate: tls.crt
             key: tls.key
-          annotationsTemplate:
-            gateway.strimzi.io/backend-pod: "{nodePodName}"
-          labelsTemplate:
-            gateway.strimzi.io/node-id: "{nodeId}"
+          perBrokerAnnotationsTemplate:
+            gateway.example.com/backend-pod: "{nodePodName}"
+          perBrokerLabelsTemplate:
+            gateway.example.com/node-id: "{nodeId}"
 ```
 
 This is useful when another networking layer consumes per-broker service metadata.
 
-#### Example 3: Use template defaults and override one broker
+#### Example 3: Use template defaults and fully override one broker
 
 ```yaml
 spec:
@@ -299,10 +302,12 @@ spec:
         type: nodeport
         tls: true
         configuration:
-          annotationsTemplate:
+          perBrokerAnnotationsTemplate:
             external-dns.alpha.kubernetes.io/hostname: kafka-{nodeId}.example.com.
-          labelsTemplate:
+            external-dns.alpha.kubernetes.io/ttl: "60"
+          perBrokerLabelsTemplate:
             exposure-type: standard
+            example.com/node-id: "{nodeId}"
           brokers:
             - broker: 5
               annotations:
@@ -311,6 +316,7 @@ spec:
                 exposure-type: premium
 ```
 
+Because broker `5` defines explicit annotations and labels, it does not inherit any template-provided metadata.
 This keeps the common case short while preserving precise control where needed.
 
 ## Affected/not affected projects
@@ -321,6 +327,7 @@ Affected:
 * `strimzi-kafka-operator` Cluster Operator listener validation and resource generation
 * generated CRD documentation for listener configuration
 * user-facing listener documentation
+* future `TLSRoute` support for listeners
 
 Not affected:
 
@@ -340,11 +347,15 @@ This proposal is fully backwards compatible.
 
 ## Rejected alternatives
 
-### Apply templates only when `brokers[].annotations` or `brokers[].labels` are absent
+### Using shorter names such as `annotationsTemplate` and `labelsTemplate`
 
-This was rejected because it makes partial overrides awkward.
-Users often want a common default plus a targeted override for one broker.
-Merging template values first and then overlaying explicit broker metadata is more useful.
+These names are shorter, but they do not make it sufficiently clear that the template applies only to per-broker resources and not to bootstrap resources.
+Using `perBrokerAnnotationsTemplate` and `perBrokerLabelsTemplate` makes the scope explicit.
+
+### Merging template values with broker-specific annotations and labels
+
+This was rejected because it makes it difficult for users to omit labels or annotations that come from the template.
+Treating `brokers[].annotations` and `brokers[].labels` as the complete per-broker configuration is simpler and gives users a clear way to replace the templated defaults.
 
 ### Support templating of metadata keys as well as values
 
