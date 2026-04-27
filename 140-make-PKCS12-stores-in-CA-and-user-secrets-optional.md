@@ -51,9 +51,11 @@ It will default to `true`.
 In this state, the operators will continue to create and manage the PKCS12 stores in the CA and user Secrets.
 When set to `false` by the user, Cluster and User Operators skip PKCS12 generation.
 CA and user Secrets are created without PKCS12 stores or passwords.
+And the PKCS12 stores and passwords will be automatically removed from any existing Secrets.
 
 The Cluster Operator will automatically propagate the `STRIMZI_PKCS12_KEYSTORE_GENERATION` configuration to the User Operator deployed as part of a Kafka cluster.
 So when `STRIMZI_PKCS12_KEYSTORE_GENERATION` is set to `false` by the user in the Cluster Operator, it will automatically be set to `false` in the User Operator as well.
+Users using standalone User Operator will need to configure this environment variable in the User Operator themselves.
 
 ## Out of scope
 
