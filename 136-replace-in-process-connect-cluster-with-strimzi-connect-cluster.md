@@ -24,7 +24,7 @@ The operator can use this directly instead of maintaining its own in-process imp
 ## Motivation
 
 The main motivation is that it removes unnecessary dependencies (i.e., three Connect libraries are only used by two test classes).
-And with that it also reduce overall maintenance for us having both in-memory nad container variant.
+And with that it also reduce overall maintenance for us having both in-memory and container variant.
 Other already mentioned point is that also shrinks the dependency tree and eliminates a recurring source of CVE-related upgrade blockers.
 
 ## Proposal
@@ -38,7 +38,7 @@ This repository:
 - Produces connector JARs as release artifacts
 - Can host multiple test connectors in the future (e.g., source and sink connectors with different testing behaviors)
 
-#### StrimziTestSourceConnector
+#### StrimziFaultInjectionSourceConnector
 
 The initial connector is a source connector (moved from the operator's `TestingConnector`) with configurable fault-injection behavior:
 
@@ -49,13 +49,13 @@ The initial connector is a source connector (moved from the operator's `TestingC
 
 This class depends on `org.apache.kafka:connect-api`.
 
-#### StrimziTestSourceConnectorConfig
+#### StrimziFaultInjectionSourceConnectorConfig
 
 A constants-only class that exposes the connector's configuration keys and class name **without** depending on the Kafka Connect API:
 
 ```java
-public final class StrimziTestSourceConnectorConfig {
-    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.connectors.StrimziTestSourceConnector";
+public final class StrimziFaultInjectionSourceConnectorConfig {
+    public static final String CONNECTOR_CLASS_NAME = "io.strimzi.test.connectors.StrimziFaultInjectionSourceConnector";
     public static final String FAIL_ON_START = "fail.on.start";
     public static final String TASK_FAIL_ON_START = "task.fail.on.start";
     public static final String START_TIME_MS = "start.time.ms";
@@ -78,13 +78,13 @@ The JAR is placed at `/opt/kafka/plugins/<connector-name>/` inside the image.
 A dedicated builder method for each test connector:
 
 ```java
-public StrimziConnectClusterBuilder withStrimziTestSourceConnector() { }
+public StrimziConnectClusterBuilder withStrimziFaultInjectionSourceConnector() { }
 ```
 
 When a sink test connector is added in the future, a corresponding method is added:
 
 ```java
-public StrimziConnectClusterBuilder withStrimziTestSinkConnector() { }
+public StrimziConnectClusterBuilder withStrimziFaultInjectionSinkConnector() { }
 ```
 
 When enabled, the `plugin.path` is configured to include `/opt/kafka/plugins/<connector-name>/`, where the pre-built connector JAR is already present in the image.
@@ -96,13 +96,13 @@ These changes happen after the test-connectors repo, test-container-images, and 
 
 1. Remove `ConnectCluster.java` and `TestingConnector.java` from the operator.
 2. Remove `org.apache.kafka:connect-runtime`, `org.apache.kafka:connect-file`, and `org.apache.kafka:connect-api` dependencies.
-3. Add a dependency on `strimzi/test-connectors` (just for `StrimziTestSourceConnectorConfig` and there will be no `connect-api` transitive dependency).
-4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withStrimziTestSourceConnector()`.
+3. Add a dependency on `strimzi/test-connectors` (just for `StrimziFaultInjectionSourceConnectorConfig` and there will be no `connect-api` transitive dependency).
+4. Update `KafkaConnectApiIT` and `KafkaConnectorIT` to use `StrimziConnectCluster` with `.withStrimziFaultInjectionSourceConnector()`.
 
 ## Compatibility
 
-This adds new public API surface to test-container (the `withStrimziTestSourceConnector()` builder method), but it is strictly opt-in.
-The testing connector is only included when the user explicitly calls `.withStrimziTestSourceConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
+This adds new public API surface to test-container (the `withStrimziFaultInjectionSourceConnector()` builder method), but it is strictly opt-in.
+The testing connector is only included when the user explicitly calls `.withStrimziFaultInjectionSourceConnector()` on the builder (i.e., the default behavior of `StrimziConnectCluster` remains unchanged).
 
 On the operator side, the changes are test-only and do not affect any public APIs.
 
