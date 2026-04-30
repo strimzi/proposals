@@ -41,18 +41,11 @@ If set to an address starting with `https://`, the Metrics Reporter will use an 
 If set to an address starting with `http://`, the Metrics Reporter will use a plain HTTP server.
 Only one protocol can be active at a time.
 
-#### PEM file path configuration
-
-The certificate and key can be provided as paths to PEM files on disk:
+#### SSL certificate and key configuration
 
 - `prometheus.metrics.reporter.listener.ssl.certificate.location`: The path to the PEM file containing the server certificate or certificate chain.
 - `prometheus.metrics.reporter.listener.ssl.key.location`: The path to the PEM file containing the private key.
-
-#### Inlined PEM configuration
-
-Alternatively, the certificate and key can be provided inline as PEM-encoded strings:
-
-- `prometheus.metrics.reporter.listener.ssl.certificate.chain`: The server certificate or certificate chain in PEM format, provided as an inline string.
+- `prometheus.metrics.reporter.listener.ssl.certificate`: The server certificate or certificate chain in PEM format, provided as an inline string.
 - `prometheus.metrics.reporter.listener.ssl.key`: The private key in PEM format, provided as an inline string.
 
 If both file path and inline configurations are provided, the inline configuration takes precedence.
@@ -70,7 +63,7 @@ The metrics reporter currently uses the Prometheus `HTTPServer` from the `io.pro
 When the listener is configured with `https://`, the `HTTPServer.Builder` will be configured with an `HttpsConfigurator` to serve metrics over HTTPS.
 This will involve:
 1. Loading the certificate and private key from PEM files or inline PEM content.
-2. Initializing an `SSLContext` with the loaded key material.
+2. Initializing an `SSLContext` with the loaded key materials.
 3. Configuring the HTTPS server to use the SSL context for secure communication.
 
 If SSL is misconfigured (e.g. missing certificate, unreadable PEM file, mismatched key), the Metrics Reporter will fail to start with a clear and descriptive error message.
