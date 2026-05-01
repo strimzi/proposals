@@ -55,7 +55,7 @@ Examples include:
 * `my-company.io/pod-name: {nodePodName}`
 * `my-company.io/broker-id: {nodeId}`
 
-Requiring users to repeat these values broker by broker has several drawbacks:
+Requiring users to repeat these values for each broker has several drawbacks:
 
 * the `Kafka` custom resource becomes unnecessarily long
 * copy-paste mistakes are easy to make
@@ -138,7 +138,7 @@ To keep the behavior predictable and to allow users to omit values coming from t
 
 1. if `configuration.brokers[].annotations` is set for a broker, use it as the full annotation map for that broker
 2. otherwise, if `configuration.perBrokerAnnotationsTemplate` is set, render it for that broker
-3. if neither is set, use no broker annotations
+3. if neither is set, do not apply broker annotations
 4. the same rule applies independently to labels using `configuration.brokers[].labels` and `configuration.perBrokerLabelsTemplate`
 
 This avoids implicit merging behavior and gives users a clean escape hatch when a broker needs a completely different set of annotations or labels.
@@ -340,7 +340,7 @@ Not affected:
 
 This proposal is fully backwards compatible.
 
-* Existing configurations using only `brokers[].annotations` and `brokers[].labels` continue to work unchanged.
+* Existing configurations using `brokers[].annotations` and `brokers[].labels` continue to work unchanged.
 * Existing bootstrap metadata configuration is unchanged.
 * The change is additive and introduces no breaking API behavior.
 * Users can adopt the templates gradually.
