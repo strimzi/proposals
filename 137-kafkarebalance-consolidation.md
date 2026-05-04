@@ -38,7 +38,7 @@ This information is only enforced at runtime in `KafkaRebalanceAssemblyOperator`
 
 1. **API Sprawl**: Each new mode requires adding new top-level fields, making the API increasingly difficult to understand and maintain.
 
-2. **Poor Field Organization**: Mode-specific and common fields are mixed at the same level, making it unclear which fields apply to which mode without consulting documentation or implementation code.
+2. **Poor Field Organization**: Mode-specific and common fields are mixed at the same level, making it unclear which fields apply to which mode without consulting the upstream Cruise Control documentation or implementation code.
 
 3. **Documentation Burden**: As more modes are added, the documentation must explain increasingly complex field interdependencies and conditional requirements.
 
@@ -122,7 +122,7 @@ The following config keys will replace the primitive fields that are currently u
 1. **Introduce the new `config` map and `volumes` field** while maintaining backward compatibility:
    - Accept both old top-level primitive fields and new `config` map.
    - Accept both `moveReplicasOffVolumes` and `volumes` (mapped to the same internal representation)
-   - If both old and new forms are provided, the new form takes precedence
+   - If both old and new forms are provided, the new form takes precedence and a warning will be logged that the old form is ignored in favor of the new form.
    - Log deprecation warnings when old top-level primitive fields or `moveReplicasOffVolumes` are used
 
 2. **Update documentation** to promote the new structure while documenting the old structure as deprecated.
@@ -223,7 +223,25 @@ spec:
 ### Future Extensibility
 
 This structure enables cleaner additions for future modes. 
-The top-level operand fields (`brokers`, `volumes`) provide a stable, reusable targeting mechanism and allow supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API. One example of this would be to add broker demotion support.
+The top-level operand fields (`brokers`, `volumes`) provide a stable, reusable targeting mechanism and allow supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API.
+One example of this would be to add broker demotion support.
+
+With the proposed API, such a feature could look like this:
+
+#### Example of a `demote-brokers` rebalance
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaRebalance
+metadata:
+  name: demote-brokers-example
+spec:
+  mode: demote-brokers
+  brokers:
+    - 3
+    - 4
+  config:
+    exclude_recently_demoted_brokers: "true"
+```
 
 ## Affected/not affected projects
 
