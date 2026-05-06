@@ -5,7 +5,7 @@ This would allow for exporting metrics over HTTPS.
 
 ## Current situation
 
-The current metrics reporter in Strimzi does not support SSL.
+The Strimzi Metrics Reporter currently does not support SSL.
 This means that metrics are exported over HTTP.
 This can be a security concern in some environments, as it allows for potential interception of sensitive data.
 
