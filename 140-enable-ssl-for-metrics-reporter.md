@@ -12,7 +12,7 @@ This can be a security concern in some environments, as it allows for potential 
 ## Motivation
 
 Enabling SSL for the Metrics Reporter would provide an additional layer of security for users who need to export metrics over HTTPS.
-This would allow for secure communication between the Metrics Reporter and any monitoring tools that are consuming the metrics, such as Prometheus or Grafana.
+This would allow for secure communication between the Metrics Reporter and any monitoring tools that are consuming the metrics, such as Prometheus.
 Additionally, it would align with best practices for securing data in transit, especially in environments where sensitive information may be included in the metrics.
 
 ## Proposal
