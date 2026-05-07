@@ -66,7 +66,7 @@ One of the later sections describes examples of Gatekeeper plugins that users mi
 
 Gatekeeper plugins would be invoked at the beginning and at the end of the reconciliation, controlling entry to and exit from that reconciliation.
 When reconciliation starts, the custom resource being reconciled would be passed to the _entry_ method of the Gatekeeper plugin.
-When reconciliation completes, whether successfully or with an error, the result and the updated custom resource(s), including status, would be passed to the _exit_ method of the Gatekeeper plugins.
+When reconciliation completes, whether successfully or with an error, the result and the updated custom resource(s), including status, would be passed to the _exit_ method of the Gatekeeper plugins.)
 
 There would be two types of Gatekeeper plugins:
 * Validating plugins
@@ -77,15 +77,95 @@ But they would not be able to modify the custom resource(s) and/or their status.
 
 The mutating plugins would be able to fail the reconciliation by raising an error.
 They would also be able to modify the custom resource(s) before the reconciliation starts or modify their status when the reconciliation ends.
-These modifications would of course need to follow the Strimzi API.
+
+The modifications done to the custom resource in the _entry_ method will be internal only and will be used only within the same reconciliation.
+The updated resources would not be updated in the Kubernetes API and the changes done by the plugin would not be stored anywhere.
+The changes will also not be visible to other applications through the Kubernetes API.
+As a result, the plugins would need to apply the changes to the custom resource at every invocation.
+_(This is similar to how virtual node pools were used during migration to node pools or how Connect and MirrorMaker2 custom resources were modified internally during migration from the `v1beta2` to `v1` APIs.)_
+
+For example:
+* User creates a `Kafka` CR with the following configuration:
+  ```yaml
+  apiVersion: kafka.strimzi.io/v1
+  kind: Kafka
+  metadata:
+    name: my-cluster
+  spec:
+    kafka:
+      # ...
+  ```
+* A TLSv1.3 enforcer implemented as mutating plugin would inject into it TLSv1.3 configuration in its _entry_ method:
+  ```yaml
+  apiVersion: kafka.strimzi.io/v1
+  kind: Kafka
+  metadata:
+    name: my-cluster
+  spec:
+    kafka:
+      config:
+        ssl.protocol: TLSv1.3
+        ssl.enabled.protocols: TLSv1.3
+      # ...
+  ```
+* This modified resource would be used for the reconciliation.
+  However, it would never be stored to the Kubernetes API in this form and other users using the Kubernetes API would never see it in this form.
+
+Modifications done by the _exit_ methods to the `.status` section of the custom resource would be persisted to the Kubernetes API and visible to users and other applications.
+However, Strimzi cleans up the `.status` section during the reconciliation.
+So the plugins might need to update the status in the same way in every reconciliation as well.
+
+For example:
+* A `Kafka` CR was reconciled and is Ready:
+  ```yaml
+  apiVersion: kafka.strimzi.io/v1
+  kind: Kafka
+  metadata:
+    name: my-cluster
+  spec:
+    # ...
+  status:
+    conditions: 
+      - lastTransitionTime: "2019-08-20T11:37:00.706Z"
+        status: "True"
+        type: Ready
+  ```
+* A Security helper implemented as mutating plugin would inject a warning condition in its _exit_ method:
+  ```yaml
+  apiVersion: kafka.strimzi.io/v1
+  kind: Kafka
+  metadata:
+    name: my-cluster
+  spec:
+    # ...
+  status:
+    conditions: 
+      - lastTransitionTime: "2019-08-20T11:37:00.706Z"
+        status: "True"
+        type: Ready
+      - lastTransitionTime: "2019-08-20T11:37:00.706Z"
+        status: "True"
+        type: Warning
+        message: "Listener plain does not have TLS encryption enabled"
+  ```
+* This modified resource (its `.status` section) would be stored in the Kubernetes API.
+  Users and other tools querying the Kubernetes API would see the warning message.
+
+All modifications - regardless whether in the _entry_ or _exit_ methods - would of course also need to follow the Strimzi API.
 The plugins would not be able to add any new fields.
-Any modifications made by the plugin would be internal only.
-They would not be persisted into the Kubernetes API.
-They would only be used within a given reconciliation, similarly to how virtual node pools were used during migration to node pools or how Connect and MirrorMaker2 custom resources were modified internally during migration from the `v1beta2` to `v1` APIs.
 
 Each plugin would be allowed to implement the _entry_ and _exit_ methods for one or more custom resources.
 That would allow us to write plugins that, for example, apply only to `Kafka` resources.
 Or plugins that want to gate all custom resources.
+
+
+
+#### Error handling
+
+An error raised by the plugin in its _entry_ method will be treated as any other reconciliation failure.
+The exact error will be added to the status section of the custom resource and reported in the operator logs.
+It would also trigger the _exit_ methods of all the Gatekeeper plugins.
+This applies to both unexpected errors due to some bug or issue as well as to the resource being rejected by a (validating) plugin.
 
 ### Implementation
 
@@ -122,8 +202,11 @@ When using standalone Topic or User operators, users can set these variables in 
 
 The plugins will be configured only on a per-operator basis.
 They will not support any direct configuration on a per-custom resource basis.
-However, plugins can easily skip some resources based on an annotation.
-For example, a custom resource with the annotation `my-gatekeeper-plugin.scholz.cz/skip=true` can be used to tell the plugin to skip this custom resource.
+However, plugins (their authors) can for example decide to provide an option to skip some resources based on an annotation.
+For example, a plugin `MyGateKeeperPlugin` can check for an annotation such as `my-gatekeeper-plugin.scholz.cz/skip=true` and decide based on it whether to take any action or not.
+
+However, this is something that needs to be decided on a plugin by plugin basis by their authors.
+There will be now general way to skip the plugins that would be provided by Strimzi and allow skipping all plugins.
 
 #### Ordering
 
@@ -142,6 +225,32 @@ At reconciliation _exit_, they will always be called in the following order:
 
 Within each plugin group, the plugins will be invoked in the reverse order specified by the user or by the Strimzi source code.
 
+![Plugins wrapping the reconciliation](./images/141-Strimzi-Gatekeeper-plugins-system-onion-wrapping.svg)
+
+The plugins are _wrapping_ the reconciliation.
+So the reverse order at _exit_ naturally corresponds to this.
+It also helps to ensure that our mandatory plugins are always executed closest to the reconciliation.
+
+#### Example
+
+The following diagram shows the Strimzi reconciliation flow with the Gatekeeper plugins:
+
+1. When a custom resource is created or updated, Kubernetes triggers Strimzi operator through a watch and sends it the Custom Resource A (CR)
+2. Strimzi reconciliation starts with the invocation of the Gatekeeper plugins
+3. The CR (A) is passed to first plugin, which in this case is mutating plugin
+4. The plugin modifies the CR (A) and returns it back to Strimzi as CR (B)
+5. Strimzi takes the CR (B) and passes it to the next plugin
+6. In this case a validating plugin which returns only a success or an error after validating the CR (B)
+7. The CR (B) is passed to the regular Strimzi reconciliaiton process which manages given operand accordingly
+8. At the end, when the core Strimzi reconciliation is completed, Strimzi prepares the new `.status` section and together with the rest of the custom resource invokes with it the plugins as CR (C)
+9. It is first passed to the plugin 2
+10. Validating plugin 2 does not change it and only returns success or failure
+11. Next it passes it to the plugin 1
+12. Mutating plugin modifies the `.status` section (e.g. add a warning condition) and return CR (D)
+13. Strimzi uses the `.status` section from CR (D) and updates it in the Kubernetes API server
+
+![Strimzi reconciliation flow](./images/141-Strimzi-Gatekeeper-plugins-system-invocation.svg)
+
 #### Plugin interfaces
 
 The Gatekeeper plugins would be defined through a series of interfaces.
@@ -152,11 +261,11 @@ As a parameter, it would accept a `GatekeeperPluginConfigurationContext` record.
 Initially, the context would contain an instance of the Fabric8 Kubernetes client and an instance of the Strimzi `PlatformFeatures` class describing the environment in which the operator is running.
 The `configure(...)` method would return `void`.
 
-There would also be two additional interfaces per assembly operator:
-* Mutating plugin interface named `GatekeeperMutating<Type>Plugin` (e.g. `GatekeeperMutatingKafkaPlugin` or `GatekeeperMutatingKafkaBridgePlugin`)
-* Validating plugin interface named `GatekeeperValidating<Type>Plugin` (e.g. `GatekeeperValidatingKafkaPlugin` or `GatekeeperValidatingKafkaBridgePlugin`)
+There would also be two additional interfaces per each supported operand type:
+* Mutating plugin interface named `GatekeeperMutating<OperandType>Plugin` (e.g. `GatekeeperMutatingKafkaPlugin` or `GatekeeperMutatingKafkaBridgePlugin`)
+* Validating plugin interface named `GatekeeperValidating<OperandType>Plugin` (e.g. `GatekeeperValidatingKafkaPlugin` or `GatekeeperValidatingKafkaBridgePlugin`)
 
-Plugins would exist for the following types:
+Plugins would exist for the following operand types:
 * `Kafka` (handles both `Kafka` and `KafkaNodePool` resources)
 * `KafkaConnect` (handles both `KafkaConnect` and `KafkaConnector` resources)
 * `KafkaMirrorMaker2`
@@ -165,7 +274,11 @@ Plugins would exist for the following types:
 * `KafkaUser`
 * `KafkaTopic`
 
-At least initially, there would be no plugin for `StrimziPodSet` resources.
+At least initially, there would be no plugin support for `StrimziPodSet` resources.
+`StrimziPodSet` resources are internal resources only and are not exposed to Strimzi users.
+They also serve a very simple purpose - to create the Pods.
+And if needed, any modifications to the Pods can be easily done also through Kubernetes's own mechanisms.
+However, this can be reconsidered in the future if we see some demand and use-cases for it.
 
 Each interface would have two methods:
 * `<Type>Entry` (e.g. `kafkaEntry`) called at the beginning of the reconciliation
@@ -262,6 +375,8 @@ For example:
 * **Pre/Post update hooks:** Execute custom tasks before or after the operator or operand is upgraded.
   While we currently do not have any specific use case, such a feature might be useful in the future.
 * **Access Operator alternative:** A validating Gatekeeper plugin for `Kafka` and `KafkaUser` could be used to copy cluster or user information into different namespaces or clusters.
+  The plugin would wait for the reconciliation to complete and in the _exit_ method it would distribute the credentials or cluster coordinates to places defined in annotation.
+  _(Included as an example only - the actual replacement of Access Operator by a Gatekeeper plugin would require a separate proposal.)_
 * **Help with backward compatibility tasks.**
   For example by translating old annotations to new annotations ([#12342](https://github.com/strimzi/strimzi-kafka-operator/issues/12342)).
   Or by rewriting the resources to use new instead of old APIs internally (such as when changing from `v1beta2` to `v1` API).
@@ -317,6 +432,9 @@ To mitigate these issues, we should make sure that:
 This approach could also improve supportability.
 For example, a plugin could log the full custom resource at the beginning of reconciliation.
 
+While we could provide also some additional mitigation measured such as hardcoded execution timeout, it might lead to limiting the possible applications of the plugins.
+So it is better to rely on the responsibility of the plugin authors and users.
+
 ### Cross-version support
 
 The Gatekeeper plugins should be able to work across multiple Strimzi versions without updates.
@@ -340,6 +458,8 @@ The initial implementation would include the following plugins:
   This plugin will be enabled by default as a _default_ plugin and will replace the related Cluster Operator functionality.
 * **3scale discovery labels plugin:** would inject the 3scale discovery labels into the `KafkaBridge` resource.
   This plugin will be enabled by default as a _default_ plugin and will replace the related Cluster Operator functionality.
+
+The existing functionality these plugin would replace is relatively simple and moving it to the plugins should constitute a minimal risk.
 
 ## Future plans
 
