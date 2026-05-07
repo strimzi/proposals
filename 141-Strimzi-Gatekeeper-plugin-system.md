@@ -4,9 +4,9 @@ This proposal suggests introducing a new plugin system called _Gatekeeper_.
 
 ## Current situation
 
-Strimzi currently supports only one type of plugin: Pod Security Providers.
-The Pod Security Provider plugins can be used to inject security context for the various containers deployed by the Strimzi Cluster Operator.
-The Pod security providers are called directly from the Cluster Operator methods that generate the containers.
+Strimzi currently supports only one type of plugin: Pod Security Provider plugins.
+The Pod Security Provider plugins can be used to inject security contexts into the containers deployed by the Strimzi Cluster Operator.
+The Pod Security Provider plugins are called directly from the Cluster Operator methods that generate containers.
 Strimzi users can use the built-in providers or provide their own custom provider.
 
 ## Motivation
@@ -21,13 +21,13 @@ While the Pod Security Provider plugins are useful, their design is not practica
 Because they integrate directly into the methods that generate the containers, they lead to complex internal logic within the core operator methods.
 The operator has to:
 * Take into account the security context configured by the user in the custom resource
-* Pass it through the Pod security provider to get the actual context that should be used
+* Pass it through the Pod Security Provider plugin to get the security context that should be used
 * Set it in the container
 
 This increases the complexity of the operator code.
 It also increases the testing requirements, because you need to test the various combinations within the core operator.
 
-And while the only plugin type we have today is the Pod Security Provider, we repeat this pattern in other places as well.
+Although Pod Security Provider plugins are currently the only supported plugin type, similar patterns are repeated elsewhere in the code base.
 Some examples:
 * We have multiple sources of labels.
   We have the Cluster Operator environment variables defining custom labels for all resources of a specific type.
@@ -68,7 +68,7 @@ Gatekeeper plugins would be invoked at the beginning and at the end of the recon
 When reconciliation starts, the custom resource being reconciled would be passed to the _entry_ method of the Gatekeeper plugin.
 When reconciliation completes, whether successfully or with an error, the result and the updated custom resource(s), including status, would be passed to the _exit_ method of the Gatekeeper plugins.
 
-There would be two basic types of Gatekeeper plugins:
+There would be two types of Gatekeeper plugins:
 * Validating plugins
 * Mutating plugins
 
@@ -76,12 +76,12 @@ The validating plugins would receive the custom resource(s) and would be able to
 But they would not be able to modify the custom resource(s) and/or their status.
 
 The mutating plugins would be able to fail the reconciliation by raising an error.
-They would also be able to modify the custom resource(s) before the reconciliation starts or their status when the reconciliation ends.
+They would also be able to modify the custom resource(s) before the reconciliation starts or modify their status when the reconciliation ends.
 These modifications would of course need to follow the Strimzi API.
 The plugins would not be able to add any new fields.
 Any modifications made by the plugin would be internal only.
 They would not be persisted into the Kubernetes API.
-They would only be used within a given reconciliation, similarly to how we used _virtual node pools_ when migrating to node pools or how we modified the Connect and MirrorMaker2 custom resources during the migration from `v1beta2` to `v1` APIs.
+They would only be used within a given reconciliation, similarly to how virtual node pools were used during migration to node pools or how Connect and MirrorMaker2 custom resources were modified internally during migration from the `v1beta2` to `v1` APIs.
 
 Each plugin would be allowed to implement the _entry_ and _exit_ methods for one or more custom resources.
 That would allow us to write plugins that, for example, apply only to `Kafka` resources.
@@ -96,10 +96,10 @@ There would be three different groups of Gatekeeper plugins:
   These might be the plugins that Strimzi requires to work.
 * Default plugins would have a default configuration hardcoded in the Strimzi source code.
   These would be the plugins Strimzi provides and _recommends_.
-  But the default plugins could be changed by the users who can configure their own default plugins.
+  But the default plugins could be changed by users who wish to configure their own default plugins.
 * Custom plugins would be unset by default, and users would need to configure them explicitly.
   Custom plugins would be the plugins provided by Strimzi but disabled by default.
-  Or actually custom plugins brought in by the user.
+  Or custom plugins brought in by the user.
 
 Having these three groups is important because it allows us to define the plugins that must always be used.
 It also allows us to provide plugins that we believe should be used because they are broadly useful or needed for backward compatibility.
@@ -199,7 +199,7 @@ Validating plugins would return a _void_ completion stage.
 The same mechanism currently used for Pod Security Provider plugins would also be used for Gatekeeper plugins.
 The plugins would be loaded at operator startup through a `GatekeeperPluginFactory` singleton class.
 The factory will take the configured plugins and load them through the Java Service Loader mechanism based on the `GatekeeperPlugin` interface.
-When some configured plugins are missing, it will report the error and fail.
+If any configured plugins are missing, the operator will report an error and fail to start.
 The loaded plugins would also be initialized as part of `GatekeeperPluginFactory` initialization by calling their `configure(...)` methods.
 The initialized plugins would be stored as static fields inside `GatekeeperPluginFactory`.
 The `GatekeeperPluginFactory` class would then be used by the assembly operators to call the plugins during reconciliations.
@@ -229,7 +229,7 @@ Strimzi could provide two different Gatekeeper plugins:
 * 3scale discovery labels plugin
 * Custom environment variable-based labels plugin
 
-The _3scale discovery labels plugin_ would be a mutating `KafkaBridge` Gatekeeper plugin.
+The _3scale discovery labels plugin_ would be a mutating Gatekeeper plugin for `KafkaBridge` resources.
 In its _entry_ method, it would inject the 3scale discovery labels into the `KafkaBridge` CR, so that they are correctly set by the Cluster Operator.
 Its _exit_ method would not do anything.
 
