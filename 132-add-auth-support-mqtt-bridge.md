@@ -32,28 +32,40 @@ Therefore, we will focus on using client certificates for authentication to secu
 ### Configuration
 
 We will begin by adding new configuration options to the MQTT Bridge.
-These options will allow users to enable secure MQTT connections and specify the necessary SSL/TLS settings.
+These options will allow users to enable secure MQTT connections and specify the necessary SSL/TLS configurations.
 It will look something like this:
 
 ```application.properties
 mqtt.server.tls.port=8883
 mqtt.server.ssl.enabled=true
-mqtt.server.ssl.keystore=path/to/keystore.jks
-mqtt.server.ssl.keystore.password=your-keystore-password
-mqtt.server.ssl.truststore=path/to/truststore.jks
-mqtt.server.ssl.truststore.password=your-truststore-password
+mqtt.server.ssl.certificate.location=path/to/server-cert.pem
+mqtt.server.ssl.key.location=path/to/server-key.pem
+mqtt.server.ssl.certificate=--BEGIN CERTIFICATE--\n...\n--END CERTIFICATE--
+mqtt.server.ssl.key=--BEGIN PRIVATE KEY--\n...\n--END PRIVATE KEY--
 ```
+
+> Note: All configuration options that support both inline and file-based values are mutually exclusive. 
+Inline values take precedence over file-based values.
 
 For two-way SSL/TLS authentication, we will also need to configure the MQTT Bridge to require client certificates.
 This can be done by adding the following configuration option:
 
 ```application.properties
-mqtt.server.ssl.client-auth=true
+mqtt.server.ssl.need-client-auth=true
+mqtt.server.ssl.trusted.certificates.location=path/to/client-ca.pem
+mqtt.server.ssl.trusted.certificates=--BEGIN CERTIFICATE--\n...\n--END CERTIFICATE--
 ```
 
-Optionally, we can also support the configuration for specifying the protocols and cipher suites.
+Optionally, we can also support the configuration for specifying the protocols and cipher suites:
 
-Afer this, we are going to create a new configuration wrapper class to load and manage these new config options, say `MqttSslConfig`.
+```application.properties
+mqtt.server.ssl.protocols=TLSv1.2,TLSv1.3
+mqtt.server.ssl.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
+```
+
+> If these options are not specified, the MQTT Bridge will use the default SSL/TLS configurations provided by the Java runtime.
+
+After this, we are going to create a new configuration wrapper class to load and manage these new config options, say `MqttSslConfig`.
 This class will then be part of the existing `MqttConfig`.
 It would look something like this:
 
@@ -99,7 +111,7 @@ public class MqttServerInitializer extends ChannelInitializer<SocketChannel> {
     protected void initChannel(SocketChannel ch) {
 
         if (sslConfig.isEnabled()) {
-            SslContext sslContext = // logic to create SSL context using the provided keystore and truststore
+            SslContext sslContext = // logic to create SSL context using the provided SSL/TLS configurations
 
             ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
         }
