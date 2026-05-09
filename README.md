@@ -9,6 +9,16 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 141 | [Make PKCS12 stores in CA and User `Secrets` optional](./141-make-PKCS12-stores-in-CA-and-user-secrets-optional.md) |
+| 140 | [Replace in-process ConnectCluster with StrimziConnectCluster](./140-replace-in-process-connect-cluster-with-strimzi-connect-cluster.md) |
+| 139 | [Background deletion propagation for Pods](./139-background-deletion-propagation.md) |
+| 138 | [Configurable `validityDays` and `renewalDays` per `KafkaUser`](./138-configurable-validitydays-and-renewaldays-per-kafkauser.md) |
+| 137 | [Re-issue KafkaUser's certificate on demand](./137-re-issue-kafka-user-certificate-on-demand.md) |
+| 136 | [Gateway API-based `type: tlsroute` listener](./136-tls-route-listener.md) |
+| 135 | [Templating `advertisedPort` fields in the `Kafka` custom resource](./135-templating-advertised-port-fields.md) |
+| 134 | [Dedicated executor service for HTTP Bridge async Kafka-related operations](./134-dedicated-executor-for-kafka-bridge.md) |
+| 133 | [Asynchronous Issue Triage](./133-async-triage.md) |
+| 132 | [TLS support in test-container](./132-tls-support-in-test-container.md) |
 | 131 | [In-place Pod resizing](./131-in-place-pod-resizing.md) |
 | 130 | [Publishing Test-Clients to Maven](./130-publishing-test-clients-to-maven.md) |
 | 129 | [Deprecate `type: ingress` listeners](./129-deprecate-type-ingress-listeners.md) |
