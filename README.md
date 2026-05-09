@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 142 | [Per-broker annotation and label templates for Kafka listeners](./142-per-broker-annotation-and-label-templates.md) |
 | 141 | [Make PKCS12 stores in CA and User `Secrets` optional](./141-make-PKCS12-stores-in-CA-and-user-secrets-optional.md) |
 | 140 | [Replace in-process ConnectCluster with StrimziConnectCluster](./140-replace-in-process-connect-cluster-with-strimzi-connect-cluster.md) |
 | 139 | [Background deletion propagation for Pods](./139-background-deletion-propagation.md) |
