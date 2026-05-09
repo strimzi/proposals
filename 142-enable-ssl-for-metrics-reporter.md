@@ -52,8 +52,9 @@ If both file path and inline configurations are provided, the inline configurati
 
 #### Additional SSL configuration
 
-- `prometheus.metrics.reporter.listener.ssl.enabled.protocols`: Comma-separated list of enabled secure transport protocols (e.g. `TLSv1.2,TLSv1.3`).
+- `prometheus.metrics.reporter.listener.ssl.enabled.protocols`: Comma-separated list of enabled secure transport protocols. Defaults to `TLSv1.2,TLSv1.3`.
 - `prometheus.metrics.reporter.listener.ssl.enabled.cipher.suites`: Comma-separated list of cipher suites that the server will support.
+Defaults to Java's default cipher suites.
 
 ### Implementation
 
@@ -62,7 +63,8 @@ The implementation will add support for the new SSL configuration options in the
 The metrics reporter currently uses the Prometheus `HTTPServer` from the `io.prometheus.metrics.exporter.httpserver` library.
 When the listener is configured with `https://`, the `HTTPServer.Builder` will be configured with an `HttpsConfigurator` to serve metrics over HTTPS.
 This will involve:
-1. Loading the certificate and private key from PEM files or inline PEM content.
+1. Loading the certificate and private key from PEM files (if the location is set) or from inline PEM content (if only inline values are set). 
+The precedence rule remains as described above (inline configuration takes precedence if both file path and inline values are provided).
 2. Initializing an `SSLContext` with the loaded key materials.
 3. Configuring the HTTPS server to use the SSL context for secure communication.
 
