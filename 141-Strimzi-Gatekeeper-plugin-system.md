@@ -158,8 +158,6 @@ Each plugin would be allowed to implement the _entry_ and _exit_ methods for one
 That would allow us to write plugins that, for example, apply only to `Kafka` resources.
 Or plugins that want to gate all custom resources.
 
-
-
 #### Error handling
 
 An error raised by the plugin in its _entry_ method will be treated as any other reconciliation failure.
@@ -217,6 +215,8 @@ At reconciliation _entry_, they will always be called in the following order:
 * Mandatory plugins
 
 Within each plugin group, the plugins will be invoked in the order specified by the user or by the Strimzi source code.
+Plugins from `STRIMZI_GATEKEEPER_CUSTOM_PLUGINS` (and `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` if set) will be called in the order as specified by the user.
+The mandatory and default (when `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` is not set) plugins will be called in the order as specified by Strimzi.
 
 At reconciliation _exit_, they will always be called in the following order:
 * Mandatory plugins
@@ -279,6 +279,12 @@ At least initially, there would be no plugin support for `StrimziPodSet` resourc
 They also serve a very simple purpose - to create the Pods.
 And if needed, any modifications to the Pods can be easily done also through Kubernetes's own mechanisms.
 However, this can be reconsidered in the future if we see some demand and use-cases for it.
+
+Using multiple small interfaces per plugin type (Mutable / Validating) and per resource type was chosen intentionally.
+While it means that we will have 14 different interfaces, it provides much better overview of what the plugin actually implements compared to having for example just 2 big interfaces with many methods.
+The plugin implementations can choose which and how many interfaces will be implemented in their plugin class.
+It also allows us to better log which plugins are actually called, because we will know what custom resources are supported by given plugin.
+And we will not be needed to make unnecessary calls to some default methods that would do nothing.
 
 Each interface would have two methods:
 * `<Type>Entry` (e.g. `kafkaEntry`) called at the beginning of the reconciliation
