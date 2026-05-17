@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 144 | [Alerting for stuck reconciliations](./144-stuck-reconciliation-alerting.md) |
 | 143 | [Enable SSL for Metrics Reporter](./143-enable-ssl-for-metrics-reporter.md) |
 | 142 | [Per-broker annotation and label templates for Kafka listeners](./142-per-broker-annotation-and-label-templates.md) |
 | 141 | [Make PKCS12 stores in CA and User `Secrets` optional](./141-make-PKCS12-stores-in-CA-and-user-secrets-optional.md) |
