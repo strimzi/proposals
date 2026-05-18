@@ -428,6 +428,8 @@ Gatekeeper plugins provide a powerful abstraction.
 However, when used incorrectly, they could also break many things.
 For example, this could happen if a mutating plugin makes an invalid change to a custom resource,
 or if a plugin takes too long while making external calls.
+Also, even if all the plugins behave nicely, each of them would need some time to complete and will contribute to the overall reconciliation time.
+So using many different plugins might negatively impact the reconciliation times.
 This creates a risk for Strimzi users and might make it harder to support them.
 
 To mitigate these issues, we should make sure that:
