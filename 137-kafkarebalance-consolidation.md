@@ -16,20 +16,20 @@ The `KafkaRebalance` resource currently supports four distinct modes:
 Over time, as new modes have been added, the API has accumulated an increasing number of top-level fields, many of which are only applicable to specific modes. 
 The following table shows which `KafkaRebalanceSpec` parameters are supported by each mode based on the current operator implementation:
 
-| Parameter | `full` | `add-brokers` | `remove-brokers` | `remove-disks` | Notes                                       |
-|---|---|---|---|----------------|---------------------------------------------|
-| `mode` | -- | -- | -- | --             | Rebalance mode, defaults to `full`          |
-| `brokers` | ignored | **required** | **required** | ignored        | List of broker IDs for the operation        |
-| `moveReplicasOffVolumes` | ignored | ignored | ignored | **required**   | List of broker/volume ID mappings           |
-| `rebalanceDisk` | supported | ignored | ignored | ignored        | Enables intra-broker disk rebalancing       |
-| `concurrentIntraBrokerPartitionMovements` | supported | ignored | ignored | ignored        | Concurrent intra-broker partition movements |
-| `goals` | supported | supported | supported | ignored        | Optimization goal list                      |
-| `skipHardGoalCheck` | supported | supported | supported | ignored        | Whether to skip hard goal validation        |
-| `excludedTopics` | supported | supported | supported | ignored        | Regex pattern for topics to exclude         |
-| `concurrentPartitionMovementsPerBroker` | supported | supported | supported | ignored        | Concurrent inter-broker partition movements |
-| `concurrentLeaderMovements` | supported | supported | supported | ignored        | Concurrent leader movements                 |
-| `replicationThrottle` | supported | supported | supported | ignored        | Replication bandwidth throttle (bytes/sec)  |
-| `replicaMovementStrategies` | supported | supported | supported | ignored        | Replica movement strategy class list        |
+| Parameter                                 | `full`   | `add-brokers`   | `remove-brokers` | `remove-disks` | Notes                                        |
+|-------------------------------------------|----------|-----------------|------------------|----------------|----------------------------------------------|
+| `mode`                                    | --       | --              | --               | --             | Rebalance mode, defaults to `full`           |
+| `brokers`                                 | ignored  | **required**    | **required**     | ignored        | List of broker IDs for the operation         |
+| `moveReplicasOffVolumes`                  | ignored  | ignored         | ignored          | **required**   | List of broker/volume ID mappings            |
+| `rebalanceDisk`                           | supported| ignored         | ignored          | ignored        | Enables intra-broker disk rebalancing        |
+| `concurrentIntraBrokerPartitionMovements` | supported| ignored         | ignored          | ignored        | Concurrent intra-broker partition movements  |
+| `goals`                                   | supported| supported       | supported        | ignored        | Optimization goal list                       |
+| `skipHardGoalCheck`                       | supported| supported       | supported        | ignored        | Whether to skip hard goal validation         |
+| `excludedTopics`                          | supported| supported       | supported        | ignored        | Regex pattern for topics to exclude          |
+| `concurrentPartitionMovementsPerBroker`   | supported| supported       | supported        | ignored        | Concurrent inter-broker partition movements  |
+| `concurrentLeaderMovements`               | supported| supported       | supported        | ignored        | Concurrent leader movements                  |
+| `replicationThrottle`                     | supported| supported       | supported        | ignored        | Replication bandwidth throttle (bytes/sec)   |
+| `replicaMovementStrategies`               | supported| supported       | supported        | ignored        | Replica movement strategy class list         |
 
 All parameters are currently defined as top-level fields in `KafkaRebalanceSpec`, making it unclear from the API schema alone which fields apply to which mode. 
 This information is only enforced at runtime in `KafkaRebalanceAssemblyOperator`, which selects a mode-specific options builder (`RebalanceOptions`, `AddBrokerOptions`, `RemoveBrokerOptions`, or `RemoveDisksOptions`) that inherits common parameters from `AbstractRebalanceOptions`.
@@ -150,14 +150,15 @@ Supported config parameters will be passed as-is to the Cruise Control REST API.
    - If Cruise Control returns an error for a config parameter whether due to an invalid value or an unknown key, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and surface the error in a warning condition on the resource's status.
 
 #### Filtered Parameters
-  | Parameter             | Why it is filtered |
-  |-----------------------|--------------------|
-  | `dryrun`              | Strimzi controls this via the rebalance state machine. Proposal generation vs. execution are separate states(`ProposalReady` -> `Rebalancing`) |
-  | `json`                | Hardcoded to `true` by Strimzi. Changing this would break response parsing. |
-  | `verbose`             | Changing verbosity could break status reporting. |
-  | `super_verbose`       | Same as `verbose`  |
-  | `brokerid`            | Managed via `spec.brokers` top-level field. |
-  | `brokerid_and_logdirs` | Managed via `spec.volumes` top-level field.|
+
+| Parameter               | Why it is filtered                                                                                                                              |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `dryrun`                | Strimzi controls this via the rebalance state machine. Proposal generation vs. execution are separate states (`ProposalReady` -> `Rebalancing`) |
+| `json`                  | Hardcoded to `true` by Strimzi. Changing this would break response parsing.                                                                     |
+| `verbose`               | Changing verbosity could break status reporting.                                                                                                |
+| `super_verbose`         | Same as `verbose`                                                                                                                               |
+| `brokerid`              | Managed via `spec.brokers` top-level field.                                                                                                     |
+| `brokerid_and_logdirs`  | Managed via `spec.volumes` top-level field.                                                                                                     |
 
 ### Example Configurations
 
