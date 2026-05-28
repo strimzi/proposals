@@ -172,6 +172,7 @@ This applies to both unexpected errors due to some bug or issue as well as to th
 There would be three different groups of Gatekeeper plugins:
 * Mandatory plugins would be hardcoded in the Strimzi source code and would not be configurable.
   These might be the plugins that Strimzi requires to work.
+  Users will not be able to disable these plugins (without rebuilding Strimzi from source).
 * Default plugins would have a default configuration hardcoded in the Strimzi source code.
   These would be the plugins Strimzi provides and _recommends_.
   But the default plugins could be changed by users who wish to configure their own default plugins.
@@ -260,6 +261,7 @@ It would contain a single method, `configure(...)`, which would be called once a
 As a parameter, it would accept a `GatekeeperPluginConfigurationContext` record.
 Initially, the context would contain an instance of the Fabric8 Kubernetes client and an instance of the Strimzi `PlatformFeatures` class describing the environment in which the operator is running.
 The `configure(...)` method would return `void`.
+When the `configure(...)` method fails and raises and exception, the operator will exit.
 
 There would also be two additional interfaces per each supported operand type:
 * Mutating plugin interface named `GatekeeperMutating<OperandType>Plugin` (e.g. `GatekeeperMutatingKafkaPlugin` or `GatekeeperMutatingKafkaBridgePlugin`)
@@ -301,6 +303,8 @@ However, it might be used in the future.
 * For mutating plugins, the method would return a completion stage containing the updated custom resources.
 For Kafka and Kafka Connect, it would return a record with the primary custom resource and a collection of the secondary custom resources.
 Validating plugins would return a _void_ completion stage.
+Validation failure would be indicated by throwing an exception.
+This would fail the reconciliation and the exception (its error) will be used in the custom resource `.status` section.
 
 The _exit_ method would have two or three parameters:
 * `Gatekeeper<Type>ExitContext` would be a record containing additional information passed to the plugin.
@@ -312,6 +316,32 @@ However, it might be used in the future.
 For Kafka and Kafka Connect, it would return a record with the primary custom resource and a collection of the secondary custom resources.
 Only the updates to the `.status` section of these resources would take any effect.
 Validating plugins would return a _void_ completion stage.
+
+The following example shows the interface for the `KafkaBridge` mutating and validating plugins:
+
+```java
+interface GatekeeperMutatingKafkaBridgePlugin {
+    default CompletionStage<KafkaBridge> KafkaBridgeEntry(GatekeeperMitatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
+        return CompletableFuture.completedFuture(kafkaBridge);
+    }
+
+    default CompletionStage<KafkaBridge> KafkaBridgeExit(GatekeeperMitatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge) {
+        return CompletableFuture.completedFuture(kafkaBridge);
+    }
+}
+
+interface GatekeeperValidatingKafkaBridgePlugin {
+    default CompletionStage<Void> KafkaBridgeEntry(GatekeeperValidatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
+        return CompletableFuture.completedFuture(null);
+    }
+
+    default CompletionStage<Void> KafkaBridgeExit(GatekeeperValidatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge) {
+        return CompletableFuture.completedFuture(null);
+    }
+}
+```
+
+If any of the methods throws an exception (or returns a failed `CompletionStage`), the reconciliation would fail.
 
 #### Loading and calling the plugins
 
@@ -424,7 +454,7 @@ For example:
 ### Supportability
 
 _With great power comes great responsibility._
-Gatekeeper plugins provide a powerful abstraction.
+Gatekeeper plugins provide a powerful abstraction. 
 However, when used incorrectly, they could also break many things.
 For example, this could happen if a mutating plugin makes an invalid change to a custom resource,
 or if a plugin takes too long while making external calls.
