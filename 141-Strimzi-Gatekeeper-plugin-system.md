@@ -232,6 +232,15 @@ The plugins are _wrapping_ the reconciliation.
 So the reverse order at _exit_ naturally corresponds to this.
 It also helps to ensure that our mandatory plugins are always executed closest to the reconciliation.
 
+#### Invocation
+
+The plugin will be always invoked at the beginning and at the end of the assembly operator _runs_.
+Due to the variations in how the different assembly operator classes look like (especially with how the `Kafka` and `KafkaNodePool` and `KafkaConnect` and `KafkaConnector` integrate), I do not expect that we would be able to add it to the `AbstractAssemblyOperator` class.
+We will need individual implementation in each assembly operator.
+
+For the `Kafka` resource, where the assembly operator (`KafkaAssemblyOperator`) includes various reconcilers, it would be called only once at the beginning before any reconciler is called and once at the end after all the reconcilers completed.
+It will not be called before and after the individual reconciler steps are called.
+
 #### Example
 
 The following diagram shows the Strimzi reconciliation flow with the Gatekeeper plugins:
@@ -498,6 +507,24 @@ The initial implementation would include the following plugins:
   This plugin will be enabled by default as a _default_ plugin and will replace the related Cluster Operator functionality.
 
 The existing functionality these plugin would replace is relatively simple and moving it to the plugins should constitute a minimal risk.
+
+### Plugin lifecycle
+
+The initial Strimzi plugins will live directly inside the Cluster Operator module.
+They will be released together with Strimzi and will be included in the Strimzi container images out of the box.
+
+For other Strimzi plugins, we can decide individually how can we manage them:
+* For most Strimzi plugins, I would expect them to be directly part of the Strimzi operators project and use the same lifecycle (releases, ...).
+* Selected plugins with larger complexity might also be managed in a separate repository with the Strimzi GitHub organization and have their own release cycle.
+  These plugins would be either bundled automatically as a dependency of the Strimzi operators.
+  Or might be distributed separately and users would include them on-demand.
+  The Access Operator alternative mentioned in one of the previous sections would be an example plugin where its complexity might deserve a separate repository and lifecycle.
+  However, this should be decided in the future individually on a plugin-by-plugin basis.
+* The mandatory plugins need to be always bundled into the operators directly regardless whether the live in the operators repository or not.
+
+Third-party plugins would always live outside the Strimzi GitHub organization and are not expected to be bundled as part of the Strimzi repository.
+Users would include them in the operators either by building a custom container image or by using Kubernetes Image Volumes.
+Vendors can decide to bundle their plugins into their container images.
 
 ## Future plans
 
