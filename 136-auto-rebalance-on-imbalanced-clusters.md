@@ -102,108 +102,6 @@ Following the above approach will provide several advantages:
 * we ensure that the operator controls all rebalance and cluster remediation operations.
 * using the existing `KafkaRebalance` CR system gives more visibility into what is happening and when, which (as we don't support the Cruise Control UI) enhances observability and will also aid in debugging.
 
-### Maintenance Time Windows
-
-Auto-rebalance on imbalance supports maintenance time windows to allow users to control when rebalancing operations occur.
-
-#### Implementation Design
-
-Users can configure **dedicated maintenance time windows** specifically for auto-rebalance on imbalance. These windows are independent of the global maintenance windows used for certificate renewals.
-
-**Recommended Configuration - Custom Maintenance Windows for Rebalancing:**
-
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: Kafka
-metadata:
-  name: my-cluster
-spec:
-  kafka:
-    # ...
-  maintenanceTimeWindows:
-    - "* * 2-4 * * ?"     # Global: 2:00-4:59 UTC daily (for certificate renewals)
-  cruiseControl:
-    # ...
-    autoRebalance:
-      - mode: imbalance
-        maintenanceTimeWindows:
-          - "* * 8-10 * * ?"    # Custom window #1: 8:00-10:59 UTC daily
-          - "* * 14-16 * * ?"   # Custom window #2: 14:00-16:59 UTC daily
-          - "* * 20-22 * 5 ?"   # Custom window #3: 20:00-22:59 UTC on Fridays only
-        template:
-          name: my-imbalance-rebalance-template
-```
-
-**Key Features:**
-
-- **Fully customizable**: Users define their own cron expressions for when rebalancing can occur
-- **Multiple windows**: Support for multiple time windows per day/week (as shown above)
-- **Independent from global windows**: Rebalancing windows are separate from certificate renewal windows
-- **Standard cron format**: Uses the same cron expression format as `Kafka.spec.maintenanceTimeWindows` (in UTC timezone)
-- **Optional field**: If not specified, different behavior applies (see options below)
-
-**Configuration Options:**
-
-1. **Custom maintenance windows for imbalance** (RECOMMENDED):
-   ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         maintenanceTimeWindows:           # User-defined windows
-           - "* * 8-10 * * ?"
-           - "* * 14-16 * * ?"
-   ```
-   - ✅ Uses ONLY the windows defined here (ignores global windows)
-   - ✅ Full user control over rebalancing schedule
-   - ✅ Can be different from certificate renewal schedule
-   - ✅ Best for production clusters with specific operational requirements
-
-2. **Fallback to global windows**:
-   ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         # maintenanceTimeWindows field not present
-   # But Kafka.spec.maintenanceTimeWindows exists
-   ```
-   - Uses the global `Kafka.spec.maintenanceTimeWindows`
-   - Simpler configuration when rebalancing and certificate renewal can share the same schedule
-   - Less flexible but easier to manage
-
-3. **No maintenance windows (immediate rebalancing)**:
-   ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         # maintenanceTimeWindows field not present
-   # AND Kafka.spec.maintenanceTimeWindows also not present
-   ```
-   - Rebalancing triggers immediately when anomalies are detected
-   - No time-based restrictions
-   - Suitable for development/test clusters or critical production clusters requiring immediate action
-
-**Behavior:**
-
-- **When maintenance windows are configured** (option 1 or 2):
-  - When an anomaly is detected outside a maintenance window, the operator records the detection but does NOT trigger a rebalance
-  - During the next maintenance window, the operator queries Cruise Control's `state` endpoint
-  - If the anomaly still exists (based on `detectionDate` comparison), the rebalance is triggered
-  - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window
-  
-- **When no maintenance windows are configured** (option 3):
-  - Rebalance is triggered immediately when a fixable goal violation is detected
-  - Useful for critical clusters where imbalance correction cannot wait
-
-**Emergency Override:**
-
-If users need immediate rebalancing despite configured maintenance windows (e.g., critical disk capacity issue), they can:
-1. Temporarily remove or comment out the `maintenanceTimeWindows` field from the auto-rebalance configuration, or
-2. Create a manual `KafkaRebalance` resource (which bypasses maintenance windows)
-
-#### Interaction with Scale Operations
-
-Scale-up and scale-down auto-rebalance operations will continue to **ignore** maintenance windows (executed immediately), while imbalance auto-rebalance respects them.
-
 ### `imbalance` mode in Strimzi's auto-rebalancing feature
 
 The [`auto-rebalancing`](https://strimzi.io/docs/operators/latest/deploying#proc-automating-rebalances-str) feature in Strimzi allows the operator to run a rebalance automatically when a Kafka cluster is scaled up (by adding brokers) or scaled down (by removing brokers).
@@ -318,13 +216,13 @@ The `KafkaAutoRebalanceReconciler` retrieves the anomaly detection goals from th
 The `KafkaRebalance` has 4 modes: `full`, `add-broker`, `remove-broker` and `remove-disks` mode.
 The `imbalance` mode will be mapped to the `full` mode in the generated KafkaRebalance resource which means that the generated `KafkaRebalance` custom resource will have the mode set as `full` which within the Strimzi rebalancing operator means calling the Cruise Control API to run a rebalancing taking all brokers into account.
 
-The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-goal-violation`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, `goal-violation` means that a goal related imbalance was detected in the cluster.
+The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, `goal-violation` means that a goal related imbalance was detected in the cluster.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaRebalance
 metadata:
-  name: my-cluster-auto-rebalancing-goal-violation
+  name: my-cluster-auto-rebalancing-imbalance
   finalizers:
     - strimzi.io/auto-rebalancing
 spec:
@@ -687,6 +585,108 @@ To stop a running rebalance, users can apply the `strimzi.io/rebalance=stop` ann
 This will stop the running rebalance and the stopped `KafkaRebalance` resource will be deleted.
 Users will need to ensure that they disable the `imbalance` mode of auto-rebalance after stopping the rebalance; otherwise, the rebalance will be triggered again since the anomalies are still present in the cluster.
 
+### Maintenance Time Windows
+
+Auto-rebalance on imbalance supports maintenance time windows to allow users to control when rebalancing operations occur.
+
+#### Implementation Design
+
+Users can configure **dedicated maintenance time windows** specifically for auto-rebalance on imbalance. These windows are independent of the global maintenance windows used for certificate renewals.
+
+**Recommended Configuration - Custom Maintenance Windows for Rebalancing:**
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+spec:
+  kafka:
+    # ...
+  maintenanceTimeWindows:
+    - "* * 2-4 * * ?"     # Global: 2:00-4:59 UTC daily (for certificate renewals)
+  cruiseControl:
+    # ...
+    autoRebalance:
+      - mode: imbalance
+        maintenanceTimeWindows:
+          - "* * 8-10 * * ?"    # Custom window #1: 8:00-10:59 UTC daily
+          - "* * 14-16 * * ?"   # Custom window #2: 14:00-16:59 UTC daily
+          - "* * 20-22 * 5 ?"   # Custom window #3: 20:00-22:59 UTC on Fridays only
+        template:
+          name: my-imbalance-rebalance-template
+```
+
+**Key Features:**
+
+- **Fully customizable**: Users define their own cron expressions for when rebalancing can occur
+- **Multiple windows**: Support for multiple time windows per day/week (as shown above)
+- **Independent from global windows**: Rebalancing windows are separate from certificate renewal windows
+- **Standard cron format**: Uses the same cron expression format as `Kafka.spec.maintenanceTimeWindows` (in UTC timezone)
+- **Optional field**: If not specified, different behavior applies (see options below)
+
+**Configuration Options:**
+
+1. **Custom maintenance windows for imbalance** (RECOMMENDED):
+   ```yaml
+   cruiseControl:
+     autoRebalance:
+       - mode: imbalance
+         maintenanceTimeWindows:           # User-defined windows
+           - "* * 8-10 * * ?"
+           - "* * 14-16 * * ?"
+   ```
+    - ✅ Uses ONLY the windows defined here (ignores global windows)
+    - ✅ Full user control over rebalancing schedule
+    - ✅ Can be different from certificate renewal schedule
+    - ✅ Best for production clusters with specific operational requirements
+
+2. **Fallback to global windows**:
+   ```yaml
+   cruiseControl:
+     autoRebalance:
+       - mode: imbalance
+         # maintenanceTimeWindows field not present
+   # But Kafka.spec.maintenanceTimeWindows exists
+   ```
+    - Uses the global `Kafka.spec.maintenanceTimeWindows`
+    - Simpler configuration when rebalancing and certificate renewal can share the same schedule
+    - Less flexible but easier to manage
+
+3. **No maintenance windows (immediate rebalancing)**:
+   ```yaml
+   cruiseControl:
+     autoRebalance:
+       - mode: imbalance
+         # maintenanceTimeWindows field not present
+   # AND Kafka.spec.maintenanceTimeWindows also not present
+   ```
+    - Rebalancing triggers immediately when anomalies are detected
+    - No time-based restrictions
+    - Suitable for development/test clusters or critical production clusters requiring immediate action
+
+**Behavior:**
+
+- **When maintenance windows are configured** (option 1 or 2):
+    - When an anomaly is detected outside a maintenance window, the operator records the detection but does NOT trigger a rebalance
+    - During the next maintenance window, the operator queries Cruise Control's `state` endpoint
+    - If the anomaly still exists (based on `detectionDate` comparison), the rebalance is triggered
+    - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window
+
+- **When no maintenance windows are configured** (option 3):
+    - Rebalance is triggered immediately when a fixable goal violation is detected
+    - Useful for critical clusters where imbalance correction cannot wait
+
+**Emergency Override:**
+
+If users need immediate rebalancing despite configured maintenance windows (e.g., critical disk capacity issue), they can:
+1. Temporarily remove or comment out the `maintenanceTimeWindows` field from the auto-rebalance configuration, or
+2. Create a manual `KafkaRebalance` resource (which bypasses maintenance windows)
+
+#### Interaction with Scale Operations
+
+Scale-up and scale-down auto-rebalance operations will continue to **ignore** maintenance windows (executed immediately), while imbalance auto-rebalance respects them.
+
 #### Handling Intra-Broker Disk Imbalances (JBOD Storage)
 
 For Kafka clusters using **JBOD storage with multiple disks**, the `imbalance` mode automatically handles both **inter-broker** (replicas distributed across brokers) and **intra-broker disk imbalances** (disk usage between disks on the same broker).
@@ -741,7 +741,7 @@ Inter-broker:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaRebalance
 metadata:
-  name: my-cluster-auto-rebalancing-goal-violation
+  name: my-cluster-auto-rebalancing-imbalance
 spec:
   mode: full
   rebalanceDisk: false
@@ -753,7 +753,7 @@ Intra-broker:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaRebalance
 metadata:
-  name: my-cluster-auto-rebalancing-goal-violation
+  name: my-cluster-auto-rebalancing-imbalance
 spec:
   mode: full
   rebalanceDisk: true
@@ -989,7 +989,7 @@ Tests will use `MockCruiseControl` to simulate Cruise Control's `state` endpoint
 1. **Anomaly Detection and Successful Rebalance**
    - Ensure no existing `KafkaRebalance` resources are in active states
    - Mock `state?substates=anomaly_detector` returning goal violation with `fixableViolatedGoals` and detection timestamp
-   - Verify operator creates `<cluster>-auto-rebalancing-goal-violation` `KafkaRebalance` resource
+   - Verify operator creates `<cluster>-auto-rebalancing-imbalance` `KafkaRebalance` resource
    - Simulate `KafkaRebalance` progressing to `Ready` state
    - Verify state transitions: `Idle` → `RebalanceOnImbalance` → `Idle`
    - Verify `KafkaRebalance` resource is deleted after completion
