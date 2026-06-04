@@ -72,13 +72,28 @@ There would be two types of Gatekeeper plugins:
 * Validating plugins
 * Mutating plugins
 
+The validating plugins are essentially a subset of the mutating plugin.
 The validating plugins would receive the custom resource(s) and would be able to fail reconciliation by raising an error.
 But they would not be able to modify the custom resource(s) and/or their status.
+The validating plugins would use the following logic:
+* Get a copy of the custom resource(s)
+* Validate it:
+    * Approve it by doing nothing
+    * Reject it by throwing an exception
+* If needed, they can interact with 3rd-party system.
+  E.g. register the cluster to a monitoring stack or into a management console.
 
-The mutating plugins would be able to fail the reconciliation by raising an error.
-They would also be able to modify the custom resource(s) before the reconciliation starts or modify their status when the reconciliation ends.
+The mutating plugins can do anything the validating plugins can do as described above.
+This includes raising an error to reject the resource and failing the reconciliation.
+But they would also be able to modify the custom resource(s) before the reconciliation starts or modify their status when the reconciliation ends.
 
-The modifications done to the custom resource in the _entry_ method will be internal only and will be used only within the same reconciliation.
+The main reason why validating and mutating plugins as separate concepts is _trust_.
+When users use a third party plugin, validating plugin has less potential to cause harm as all it can do is failing the validation.
+Mutating plugin on the other hand can for example disable authentication or authorization.
+So when deploying a mutating plugin, you should be sure it can be trusted.
+For validating, you should still trust it, but it is less critical.
+
+The modifications done to the custom resource in the _entry_ method of the mutating plugin will be internal only and will be used only within the same reconciliation.
 The updated resources would not be updated in the Kubernetes API and the changes done by the plugin would not be stored anywhere.
 The changes will also not be visible to other applications through the Kubernetes API.
 As a result, the plugins would need to apply the changes to the custom resource at every invocation.
