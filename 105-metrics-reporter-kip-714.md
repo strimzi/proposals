@@ -2,7 +2,7 @@
 
 Apache Kafka 3.7.0 introduced the ability for Kafka clients to send their metrics to brokers via [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).
 
-The Kafka clients have this feature built-in and enabled by default. However for this feature to be usable, administrators must implement and provide a broker-side plugin to collect the metrics. The plugin must be a [`MetricReporter`](https://kafka.apache.org/40/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) instance that also implements the [`ClientTelemetry`](https://kafka.apache.org/40/javadoc/org/apache/kafka/server/telemetry/ClientTelemetry.html) interface.
+The Kafka clients have this feature built-in and enabled by default. However for this feature to be usable, administrators must implement and provide a broker-side plugin to collect the metrics. The plugin must be a [`MetricReporter`](https://kafka.apache.org/43/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) instance. KIP-714 originally required implementing the [`ClientTelemetry`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetry.html) interface, but since Kafka 4.2.0 this interface is deprecated in favor of [`ClientTelemetryExporterProvider`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetryExporterProvider.html) which provides more context.
 
 Then administrators must set metrics subscriptions to define the metrics clients will send. There are no default subscriptions. Subscriptions can be set, updated and deleted at runtime via the `kafka-configs.sh` or `kafka-client-metrics.sh` tools, or via the `Admin` API. For example:
 ```sh
@@ -21,16 +21,18 @@ This proposes adding support for KIP-714 to the server-side metric reporter, `Se
 
 ## Motivation
 
-This proposal shares its motivations with KIP-714. Monitoring applications is essential to ensure they function correctly. While brokers emit themselves a lot of metrics, it's often necessary to get client metrics to diagnose issues. However collecting metrics from all applications can be challenging. This can be due to multiple reasons:
+Monitoring applications is essential to ensure they function correctly. While brokers emit themselves a lot of metrics, it's often necessary to get client metrics to diagnose issues. For business critical applications the recommendation is still to directly collect their metrics directly for example via the Strimzi client metrics reporter or JMX exporter.
+
+This proposal shares its motivations with KIP-714. Collecting client metrics from all applications can be challenging. This can be due to multiple reasons:
 - Applications deployed in distributed and heterogeneous environments
 - Applications run and owned by separate teams
 - Kafka clients embedded in complex applications
 
-When clients are able to send their metrics to broker this eases their collection, and greatly simplifies diagnosing issues. The mechanism to set subscriptions also allows users to precisely adjust metrics at runtime to collect the most relevant metrics. 
+When clients are able to send their metrics to broker this eases their collection, and can greatly simplify diagnosing issues. The mechanism to set subscriptions also allows users to precisely adjust metrics at runtime to collect the most relevant metrics, while the static direct collection may cover a wider range of metrics used for regular monitoring by the application's owners.
 
 ## Proposal
 
-Now that we separated the metrics-reporter into client-side and server-side modules ([Proposal 96](./096-split-metrics-reporter-into-modules.md)), we can make the server-side module implement the `ClientTelemetry` interface to support KIP-714.
+Now that we separated the metrics-reporter into client-side and server-side modules ([Proposal 96](./096-split-metrics-reporter-into-modules.md)), we can make the server-side module implement the `ClientTelemetryExporterProvider` interface to support KIP-714. As this interface was introduced in Kafka 4.2.0, it will only work on servers (brokers and controllers) running 4.2.0 or above. Trying to use it on an older version will result in the server failing at startup.
 
 ### Naming
 
@@ -40,25 +42,17 @@ When a client retrieves its metric subscriptions, it is assigned a unique client
 
 ### Configurations
 
-The `client_instance_id` label is nice to identify all metrics from a client but does not enable to identify which client it is. Fortunately every time clients send metrics, they attach a bunch of metadata to identify themselves. This metadata is an [`AuthorizableRequestContext`](https://kafka.apache.org/40/javadoc/org/apache/kafka/server/authorizer/AuthorizableRequestContext.html) object that contains the client address, client Id, correlation Id, listener name, principal, request type, request version and security protocol from the client.
+The `client_instance_id` label is nice to identify all metrics from a client but does not enable to identify which client it is. Fortunately every time clients send metrics, they attach a bunch of metadata to identify themselves. This metadata is an [`AuthorizableRequestContext`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/authorizer/AuthorizableRequestContext.html) object that contains the client address, client Id, correlation Id, listener name, principal, request type, request version and security protocol from the client.
 
 A few of these fields are of very low value for metrics:
 - request type: This is always `72` which is the [`PushTelemetry`](https://kafka.apache.org/protocol#The_Messages_PushTelemetry) API key.
-- request version: This is the version of the `PushTelemetry` request. As of Kafka 4.0, it is always `0`.
+- request version: This is the version of the `PushTelemetry` request. As of Kafka 4.3, it is always `0`.
 - correlation Id: This starts at zero for each client and keeps increasing every time the client sends metrics. This shouldn't be used as a label as it would effectively create a new metric series each time.
 
 The reporter can convert the other fields as labels and add them to the metric series. In many cases it does not make sense to add all of them, for example if the cluster is behind a proxy the client address will always be the same. Also using all of them can create high cardinality labels series which can be problematic in Prometheus.
 
 I propose introducing a configuration to select the metadata fields to use as labels: 
-- `prometheus.metrics.reporter.telemetry.labels`: List of label names in client metrics. The valid names are `client_id`, `listener_name`, `security_protocol`, `principal`, `client_address`. This defaults to `client_id`. This configuration is reconfigurable at runtime.
-
-### Client metrics life cycle
-
-When the reporter receives metrics from a client, it converts them and adds them into Prometheus registry, ready to be collected when the `GET /metrics` endpoint is scraped. The subscription specifies an interval for the client to send metrics. However when metrics are received, the interval or any details about the subscription that caused this emission is not available. 
-
-So we need a mechanism to remove metrics from the registry when a client stops emitting metrics, otherwise if a client shuts down, the metrics reporter will keep reporting its metrics. As we don't have the interval, the simplest approach is to delete client metrics whenever they are scraped. While this may create gaps in metric series, this ensures that metrics collected are always valid. 
-
-Typically the subscription interval and the scrapping interval should be of the same order of magnitude. [Prometheus default scaping interval](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#configuration-file) is 1 minute, and the [default metric interval](https://github.com/apache/kafka/blob/trunk/server/src/main/java/org/apache/kafka/server/metrics/ClientMetricsConfigs.java#L89) is 5 minutes, so this should work fine and not cause too much confusion.
+- `prometheus.metrics.reporter.client.telemetry.labels`: List of label names in client metrics. The valid names are `client_id`, `listener_name`, `security_protocol`, `principal`, `client_address`. This defaults to `client_id`. This configuration is reconfigurable at runtime.
 
 ### Monitoring client metric collection
 
@@ -75,7 +69,8 @@ Administrators should monitor these metrics when they set subscriptions.
 
 ### Updates to strimzi-kafka-operator
 
-The `metricsConfig` definition will support the new configuration if the `type` is set to `strimziMetricsReporter`, via a new value `telemetryLabels`. For example:
+The `metricsConfig` definition will support the new configuration if the `type` is set to `strimziMetricsReporter`, via a new value `clientTelemetryLabels`. This new field directly maps to the `prometheus.metrics.reporter.client.telemetry.labels` configuration of the reporter.
+For example:
 ```yaml
 metricsConfig:
   type: strimziMetricsReporter
@@ -83,11 +78,11 @@ metricsConfig:
     allowList:
       - "kafka_log.*"
       - "kafka_network.*"
-    telemetryLabels:
+    clientTelemetryLabels:
       - "client_id"
       - "principal"
 ```
-If this value is not set, it will default to `client_id` like in the metrics reporter.
+If this value is not set, it will default to `client_id` like in the metrics reporter. Allowed values are `client_id`, `listener_name`, `security_protocol`, `principal`, `client_address`.
 
 ## Affected/not affected projects
 
