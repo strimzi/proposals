@@ -330,7 +330,7 @@ Validating plugins would return a _void_ completion stage.
 Validation failure would be indicated by throwing an exception.
 This would fail the reconciliation and the exception (its error) will be used in the custom resource `.status` section.
 
-The _exit_ method would have three or five parameters:
+The _exit_ method would have three or four parameters:
 * `Gatekeeper<Type>ExitContext` would be a record containing additional information passed to the plugin.
 Initially, it would be an empty record without any fields.
 However, it might be used in the future.
