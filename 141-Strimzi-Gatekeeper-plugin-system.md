@@ -323,43 +323,78 @@ The _entry_ method would have two or three parameters:
 Initially, it would be an empty record without any fields.
 However, it might be used in the future.
 * The custom resource which the plugin should evaluate.
-* In case of Kafka and Kafka Connect plugins, a collection with the secondary resources (Kafka node pools or connectors).
+* In case of Kafka and Kafka Connect, a collection with the secondary resources (Kafka node pools or connectors).
 * For mutating plugins, the method would return a completion stage containing the updated custom resources.
 For Kafka and Kafka Connect, it would return a record with the primary custom resource and a collection of the secondary custom resources.
 Validating plugins would return a _void_ completion stage.
 Validation failure would be indicated by throwing an exception.
 This would fail the reconciliation and the exception (its error) will be used in the custom resource `.status` section.
 
-The _exit_ method would have two or three parameters:
+The _exit_ method would have three or five parameters:
 * `Gatekeeper<Type>ExitContext` would be a record containing additional information passed to the plugin.
 Initially, it would be an empty record without any fields.
 However, it might be used in the future.
-* The custom resource which the plugin should evaluate including the updated status section.
-* In case of Kafka and Kafka Connect plugins, a collection with the secondary resources (Kafka node pools or connectors).
-* For mutating plugins, the method would return a completion stage containing the updated custom resources.
-For Kafka and Kafka Connect, it would return a record with the primary custom resource and a collection of the secondary custom resources.
-Only the updates to the `.status` section of these resources would take any effect.
+* The original custom resource which the plugin should evaluate including the original status section.
+* In case of Kafka and Kafka Connect, a collection with the secondary resources (Kafka node pools or connectors).
+* The new custom resource status section, which the plugin should evaluate.
+* In case of Kafka and Kafka Connect plugins, there will be a secondary _exit_ method for handling the sattus of the secondary resource.
+* For mutating plugins, the method would return a completion stage containing the updated status section of the custom resources.
+For Kafka and Kafka Connect, the _exit_ method for the Kafka Status would return the Kafka Status.
+The _exit_ method for the secondary resource will return the secondary resource's status.
+Only the updates to the resource status would take any effect.
 Validating plugins would return a _void_ completion stage.
 
 The following example shows the interface for the `KafkaBridge` mutating and validating plugins:
 
 ```java
 interface GatekeeperMutatingKafkaBridgePlugin {
-    default CompletionStage<KafkaBridge> KafkaBridgeEntry(GatekeeperMitatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
+    default CompletionStage<KafkaBridge> kafkaBridgeEntry(GatekeeperMitatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
         return CompletableFuture.completedFuture(kafkaBridge);
     }
 
-    default CompletionStage<KafkaBridge> KafkaBridgeExit(GatekeeperMitatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge) {
-        return CompletableFuture.completedFuture(kafkaBridge);
+    default CompletionStage<KafkaBridgeStatus> kafkaBridgeExit(GatekeeperMitatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge, KafkaBridgeStatus newKafkaBridgeStatus) {
+        return CompletableFuture.completedFuture(newKafkaBridgeStatus);
     }
 }
 
 interface GatekeeperValidatingKafkaBridgePlugin {
-    default CompletionStage<Void> KafkaBridgeEntry(GatekeeperValidatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
+    default CompletionStage<Void> kafkaBridgeEntry(GatekeeperValidatingKafkaBridgeEntryContext context, KafkaBridge kafkaBridge) {
         return CompletableFuture.completedFuture(null);
     }
 
-    default CompletionStage<Void> KafkaBridgeExit(GatekeeperValidatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge) {
+    default CompletionStage<Void> kafkaBridgeExit(GatekeeperValidatingKafkaBridgeExitContext context, KafkaBridge kafkaBridge, KafkaBridgeStatus newKafkaBridgeStatus) {
+        return CompletableFuture.completedFuture(null);
+    }
+}
+```
+
+The following example shows the interface for the `Kafka` mutating and validating plugins:
+
+```java
+interface GatekeeperMutatingKafkaPlugin {
+    default CompletionStage<Kafka> kafkaEntry(GatekeeperMitatingKafkaBridgeEntryContext context, Kafka kafka, List<KafkaNodePool> kafkaNodePools) {
+        return CompletableFuture.completedFuture(new KafkaAndKafkaNodePools(kafka, kafkaNodePools));
+    }
+
+    default CompletionStage<KafkaBridgeStatus> kafkaNodePoolExit(GatekeeperMitatingKafkaBridgeExitContext context, Kafka kafka, kafkaNodePool, KafkaNodePoolStatus newKafkaNodePoolStatus) {
+        return CompletableFuture.completedFuture(newKafkaNodePoolStatus);
+    }
+
+    default CompletionStage<KafkaBridgeStatus> kafkaExit(GatekeeperMitatingKafkaBridgeExitContext context, Kafka kafka, List<KafkaNodePool> kafkaNodePools, KafkaStatus newKafkaStatus) {
+        return CompletableFuture.completedFuture(newKafkaStatus);
+    }
+}
+
+interface GatekeeperValidatingKafkaPlugin {
+    default CompletionStage<Void> kafkaEntry(GatekeeperMitatingKafkaBridgeEntryContext context, Kafka kafka, List<KafkaNodePool> kafkaNodePools) {
+        return CompletableFuture.completedFuture(null);
+    }
+
+    default CompletionStage<Void> kafkaNodePoolExit(GatekeeperMitatingKafkaBridgeExitContext context, Kafka kafka, kafkaNodePool, KafkaNodePoolStatus newKafkaNodePoolStatus) {
+        return CompletableFuture.completedFuture(null);
+    }
+
+    default CompletionStage<Void> kafkaExit(GatekeeperMitatingKafkaBridgeExitContext context, Kafka kafka, List<KafkaNodePool> kafkaNodePools, KafkaStatus newKafkaStatus) {
         return CompletableFuture.completedFuture(null);
     }
 }
