@@ -54,6 +54,10 @@ For the Cluster Operator and User Operator, this means after the reconciliation 
 For the Topic Operator, this means after the topic is accepted into the in-flight batch.
 If the resource is not accepted for reconciliation, for example because the lock is not acquired or the topic is already in flight, the metric is not created.
 
+Reconciliations that are skipped also do not register as stuck.
+For example, when a custom resource has the `strimzi.io/pause-reconciliation` annotation, the reconciliation completes without doing the normal resource work.
+The meter is removed when that skipped reconciliation completes, so the alert does not match.
+
 If the reconciliation gets stuck and the completion path is never reached, the metric remains exported with the original start timestamp.
 Prometheus can then alert based on elapsed time:
 
@@ -110,6 +114,8 @@ For the Cluster Operator and User Operator, it should be created after the recon
 For the Topic Operator, it should be created after a topic is accepted for reconciliation and is tracked as in-flight.
 It should be removed in the matching completion path that stops the existing reconciliation timer and clears the in-progress state.
 If the resource is not accepted for reconciliation, no in-progress metric should be created because that execution path is not actively reconciling the resource.
+Skipped reconciliations, such as a paused custom resource, briefly pass through this lifecycle.
+The meter is removed when the skipped reconciliation completes, so no long-lived series is produced.
 
 The implementation can reuse the existing `removeMetric(...)` pattern used by other per-resource metrics.
 This is important for deleted resources because the desired terminal state is no exported series, not a special value.
@@ -119,6 +125,7 @@ Tests should cover the main lifecycle cases:
 * The metric is created while a reconciliation is running.
 * The metric is removed after success or failure.
 * The metric is not created when the resource is not accepted for reconciliation.
+* Reconciliations that are skipped, such as for a paused custom resource, do not produce a long-lived metric.
 * The metric remains exported while a reconciliation future has not completed.
 
 ### Documentation and examples
