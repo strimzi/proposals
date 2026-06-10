@@ -1,1 +1,7 @@
 /.idea/
+
+# AI assistants configuration
+.claude/
+.mcp.json
+.bob/
+.opencode
