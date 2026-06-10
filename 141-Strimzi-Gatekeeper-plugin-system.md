@@ -337,7 +337,7 @@ However, it might be used in the future.
 * The original custom resource which the plugin should evaluate including the original status section.
 * In case of Kafka and Kafka Connect, a collection with the secondary resources (Kafka node pools or connectors).
 * The new custom resource status section, which the plugin should evaluate.
-* In case of Kafka and Kafka Connect plugins, there will be a secondary _exit_ method for handling the sattus of the secondary resource.
+* In case of Kafka and Kafka Connect plugins, there will be a secondary _exit_ method for handling the status of the secondary resource.
 * For mutating plugins, the method would return a completion stage containing the updated status section of the custom resources.
 For Kafka and Kafka Connect, the _exit_ method for the Kafka Status would return the Kafka Status.
 The _exit_ method for the secondary resource will return the secondary resource's status.
