@@ -241,7 +241,7 @@ At reconciliation _exit_, they will always be called in the following order:
 
 Within each plugin group, the plugins will be invoked in the reverse order specified by the user or by the Strimzi source code.
 
-![Plugins wrapping the reconciliation](./images/141-Strimzi-Gatekeeper-plugins-system-onion-wrapping.svg)
+![Plugins wrapping the reconciliation](./images/144-Strimzi-Gatekeeper-plugins-system-onion-wrapping.svg)
 
 The plugins are _wrapping_ the reconciliation.
 So the reverse order at _exit_ naturally corresponds to this.
@@ -274,7 +274,7 @@ The following diagram shows the Strimzi reconciliation flow with the Gatekeeper 
 12. Mutating plugin modifies the `.status` section (e.g. add a warning condition) and return CR (D)
 13. Strimzi uses the `.status` section from CR (D) and updates it in the Kubernetes API server
 
-![Strimzi reconciliation flow](./images/141-Strimzi-Gatekeeper-plugins-system-invocation.svg)
+![Strimzi reconciliation flow](./images/144-Strimzi-Gatekeeper-plugins-system-invocation.svg)
 
 #### Plugin interfaces
 
