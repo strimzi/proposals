@@ -1,11 +1,13 @@
-# Safe rollout of listener connectivity changes (per-broker listener-resource reconciliation + deterministic node ports)
+# Safe rollout of listener connectivity changes
 
 Make connectivity-affecting listener changes (listener type changes, port changes, adding/removing a listener) safe to roll out and roll back. This applies to **all listener types that provision per-broker Kubernetes resources** — `nodeport`, `loadbalancer`, `cluster-ip`, `route`, and `ingress` — not just `nodeport`. The proposal has two complementary parts:
 
 - **Per-broker listener-resource reconciliation aligned with the rolling update (the general fix).** Reconcile each broker's listener resources (its `Service`, and `Route`/`Ingress` where applicable) in lockstep with that broker's own restart, instead of replacing all per-broker resources for the whole cluster up front while the brokers restart one by one. This removes the availability window — present for **every** per-broker listener type — where a not-yet-rolled broker's resources already point at a listener the broker is not yet serving.
 - **Deterministic node ports (a `nodeport`-specific hardening).** Give `nodeport` listeners stable, formula-derived node ports so deployments and rollbacks never reshuffle ports between listeners. This removes the most severe failure from the incident below (clients hitting the *wrong SASL mechanism*), with a small, low-risk change and no change to the rolling-update machinery.
 
-The two are independent and can ship separately. The rest of this document refers to them as **Phase 1 (deterministic node ports)** and **Phase 2 (per-broker reconciliation)**, numbered by expected delivery order (Phase 1 is the smaller change and is expected to land first), not by importance — Phase 2 is the general fix.
+The rest of this document refers to them as **Phase 1 (deterministic node ports)** and **Phase 2 (per-broker reconciliation)**, numbered by expected delivery order (Phase 1 is the smaller change and is expected to land first), not by importance — Phase 2 is the general fix.
+
+**Why a single proposal.** The two parts are the two independent root causes of the *same* incident and are designed against the same area of the code (external listener provisioning during a roll); presenting them together makes the trade-off between them explicit (see [Rejected alternatives](#rejected-alternatives), which shows why neither alone is sufficient). They can still be delivered as **two separate pull requests** — Phase 1 is a self-contained CRD feature with no dependency on Phase 2 — and if the maintainers prefer, Phase 1 can be extracted into its own proposal. The implementation work is intentionally decoupled; only the design rationale is shared.
 
 `loadbalancer` listeners have an address-churn problem analogous to the `nodeport` port reshuffle (the cloud may reassign the external IP/hostname when the `Service` is recreated); equivalent pinning mitigations exist but are cloud-provider-specific and are out of scope here. The general remedy for `loadbalancer` (and all other types) is Phase 2.
 
@@ -103,6 +105,13 @@ listeners:
 ```
 
 Because each listener maps to a disjoint port range and each broker's port is a pure function of its node ID, ports are identical across every deploy, rollback and type change, and two listeners can never collide. Node-port validation is extended to reject rendered values outside the service node-port range and duplicates within a listener.
+
+**Relationship to `advertisedPortTemplate` (#135).** These are different fields controlling different things and are not interchangeable:
+
+- `advertisedPortTemplate` sets the **advertised** port — the value Strimzi writes into `advertised.listeners` and hands to clients. It does **not** influence which `NodePort` Kubernetes actually allocates.
+- `nodePortTemplate` (this proposal) pins the **actually allocated** `spec.ports[].nodePort` on the `Service`. This is the value that physically routes traffic and that collides on a random reallocation.
+
+For a `nodeport` listener the two are normally equal, but only pinning the real `NodePort` prevents the collision; templating only the advertised port would still let Kubernetes shuffle the underlying ports. `nodePortTemplate` follows the same formula syntax and evaluation as `advertisedPortTemplate` for consistency.
 
 Phase 1 requires no change to the rolling update and is fully backwards compatible (explicit per-broker `nodePort` continues to take precedence). It can be delivered and adopted before Phase 2.
 
@@ -204,9 +213,12 @@ The roll iterates node by node on a single-threaded executor via `maybeRollKafka
 The hook (`reconcileBrokerListener(node)` + that broker's `ConfigMap` update) must:
 
 - fire only at those points, never when a node is merely "considered" (otherwise the broker's resources are switched while the still-running broker serves the old listener — the exact bug, localized to one broker for the duration of a deferral);
-- be **idempotent**, because a node may pass `canRoll` and still be retried.
+- be **idempotent**, because a node may pass `canRoll` and still be retried;
+- run before **every** restart of a not-yet-converged broker, including the `forceRestart` and force-roll-on-error branches (see below).
 
-A connectivity change is signalled by `podNeedsRestart` returning a new reason (e.g. `LISTENER_CONFIGURATION_CHANGE`) for brokers that are not yet converged. This yields `needsRestart = true` (so it is gated by `canRoll` and never the unsafe `forceRestart`) and short-circuits the dynamic-reconfiguration path (`advertised.listeners` is not dynamically updatable anyway).
+A connectivity change is signalled by `podNeedsRestart` returning a new reason (e.g. `LISTENER_CONFIGURATION_CHANGE`) for brokers that are not yet converged. This yields `needsRestart = true` (so it is gated by `canRoll`) and short-circuits the dynamic-reconfiguration path (`advertised.listeners` is not dynamically updatable anyway).
+
+**Handling the `forceRestart` branch.** Although a connectivity change itself maps to `needsRestart` (not `forceRestart`), a not-yet-converged broker can still hit the `forceRestart`/force-roll-on-error path for an *unrelated* reason — e.g. the pod is stuck, unresponsive, or on an old revision — during the migration. If the listener hook only ran on the `needsRestart` branch, such a broker would be restarted with its resources/`ConfigMap` still on the old listener and would come back mismatched, converging only on a later reconcile. The hook must therefore key off "is this broker not yet converged?" and run before the restart on **all** branches. Because the hook is idempotent and only reconciles that broker's own resources, doing so on the force paths is safe.
 
 **4. Avoid the PodSet "double-roll".**
 The advertised host/port hash is folded into the broker config hash and surfaced as a **pod annotation** (`perBrokerKafkaConfiguration()` → `podSetPodAnnotations()`), and `podSet()` runs *before* the roll and can itself restart pods when annotations change. If the new advertised config were applied up front, `podSet()` would roll pods prematurely — with the new annotation but before the per-broker `Service` hook runs. Phase 2 must therefore keep the up-front `podSet()` carrying the **old** advertised hash and apply each broker's new config/annotation during the roll (step 3), so a broker is rolled exactly once, by `KafkaRoller`, with its `Service` already switched. This is the most delicate part of the implementation and must be covered by tests.
@@ -233,11 +245,32 @@ reconcileSharedPrerequisites()        // certs/secrets, no connectivity change
 - If a broker fails to roll, the bootstrap is never switched; the cluster is left in a still-functional mixed state (each broker self-consistent) and the next reconcile resumes via the per-broker convergence guard.
 - `KafkaRoller`'s existing controller/quorum and in-sync-replica safety checks are unchanged and continue to gate each broker's restart.
 
-### Implementation alternative considered for Phase 2
+### Decision: in-roller hook (and the rejected alternative)
 
-Rather than teaching `KafkaRoller` to reconcile listener resources, the listener reconciler could drive the roll itself by calling `maybeRollKafka(...)` with a **single-node set per broker**, reconciling that broker's resources between calls. This keeps resource/`ConfigMap` I/O out of `KafkaRoller` and preserves its clean "pods + admin client only" boundary, which is attractive for the operator's most safety-critical component.
+**This proposal recommends the in-roller hook** described above: a single `KafkaRoller` instance for the whole roll, with the strictly-placed, idempotent pre-restart hook reconciling each broker's resources.
 
-The downside is real: a fresh `KafkaRoller` per broker loses the cross-node ordering and quorum/ISR batching that a single roller instance provides across all nodes, re-creates admin clients on every call, and re-derives ordering (controllers vs brokers, unready-first) that the roller does for free. Given those losses, this proposal recommends the in-roller hook (with the strict pre-restart placement above) as the primary approach, but the per-broker-`maybeRollKafka` variant is a viable fallback if maintainers prefer not to widen the `KafkaRoller` boundary, and the choice should be settled during review.
+The decision is driven by **safety over boundary-cleanliness**. A single `KafkaRoller` instance holds the cluster-wide view needed to roll safely — controller-first ordering, unready-first ordering, and quorum/ISR `canRoll` checks evaluated across all nodes. Preserving that global view is the property that actually protects availability during the roll, and it is the harder thing to get right.
+
+The rejected alternative is to drive the roll from the listener reconciler by calling `maybeRollKafka(...)` with a **single-node set per broker**, reconciling that broker's resources between calls. This keeps resource/`ConfigMap` I/O out of `KafkaRoller` and preserves its clean "pods + admin client only" boundary — attractive, but it spins up a fresh roller per broker, which loses the cross-node ordering and quorum/ISR batching, re-creates admin clients on every call, and re-derives ordering the roller otherwise does for free. Trading away the roller's global safety reasoning to keep a code boundary tidy is the wrong trade for the operator's most safety-critical path, so this variant is rejected. The cost of the chosen approach — widening `KafkaRoller`'s responsibility — is contained by the strict hook placement and idempotency requirements above and must be covered by tests.
+
+### Feature gate and rollout (Phase 2)
+
+Because Phase 2 changes the behaviour of the reconcile/roll path — the operator's most safety-critical area — it is introduced behind a **feature gate** (e.g. `CoupledListenerRollout`), following Strimzi's usual gate lifecycle:
+
+- **Alpha (disabled by default):** opt-in for early adopters and CI; the current all-at-once behaviour remains the default.
+- **Beta (enabled by default):** after the test matrix below is green across supported listener types, with the gate still available to disable.
+- **GA / gate removal:** once proven in the field.
+
+When the gate is disabled, the code path is exactly today's behaviour, so the change is risk-free to ship dark.
+
+### Testing (Phase 2)
+
+The proposal is only credible with explicit coverage of the partial-roll states it claims to make safe:
+
+- **Unit tests** for the per-broker convergence detector (mixed/half-migrated state, internal-listener guard) and for the `KafkaRoller` hook placement (fires only pre-restart after `canRoll`, fires on the `forceRestart`/error branches for not-yet-converged brokers, is idempotent under retries, does not fire for "considered-but-deferred" nodes).
+- **Integration tests** asserting no PodSet "double-roll" occurs (each broker rolls exactly once for a connectivity change).
+- **System tests** that perform a listener `type` change and a rollback for each per-broker listener type (`nodeport`, `loadbalancer`, `cluster-ip`, `route`, `ingress`) on a multi-broker cluster, asserting clients with cached metadata keep producing/consuming throughout the roll, and that an interrupted reconcile resumes rather than re-rolling.
+- **Phase 1** adds validation tests for `nodePortTemplate` (range/duplicate rejection, formula evaluation, precedence over and interaction with explicit `nodePort`).
 
 ## Affected/not affected projects
 
@@ -250,6 +283,7 @@ No other Strimzi projects are affected. Only KRaft-based clusters are in scope (
 
 ## Compatibility
 
+- **Phase 2 is gated** behind a feature gate that is disabled by default initially (see [Feature gate and rollout (Phase 2)](#feature-gate-and-rollout-phase-2)), so it ships with zero behaviour change until explicitly enabled.
 - **Behaviour is unchanged for non-connectivity-affecting reconciliations**, and for connectivity changes on internal listeners (which fall back to current behaviour).
 - **Phase 1 is fully backwards compatible**: `nodePortTemplate` is optional and explicit per-broker `nodePort` still wins.
 - **Phase 2 needs no API/CRD change.**
