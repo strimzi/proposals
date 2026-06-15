@@ -118,7 +118,7 @@ To provide users more flexibility, they only have to configure the auto-rebalanc
 When the auto-rebalance configuration is set with `imbalance` mode enabled, the operator will trigger a partition rebalance whenever a fixable goal violation is detected by the anomaly detector.
 For the operator to trigger the auto-rebalance, it must be aware that the cluster is imbalanced due to a goal violation anomaly.
 We will make use of the `state` endpoint of Cruise Control to do this.
-The operator will use this endpoint to understand if there are any goal violations so that the operator can trigger a rebalance (see section "KafkaAutoRebalanceReconciler using state endpoint" below).
+The operator will use this endpoint to understand if there are any goal violations so that the operator can trigger a rebalance (see section "Reconciliation logic using the state endpoint" below).
 With this proposal, we will only support auto-rebalance for cluster imbalances caused by goal violations.
 We also plan to implement the same for topic and metrics related issues, but these will be part of future work since their implementation requires different approaches.
 For example, when dealing with topic related issues, it will require a coordination with topic operator and metrics issues will require coordination with the Kafka API.
@@ -173,8 +173,8 @@ spec:
 When the `template` is set, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource (based on the template) when a fixable anomaly is detected and notified by the `state` endpoint.
 The operator copies over goals and rebalancing options from the referenced `template` resource to the generated rebalancing one.
 If the user has not configured the anomaly detection goals in Cruise Control section of the Kafka CR then the operator will set the default goals to be used by the anomaly detector. 
-The default anomaly detection goals set by the operator are `RACK_AWARENESS_GOAL`, `MIN_TOPIC_LEADERS_PER_BROKER_GOAL`, `REPLICA_CAPACITY_GOAL`, `DISK_CAPACITY_GOAL`. 
-These are similar to the default goals used for `KafkaRebalance` if the users don't mention the rebalance goals.
+The default anomaly detection goals set by the operator are `RACK_AWARENESS_GOAL`, `MIN_TOPIC_LEADERS_PER_BROKER_GOAL`, `REPLICA_CAPACITY_GOAL`, `DISK_CAPACITY_GOAL`.
+These are similar to the default goals used for `KafkaRebalance` if the users don't set the rebalance goals.
 **Template Goal Validation:**
 
 If the user specifies a rebalance template, the operator validates that the goals in the template are a subset of the anomaly detection goals configured for Cruise Control.
@@ -216,7 +216,7 @@ The `KafkaAutoRebalanceReconciler` retrieves the anomaly detection goals from th
 The `KafkaRebalance` has 4 modes: `full`, `add-broker`, `remove-broker` and `remove-disks` mode.
 The `imbalance` mode will be mapped to the `full` mode in the generated KafkaRebalance resource which means that the generated `KafkaRebalance` custom resource will have the mode set as `full` which within the Strimzi rebalancing operator means calling the Cruise Control API to run a rebalancing taking all brokers into account.
 
-The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, `goal-violation` means that a goal related imbalance was detected in the cluster.
+The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `-imbalance` suffix indicates that this rebalance was triggered by detected goal violations in the cluster.
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -278,7 +278,7 @@ On every reconciliation, the operator checks the cluster state in this order and
 2. **Scale-up detected** → Execute scale-up rebalance immediately (if an imbalance rebalance is running, it is stopped)
 3. **Goal violation detected** → Execute imbalance rebalance (only if no scale operation is in progress, and maintenance time windows are satisfied if configured)
 
-If a scale operation interrupts an imbalance rebalance, the imbalance rebalance is dropped.
+If a scale operation interrupts an imbalance rebalance, the imbalance rebalance will be stopped and the corresponding `KafkaRebalance` will be deleted to start the scaling operation.
 After the scale operation completes, if the cluster is still imbalanced, Cruise Control will detect the goal violation again in a future reconciliation, and a fresh imbalance rebalance will be triggered.
 This prevents wasted work: scale operations change the cluster topology, making any in-progress imbalance rebalance based on outdated information.
 
@@ -383,20 +383,19 @@ This ensures we don't retrigger rebalances for goal violations that were already
 Since auto-generated `KafkaRebalance` resources are deleted upon completion or failure, and manual `KafkaRebalance` resources can be deleted by users, we need a persistent location to track completion times.
 The operator uses a **ConfigMap** to store this information.
 
-**ConfigMap: `<cluster-name>-auto-rebalance-imbalance-tracker`**
+**ConfigMap: `<cluster-name>-rebalancing-tracker`**
 
 This ConfigMap:
 - Stores the timestamp of the most recent rebalance completion
-- Tracks the current rebalancing phase for JBOD clusters (inter-broker vs. intra-broker)
 - Is created in the same namespace as the Kafka cluster
 - Persists even after `KafkaRebalance` resources are deleted
-- Allows the operator to recover state after crashes or restarts
-- Is managed exclusively by the `KafkaAssemblyOperator` (maintains proper ownership boundaries)
+- Allows the operator to prevent duplicate rebalance triggers for already-fixed anomalies
+- Is managed by the `KafkaRebalanceAssemblyOperator` (which already owns all `KafkaRebalance` reconciliation)
 
 **ConfigMap Lifecycle:**
 
-- **Creation**: Created automatically by the operator when the first rebalance (manual or auto-generated) completes
-- **Updates**: Updated throughout the lifecycle whenever rebalances complete or JBOD rebalancing phases change
+- **Creation**: Created automatically by the operator when the first rebalance (manual or auto-generated) completes 
+- **Updates**: Updated by `KafkaRebalanceAssemblyOperator` whenever any `KafkaRebalance` resource (manual or auto-generated) transitions to a terminal state (`Ready`, `NotReady`, or `Stopped`)
 - **Persistence**: The ConfigMap is **not deleted** when rebalances complete or when the Kafka cluster is idle
 - **Deletion**: Only deleted when the Kafka cluster itself is deleted (via owner reference to the Kafka CR)
 - **Rationale**: Persisting the ConfigMap allows accurate timestamp comparison across reconciliations and operator restarts, preventing duplicate rebalancing operations
@@ -406,48 +405,62 @@ Example ConfigMap:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: my-cluster-auto-rebalance-imbalance-tracker
+  name: my-cluster-rebalancing-tracker
   namespace: kafka
   labels:
     strimzi.io/cluster: my-cluster
     strimzi.io/kind: Kafka
 data:
   lastRebalanceCompletionTime: "2026-06-03T14:23:45Z"
-  # For JBOD clusters in RebalanceOnImbalance state, tracks which phase is active
-  rebalancingPhase: "inter-broker"  # Values: "inter-broker", "intra-broker", or absent
 ```
 
 **ConfigMap Data Fields:**
 
 1. **`lastRebalanceCompletionTime`**: ISO-8601 timestamp of the most recent rebalance completion (manual or auto-generated)
 
-2. **`rebalancingPhase`** (optional, only present during active RebalanceOnImbalance for JBOD clusters):
-   - `"inter-broker"`: Inter-broker rebalancing is currently active
-   - `"intra-broker"`: Intra-broker disk rebalancing is currently active
-   - Field is absent when not in RebalanceOnImbalance state or for non-JBOD clusters
-
 **Update Logic:**
 
-To maintain proper operator ownership boundaries (where `KafkaAssemblyOperator` owns the `Kafka` CR and `KafkaRebalanceAssemblyOperator` owns `KafkaRebalance` CRs), the update mechanism works as follows:
+The operator leverages the **existing `KafkaRebalanceAssemblyOperator`** which already watches and reconciles all `KafkaRebalance` resources.
+The ConfigMap update logic is added directly into `KafkaRebalanceAssemblyOperator.reconcileKafkaRebalance()` method, which processes every `KafkaRebalance` resource (whether auto-generated or manual).
 
-The `KafkaAssemblyOperator` (which contains `KafkaAutoRebalanceReconciler`) maintains a watch on `KafkaRebalance` resources with the `strimzi.io/cluster` label matching Kafka clusters it manages.
-When any `KafkaRebalance` resource (manual or auto-generated) transitions to a terminal state (Ready, NotReady, or Stopped):
-1. The watch trigger fires in `KafkaAssemblyOperator`
-2. The operator extracts the cluster name from the `KafkaRebalance` labels (`strimzi.io/cluster`)
-3. The operator updates the ConfigMap `<cluster-name>-auto-rebalance-imbalance-tracker` with the current timestamp in the `lastRebalanceCompletionTime` field
-4. This happens **before** the `KafkaRebalance` resource is deleted (for auto-generated ones)
+**How it works:**
+
+`KafkaRebalanceAssemblyOperator` already reconciles every `KafkaRebalance` resource and updates their status. We extend this to also update the ConfigMap when a rebalance reaches a terminal state:
+
+```java
+// In KafkaRebalanceAssemblyOperator.reconcileKafkaRebalance()
+// After status update logic
+
+KafkaRebalanceState currentState = KafkaRebalanceUtils.rebalanceState(kafkaRebalance.getStatus());
+
+// Update ConfigMap for terminal states
+if (currentState == Ready || currentState == NotReady || currentState == Stopped) {
+    String clusterName = kafkaRebalance.getMetadata().getLabels().get(Labels.STRIMZI_CLUSTER_LABEL);
+    if (clusterName != null) {
+        // Update the tracker ConfigMap with the completion timestamp
+        updateRebalanceCompletionTime(
+            kafkaRebalance.getMetadata().getNamespace(), 
+            clusterName, 
+            Instant.now()
+        );
+    }
+}
+
+// Continue with existing reconciliation logic...
+```
 
 This approach:
-- Preserves operator ownership boundaries: only `KafkaAssemblyOperator` modifies the state ConfigMap
-- Captures completion times for both manual and auto-generated rebalances
-- Works even if users delete `KafkaRebalance` resources manually (the watch sees the terminal state before deletion)
-- Provides a separate, queryable resource for tracking rebalance state without polluting the Kafka CR status
+- **Leverages existing infrastructure**: Uses the `KafkaRebalanceAssemblyOperator` watch that already processes all `KafkaRebalance` resources
+- **Single source of truth**: Every rebalance (auto-generated or manual) is processed by the same operator
+- **Automatic coverage**: The ConfigMap is updated for ANY rebalance that completes, regardless of how it was created
+- **Consistent with ownership**: `KafkaRebalanceAssemblyOperator` owns `KafkaRebalance` reconciliation, so it's natural for it to track completion times
+- **No duplication**: Avoids listing/checking rebalances in multiple places
 
 **Comparison Logic:**
 
 A rebalance on imbalance will be triggered when:
 ```java
-ConfigMap stateConfigMap = getConfigMap(namespace, clusterName + "-auto-rebalance-imbalance-tracker");
+ConfigMap stateConfigMap = getConfigMap(namespace, clusterName + "-rebalancing-tracker");
 String lastCompletionTime = stateConfigMap != null ? stateConfigMap.getData().get("lastRebalanceCompletionTime") : null;
 
 if (lastCompletionTime == null) {
@@ -465,9 +478,10 @@ This ensures anomalies fixed by either manual or auto-rebalances don't trigger d
 
 #### What happens if there are no rebalances running and an anomaly is detected (The Happy Path)
 
-1. The operator retrieves the `lastRebalanceCompletionTime` from the `<cluster-name>-auto-rebalance-imbalance-tracker` ConfigMap and compares the anomaly `detectionDate` against this timestamp (see comparison logic in "Logic to trigger rebalance" section)
+1. The operator retrieves the `lastRebalanceCompletionTime` from the `<cluster-name>-rebalancing-tracker` ConfigMap and compares the anomaly `detectionDate` against this timestamp (see comparison logic in "Logic to trigger rebalance" section)
 2. If the comparison indicates a new anomaly, the operator transitions to `RebalanceOnImbalance` and creates a new `KafkaRebalance` resource
-3. Once the rebalance completes, the `KafkaAssemblyOperator` updates the `lastRebalanceCompletionTime` field in the ConfigMap, then the `KafkaAutoRebalancingReconciler` transitions back to `Idle` and deletes the resource
+3. Once the rebalance completes (transitions to `Ready` state), the `KafkaRebalanceAssemblyOperator` automatically updates the `lastRebalanceCompletionTime` field in the ConfigMap during its reconciliation
+4. The `KafkaAutoRebalanceReconciler` then detects the completion, transitions back to `Idle`, and deletes the auto-generated resource
 
 #### What happens if the anomaly is detected during a running rebalance
 
@@ -478,15 +492,10 @@ If the anomaly persists after the rebalance completes, Cruise Control will detec
 
 When an auto-rebalance on imbalance fails (the `KafkaRebalance` resource transitions to `NotReady` state):
 
-**Step 1 - KafkaAssemblyOperator (via watch):**
-1. Detects the NotReady state transition via the `KafkaRebalance` watch
-2. Updates the `<cluster-name>-auto-rebalance-imbalance-tracker` ConfigMap with the current timestamp in the `lastRebalanceCompletionTime` field (before the resource is deleted)
-3. This records the failure timestamp as the last completion time
-
-**Step 2 - KafkaAutoRebalancingReconciler:**
-1. **Propagates the error**: Sets a Warning condition on the Kafka CR with the error message from the `KafkaRebalance` status
-2. **Transitions to Idle**: Moves the auto-rebalance state machine from `RebalanceOnImbalance` back to `Idle`
-3. **Deletes the resource**: Removes the failed `KafkaRebalance` resource (safe since completion timestamp is in ConfigMap)
+1. **ConfigMap updated automatically**: The `KafkaRebalanceAssemblyOperator` updates the `<cluster-name>-rebalancing-tracker` ConfigMap's `lastRebalanceCompletionTime` when it reconciles the `NotReady` state
+2. **Error propagation**: The `KafkaAutoRebalanceReconciler` sets a Warning condition on the Kafka CR with the error message from the `KafkaRebalance` status
+3. **State transition**: Moves the auto-rebalance state machine from `RebalanceOnImbalance` back to `Idle`
+4. **Cleanup**: Removes the failed `KafkaRebalance` resource
 
 **Retry Behavior:**
 
@@ -587,13 +596,14 @@ Users will need to ensure that they disable the `imbalance` mode of auto-rebalan
 
 ### Maintenance Time Windows
 
-Auto-rebalance on imbalance supports maintenance time windows to allow users to control when rebalancing operations occur.
+Auto-rebalance on imbalance can respect maintenance time windows to control when rebalancing operations occur, using the existing `Kafka.spec.maintenanceTimeWindows` configuration that is already used for certificate renewals in Strimzi.
 
 #### Implementation Design
 
-Users can configure **dedicated maintenance time windows** specifically for auto-rebalance on imbalance. These windows are independent of the global maintenance windows used for certificate renewals.
+The operator will reuse the **global maintenance time windows** defined at `Kafka.spec.maintenanceTimeWindows` for auto-rebalance on imbalance operations.
+This provides a unified approach to scheduling maintenance activities (certificate renewals and cluster rebalancing) within designated time windows.
 
-**Recommended Configuration - Custom Maintenance Windows for Rebalancing:**
+**Configuration Example:**
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1beta2
@@ -604,88 +614,74 @@ spec:
   kafka:
     # ...
   maintenanceTimeWindows:
-    - "* * 2-4 * * ?"     # Global: 2:00-4:59 UTC daily (for certificate renewals)
+    - "* * 2-4 * * ?"     # 2:00-4:59 UTC daily for both cert renewals AND auto-rebalancing
   cruiseControl:
     # ...
     autoRebalance:
       - mode: imbalance
-        maintenanceTimeWindows:
-          - "* * 8-10 * * ?"    # Custom window #1: 8:00-10:59 UTC daily
-          - "* * 14-16 * * ?"   # Custom window #2: 14:00-16:59 UTC daily
-          - "* * 20-22 * 5 ?"   # Custom window #3: 20:00-22:59 UTC on Fridays only
         template:
           name: my-imbalance-rebalance-template
 ```
 
 **Key Features:**
 
-- **Fully customizable**: Users define their own cron expressions for when rebalancing can occur
-- **Multiple windows**: Support for multiple time windows per day/week (as shown above)
-- **Independent from global windows**: Rebalancing windows are separate from certificate renewal windows
-- **Standard cron format**: Uses the same cron expression format as `Kafka.spec.maintenanceTimeWindows` (in UTC timezone)
-- **Optional field**: If not specified, different behavior applies (see options below)
+- **Reuses existing infrastructure**: Leverages the same `Util.isMaintenanceTimeWindowsSatisfied()` utility method already used for certificate renewals
+- **Unified maintenance scheduling**: Both certificate renewals and imbalance rebalancing occur during the same time windows
+- **Standard cron format**: Uses the same cron expression format as certificate renewal windows (in UTC timezone)
+- **Optional field**: If not specified, rebalancing triggers immediately when anomalies are detected
 
 **Configuration Options:**
 
-1. **Custom maintenance windows for imbalance** (RECOMMENDED):
+1. **With maintenance windows configured**:
    ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         maintenanceTimeWindows:           # User-defined windows
-           - "* * 8-10 * * ?"
-           - "* * 14-16 * * ?"
+   spec:
+     maintenanceTimeWindows:
+       - "* * 2-4 * * ?"      # 2:00-4:59 AM UTC daily
+       - "* * 14-16 * 5 ?"    # 2:00-4:59 PM UTC on Fridays
+     cruiseControl:
+       autoRebalance:
+         - mode: imbalance
+           template:
+             name: my-template
    ```
-    - ✅ Uses ONLY the windows defined here (ignores global windows)
-    - ✅ Full user control over rebalancing schedule
-    - ✅ Can be different from certificate renewal schedule
-    - ✅ Best for production clusters with specific operational requirements
+   - ✅ Rebalancing and certificate renewals respect the same time windows
+   - ✅ Simpler configuration - one set of windows for all maintenance activities
+   - ✅ Consistent maintenance scheduling across all operator operations
 
-2. **Fallback to global windows**:
+2. **Without maintenance windows (immediate rebalancing)**:
    ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         # maintenanceTimeWindows field not present
-   # But Kafka.spec.maintenanceTimeWindows exists
+   spec:
+     # maintenanceTimeWindows not specified
+     cruiseControl:
+       autoRebalance:
+         - mode: imbalance
    ```
-    - Uses the global `Kafka.spec.maintenanceTimeWindows`
-    - Simpler configuration when rebalancing and certificate renewal can share the same schedule
-    - Less flexible but easier to manage
-
-3. **No maintenance windows (immediate rebalancing)**:
-   ```yaml
-   cruiseControl:
-     autoRebalance:
-       - mode: imbalance
-         # maintenanceTimeWindows field not present
-   # AND Kafka.spec.maintenanceTimeWindows also not present
-   ```
-    - Rebalancing triggers immediately when anomalies are detected
-    - No time-based restrictions
-    - Suitable for development/test clusters or critical production clusters requiring immediate action
+   - Rebalancing triggers immediately when anomalies are detected
+   - No time-based restrictions
+   - Suitable for development/test clusters or critical production clusters requiring immediate action
 
 **Behavior:**
 
-- **When maintenance windows are configured** (option 1 or 2):
-    - When an anomaly is detected outside a maintenance window, the operator records the detection but does NOT trigger a rebalance
-    - During the next maintenance window, the operator queries Cruise Control's `state` endpoint
-    - If the anomaly still exists (based on `detectionDate` comparison), the rebalance is triggered
-    - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window
+- **When maintenance windows are configured**:
+  - When an anomaly is detected outside a maintenance window, the operator records the detection but does NOT trigger a rebalance
+  - During the next reconciliation that falls within a maintenance window, the operator queries Cruise Control's `state` endpoint
+  - If the anomaly still exists (based on `detectionDate` comparison against `lastRebalanceCompletionTime`), the rebalance is triggered
+  - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window check using `Util.isMaintenanceTimeWindowsSatisfied(reconciliation, maintenanceWindows, clock.instant())`
 
-- **When no maintenance windows are configured** (option 3):
-    - Rebalance is triggered immediately when a fixable goal violation is detected
-    - Useful for critical clusters where imbalance correction cannot wait
+- **When no maintenance windows are configured**:
+  - Rebalance is triggered immediately when a fixable goal violation is detected
+  - Useful for critical clusters where imbalance correction cannot wait
 
 **Emergency Override:**
 
 If users need immediate rebalancing despite configured maintenance windows (e.g., critical disk capacity issue), they can:
-1. Temporarily remove or comment out the `maintenanceTimeWindows` field from the auto-rebalance configuration, or
+1. Temporarily remove the `maintenanceTimeWindows` field from the `Kafka` CR, or
 2. Create a manual `KafkaRebalance` resource (which bypasses maintenance windows)
 
 #### Interaction with Scale Operations
 
 Scale-up and scale-down auto-rebalance operations will continue to **ignore** maintenance windows (executed immediately), while imbalance auto-rebalance respects them.
+This design follows the principle that scaling operations are typically urgent infrastructure changes (adding capacity for increased load or removing failed/excess nodes), whereas imbalance correction is a performance optimization that can be deferred to low-traffic periods defined by maintenance windows.
 
 #### Handling Intra-Broker Disk Imbalances (JBOD Storage)
 
@@ -712,7 +708,12 @@ The operator handles violations sequentially:
 
 **Execution Flow:**
 
-When anomalies are detected, the operator categorizes violations by goal type:
+When anomalies are detected, the operator categorizes violations by examining the `fixableViolatedGoals` list from Cruise Control's state endpoint:
+
+- **Inter-broker goals**: Any goal except `IntraBrokerDiskCapacityGoal` and `IntraBrokerDiskUsageDistributionGoal`
+- **Intra-broker goals**: `IntraBrokerDiskCapacityGoal` or `IntraBrokerDiskUsageDistributionGoal`
+
+Based on this categorization:
 
 1. **Both types detected**: 
    - First: Create `KafkaRebalance` with `rebalanceDisk=false` for inter-broker violations
@@ -723,7 +724,8 @@ When anomalies are detected, the operator categorizes violations by goal type:
    - Goals automatically set by Cruise Control (template goals ignored)
 
 3. **Only inter-broker violations**:
-   - Standard inter-broker rebalance (existing behavior)
+   - Create `KafkaRebalance` with `rebalanceDisk=false` (or field omitted, defaults to `false`)
+   - Uses goals from template if configured, otherwise defaults
 
 **State Machine Handling:**
 
@@ -767,25 +769,31 @@ spec:
 
 **Operator Crash Recovery:**
 
-For JBOD clusters, the FSM state `RebalanceOnImbalance` alone is insufficient to recover after an operator crash because it doesn't indicate whether inter-broker or intra-broker rebalancing is active.
-The operator uses the `<cluster-name>-auto-rebalance-imbalance-tracker` ConfigMap to track the current rebalancing phase.
-
-The ConfigMap's `rebalancingPhase` field is updated as rebalancing progresses:
-- Set to `"inter-broker"` when inter-broker rebalancing starts
-- Updated to `"intra-broker"` when intra-broker rebalancing starts
-- Removed when all rebalancing completes and FSM transitions to `Idle`
-
-When the operator restarts during `RebalanceOnImbalance`:
+When the operator crashes and restarts during `RebalanceOnImbalance`:
 
 1. Read the FSM state from `Kafka.status.autoRebalance.state` (finds `RebalanceOnImbalance`)
-2. Read `rebalancingPhase` from the ConfigMap to determine which phase was active:
-   - `"inter-broker"` → Inter-broker rebalancing was in progress
-   - `"intra-broker"` → Intra-broker rebalancing was in progress
-   - Field absent → Not a JBOD rebalance or already completed
-3. Check for the existing `KafkaRebalance` resource and verify its `rebalanceDisk` field matches the expected phase
-4. Resume monitoring the rebalance from its current state
+2. Check if the `KafkaRebalance` resource `<cluster-name>-auto-rebalancing-imbalance` exists:
+   - **If exists**: Continue monitoring it from its current state (`ProposalReady`, `Rebalancing`, `Ready`, etc.)
+     - The `rebalanceDisk` field in the `KafkaRebalance` spec indicates whether this is inter-broker (`false`) or intra-broker (`true`) rebalancing
+     - Process the rebalance normally based on its current state
+   - **If missing**: The rebalance was either completed, failed, stopped, or manually deleted during the crash
+     - Transition auto-rebalance state to `Idle`
+     - Trust Cruise Control's anomaly detection to re-detect any remaining imbalances (runs every 5 minutes by default)
+     - Next reconciliation will query Cruise Control and create a new `KafkaRebalance` if violations still exist
 
-If the `KafkaRebalance` resource is missing (deleted while operator was down), treat this as a failure: transition to `Idle` and remove the `rebalancingPhase` field from the ConfigMap.
+**Why This Works:**
+
+This simplified recovery approach works because Cruise Control's anomaly detection acts as the persistent source of truth about cluster state.
+The operator doesn't need to remember "what phase were we in" because Cruise Control will tell us what violations currently exist.
+
+For JBOD two-phase rebalancing scenarios:
+- **Crash during inter-broker phase**: `KafkaRebalance` exists with `rebalanceDisk=false` → continue monitoring it from its current state
+- **Crash after inter-broker completion, before intra-broker**: 
+  - Inter-broker `KafkaRebalance` was already deleted (transitioned to `Ready` and cleaned up)
+  - Auto-rebalance state is `Idle`
+  - Cruise Control still detects remaining intra-broker violations
+  - Next reconciliation creates new `KafkaRebalance` with `rebalanceDisk=true` for the intra-broker violations
+- **Crash during intra-broker phase**: `KafkaRebalance` exists with `rebalanceDisk=true` → continue monitoring it from its current state
 
 #### Metrics for tracking the rebalance requests
 
@@ -931,7 +939,8 @@ Checking the current `KafkaRebalance` status:
   * the rebalancing is stopped, transition to **Idle** and also removing the corresponding mode from the status. The operator deletes the generated `KafkaRebalance` custom resource. The users should then disable the `imbalance` mode of auto-rebalance else a new rebalance would be triggered.
 
 If, during an ongoing auto-rebalancing, the `KafkaRebalance` custom resource is not there anymore on the next reconciliation, it could mean the user deleted it while the operator was stopped/crashed/not running.
-In this case, the FSM will assume it as falling in the `NotReady` case above.
+In this case, the operator will transition the auto-rebalance state to `Idle`.
+Cruise Control will re-detect any persisting goal violations in the next anomaly detection cycle, and a fresh rebalance will be triggered if needed.
 
 ### `KafkaRebalance` Resource Lifecycle for Imbalance Mode
 
@@ -941,7 +950,7 @@ The lifecycle of auto-generated `KafkaRebalance` resources for the `imbalance` m
 A `KafkaRebalance` resource is created when:
 - The auto-rebalance state machine is in `Idle` state
 - No active `KafkaRebalance` resources exist (checked via `KafkaRebalanceUtils.rebalanceState()`)
-- A goal violation is detected with the `detectionDate` timestamp greater than the `lastRebalanceCompletionTime` from the `<cluster-name>-auto-rebalance-imbalance-tracker` ConfigMap (or the ConfigMap doesn't exist / field is null, meaning no rebalance has ever completed)
+- A goal violation is detected with the `detectionDate` timestamp greater than the `lastRebalanceCompletionTime` from the `<cluster-name>-rebalancing-tracker` ConfigMap (or the ConfigMap doesn't exist / field is null, meaning no rebalance has ever completed)
 - The `fixableViolatedGoals` list is non-empty and `unfixableViolatedGoals` list is empty
 
 **State Progression:**
@@ -1023,7 +1032,7 @@ Tests will use `MockCruiseControl` to simulate Cruise Control's `state` endpoint
 7. **Stopped Rebalance**
    - Apply `strimzi.io/rebalance=stop` annotation on generated `KafkaRebalance`
    - Simulate transition to `Stopped` state
-   - Verify `<cluster-name>-auto-rebalance-imbalance-tracker` ConfigMap's `lastRebalanceCompletionTime` is updated
+   - Verify `<cluster-name>-rebalancing-tracker` ConfigMap's `lastRebalanceCompletionTime` is updated
    - Verify operator transitions to `Idle` and deletes resource
 
 ## Affected/not affected projects
@@ -1034,7 +1043,7 @@ This change will affect the Strimzi cluster operator.
 
 The following changes need to be made to support this feature:
 
-1. **ConfigMap for state tracking**: Create a new ConfigMap `<cluster-name>-auto-rebalance-imbalance-tracker` to track the completion time of the most recent rebalance operation (manual or automatic). This ConfigMap contains a single data entry: `lastRebalanceCompletionTime`.
+1. **ConfigMap for state tracking**: Create a new ConfigMap `<cluster-name>-rebalancing-tracker` to track the completion time of the most recent rebalance operation (manual or automatic). This ConfigMap contains a single data entry: `lastRebalanceCompletionTime`.
 
 2. **Add `imbalance` mode**: Support automatic rebalancing on goal violations (handles both inter-broker and intra-broker for JBOD) in the `Kafka.spec.cruiseControl.autoRebalance` configuration.
 
@@ -1042,7 +1051,7 @@ The following changes need to be made to support this feature:
 
 4. **Add intra-broker disk goals**: For JBOD storage support: `INTRA_BROKER_DISK_CAPACITY_GOAL` and `INTRA_BROKER_DISK_USAGE_DISTRIBUTION_GOAL`.
 
-5. **Add `maintenanceTimeWindows` field**: Optional field in the auto-rebalance configuration to specify custom maintenance windows for imbalance rebalancing.
+5. **Reuse existing maintenance windows**: The feature will leverage the existing `Kafka.spec.maintenanceTimeWindows` field and `Util.isMaintenanceTimeWindowsSatisfied()` method already used for certificate renewals.
 
 These API changes are required for the auto-rebalance on imbalance feature to function correctly.
 
