@@ -222,4 +222,4 @@ Relying on client-side retry/metadata-refresh tuning to ride out the window does
 
 ### Pin node ports deterministically
 
-Giving `nodeport` listeners stable, formula-derived node ports (so a type change/rollback never reshuffles ports between listeners) was considered as a complementary `nodeport`-specific hardening; it is split into a separate proposal and out of scope here.
+Giving `nodeport` listeners stable, formula-derived node ports (so a type change/rollback never reshuffles ports between listeners) was considered. It only narrows Failure mode B for one listener type (`nodeport`) and does nothing for Failure mode A or for `loadbalancer`/`cluster-ip`/`route`/`ingress`, so it is not a general fix. It is also inflexible: formula-derived ports must fit within the cluster's `service-node-port-range`, can collide with other `NodePort` services, and pin the operator to a fixed allocation scheme. Per-broker reconciliation addresses the root cause for all listener types instead. Rejected.
