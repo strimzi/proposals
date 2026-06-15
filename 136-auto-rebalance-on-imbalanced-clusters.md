@@ -397,7 +397,7 @@ This ConfigMap:
 - **Creation**: Created automatically by the operator when the first rebalance (manual or auto-generated) completes 
 - **Updates**: Updated by `KafkaRebalanceAssemblyOperator` whenever any `KafkaRebalance` resource (manual or auto-generated) transitions to a terminal state (`Ready`, `NotReady`, or `Stopped`)
 - **Persistence**: The ConfigMap is **not deleted** when rebalances complete or when the Kafka cluster is idle
-- **Deletion**: Only deleted when the Kafka cluster itself is deleted (via owner reference to the Kafka CR)
+- **Deletion**: Only deleted when the Kafka cluster itself is deleted (via owner reference to the Kafka CR) or Cruise Control is deleted/disabled.
 - **Rationale**: Persisting the ConfigMap allows accurate timestamp comparison across reconciliations and operator restarts, preventing duplicate rebalancing operations
 
 Example ConfigMap:
