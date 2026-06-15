@@ -5,9 +5,7 @@ Make connectivity-affecting listener changes (listener type changes, port change
 - **Per-broker listener-resource reconciliation aligned with the rolling update (the general fix).** Reconcile each broker's listener resources (its `Service`, and `Route`/`Ingress` where applicable) in lockstep with that broker's own restart, instead of replacing all per-broker resources for the whole cluster up front while the brokers restart one by one. This removes the availability window — present for **every** per-broker listener type — where a not-yet-rolled broker's resources already point at a listener the broker is not yet serving.
 - **Deterministic node ports (a `nodeport`-specific hardening).** Give `nodeport` listeners stable, formula-derived node ports so deployments and rollbacks never reshuffle ports between listeners. This removes the most severe failure from the incident below (clients hitting the *wrong SASL mechanism*), with a small, low-risk change and no change to the rolling-update machinery.
 
-The rest of this document refers to them as **Phase 1 (deterministic node ports)** and **Phase 2 (per-broker reconciliation)**, numbered by expected delivery order (Phase 1 is the smaller change and is expected to land first), not by importance — Phase 2 is the general fix.
-
-**Why a single proposal.** The two parts are the two independent root causes of the *same* incident and are designed against the same area of the code (external listener provisioning during a roll); presenting them together makes the trade-off between them explicit (see [Rejected alternatives](#rejected-alternatives), which shows why neither alone is sufficient). They can still be delivered as **two separate pull requests** — Phase 1 is a self-contained CRD feature with no dependency on Phase 2 — and if the maintainers prefer, Phase 1 can be extracted into its own proposal. The implementation work is intentionally decoupled; only the design rationale is shared.
+This document refers to them as **Phase 1 (deterministic node ports)** and **Phase 2 (per-broker reconciliation)**. They are independent and can be delivered as separate pull requests; Phase 2 is the general fix.
 
 `loadbalancer` listeners have an address-churn problem analogous to the `nodeport` port reshuffle (the cloud may reassign the external IP/hostname when the `Service` is recreated); equivalent pinning mitigations exist but are cloud-provider-specific and are out of scope here. The general remedy for `loadbalancer` (and all other types) is Phase 2.
 
@@ -71,12 +69,7 @@ The port collision was the proximate cause of the sustained auth failures; the a
 
 ## Motivation
 
-Two independent weaknesses combined into the outage:
-
-- **All per-broker resources switched at once vs. brokers restarting one-by-one** caused the cluster-wide unavailability window (Failure mode A). This is general to every per-broker listener type, not specific to `nodeport`; the same outage shape can occur on a `loadbalancer`, `route`, `ingress`, or `cluster-ip` type change.
-- **Random, type-dependent node ports** caused the cross-listener collision and therefore the auth-mechanism mismatch (Failure mode B) — the part that was severe, sustained, and required a full pod delete to clear. (`loadbalancer` has the analogous IP-churn variant.)
-
-Fixing only the window (without stable ports) still leaves the severe `nodeport` collision on a type change. Fixing only the ports (without coupling) still leaves the availability window for all types. Hence the phased proposal: a general coupling fix for the window across all listener types (Phase 2), plus a cheap `nodeport` hardening that kills the worst symptom (Phase 1).
+Failure modes A and B are independent root causes: A is general to every per-broker listener type, while B is specific to the address assignment of `nodeport` (and `loadbalancer`). They are orthogonal, so neither fix alone is sufficient. The proposal therefore addresses both — Phase 2 couples per-broker resource reconciliation to the roll (the general fix for A), and Phase 1 pins node ports to remove the severe `nodeport` collision (B).
 
 ## Proposal
 
@@ -277,7 +270,7 @@ The proposal is only credible with explicit coverage of the partial-roll states 
 This proposal affects the **Strimzi Cluster Operator** only:
 
 - Phase 1: the `api` module (a `nodePortTemplate` field on the listener configuration), `ListenersValidator`, `ListenersUtils`/`ServiceUtils` rendering, plus CRD/examples/docs.
-- Phase 2: `KafkaReconciler` (reconcile ordering), `KafkaListenersReconciler` (split into shared / per-broker / bootstrap reconciliation), and `KafkaRoller` (a strictly-placed, idempotent pre-restart hook and just-in-time advertised host/port supply) — or, under the alternative, the per-broker `maybeRollKafka` driver instead of a `KafkaRoller` change.
+- Phase 2: `KafkaReconciler` (reconcile ordering), `KafkaListenersReconciler` (split into shared / per-broker / bootstrap reconciliation), and `KafkaRoller` (a strictly-placed, idempotent pre-restart hook and just-in-time advertised host/port supply).
 
 No other Strimzi projects are affected. Only KRaft-based clusters are in scope (see [KRaft assumption](#kraft-assumption)).
 
