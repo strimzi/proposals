@@ -34,23 +34,9 @@ Some listener types do not have a stable externally-visible address across a res
 
 `cluster-ip`, `route`, and `ingress` addresses are derived deterministically from resource names, so they suffer Failure mode A but not B.
 
-### Incident this addresses
-
-A large `nodeport`-based cluster (a few hundred nodes) exposed two SASL listeners (SCRAM and Kerberos) as per-broker `NodePort` services.
-A deployment switched the listeners to `cluster-ip` and was then rolled back to `nodeport`.
-The rollback re-allocated random node ports — some SCRAM ports landed on Kerberos and vice versa — and, because all `Service`s were switched at once while brokers restarted one by one, brokers that had not yet restarted had `Service`s that no longer matched their running listeners.
-Clients holding cached metadata kept hitting the wrong port/mechanism and produced errors such as:
-
-```
-Client SASL mechanism 'SCRAM-SHA-512' not enabled in the server, enabled mechanisms are [GSSAPI]
-Client SASL mechanism 'GSSAPI' not enabled in the server, enabled mechanisms are [SCRAM-SHA-512]
-```
-
-Reads and writes failed cluster-wide for ~3 hours and only recovered after every broker pod was deleted to force a full, consistent reconcile.
-
 ## Motivation
 
-The root cause is an **atomicity mismatch**: listener resources are switched atomically for the whole cluster, but the brokers that back those resources converge gradually as they restart one by one. During that window every not-yet-rolled broker advertises a listener it is not yet serving, so clients fail to connect; and because most of the cluster is unreachable, clients cannot refresh their metadata to recover. On `nodeport`/`loadbalancer` the same window is what makes a port/address reshuffle dangerous (Failure mode B): without a reachable cluster to refresh from, cached clients keep hitting stale — and possibly cross-wired — endpoints.
+The root cause is an **atomicity mismatch**: listener resources are switched atomically for the whole cluster, but the brokers that back those resources converge gradually as they restart one by one. During that window every not-yet-rolled broker advertises a listener it is not yet serving, so clients fail to connect; and because most of the cluster is unreachable, clients cannot refresh their metadata to recover. On `nodeport`/`loadbalancer` the same window is what makes a port/address reshuffle dangerous (Failure mode B): without a reachable cluster to refresh from, cached clients keep hitting stale — and possibly cross-wired — endpoints (for example a SASL client reaching a port now serving a different mechanism), which on a real cluster has produced cluster-wide produce/consume failures for the entire duration of a listener type change and rollback.
 
 Reconciling each broker's listener resources in lockstep with that broker's own restart removes the window: at every instant each broker is internally consistent (its resources match the listener it is running), so the change rolls through the cluster the same safe way a normal restart does, and clients can always refresh metadata against the parts of the cluster that are still up.
 
