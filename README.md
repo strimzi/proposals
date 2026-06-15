@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 148 | [Safe rollout of listener connectivity changes](./148-safe-listener-connectivity-rollout.md) |
 | 144 | [Strimzi _Gatekeeper_ plugin system](./144-Strimzi-Gatekeeper-plugin-system.md) |
 | 143 | [Enable SSL for Metrics Reporter](./143-enable-ssl-for-metrics-reporter.md) |
 | 142 | [Per-broker annotation and label templates for Kafka listeners](./142-per-broker-annotation-and-label-templates.md) |
