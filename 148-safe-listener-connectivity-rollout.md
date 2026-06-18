@@ -7,12 +7,8 @@ This covers all listener types that provision per-broker Kubernetes resources: `
 The proposal reconciles each broker's listener resources in lockstep with that broker's own restart.
 Those resources are the broker's `Service`, plus its `Route` or `Ingress` where applicable.
 Today the operator replaces every per-broker resource for the whole cluster up front and then restarts the brokers one by one.
-Reconciling per broker removes the availability window where a not-yet-rolled broker's resources already point at a listener the broker is not yet serving.
-That window exists for every per-broker listener type.
-
-> **Scope: KRaft only.**
-> This proposal assumes KRaft-based Kafka clusters and does not cover ZooKeeper-based clusters, which have already been removed from current Strimzi.
-> The partial-roll correctness argument relies on KRaft broker-registration semantics (see [KRaft assumption](#kraft-assumption)).
+Reconciling per broker shrinks the mismatch window from the whole cluster for the duration of the roll down to one broker at a time, the same exposure as a normal rolling restart.
+This applies to every per-broker listener type.
 
 ## Current situation
 
@@ -63,9 +59,24 @@ Because most of the cluster is unreachable, clients cannot refresh their metadat
 On `nodeport` and `loadbalancer` the same window is what makes a port or address reshuffle dangerous (Failure mode B): with no reachable cluster to refresh from, cached clients keep hitting stale, and possibly cross-wired, endpoints (for example a SASL client reaching a port now serving a different mechanism).
 On a real cluster this has caused cluster-wide produce and consume failures for the entire duration of a listener type change and rollback.
 
-Reconciling each broker's listener resources in lockstep with that broker's own restart removes the window.
+Reconciling each broker's listener resources in lockstep with that broker's own restart shrinks the window to one broker at a time.
 At every instant each broker is internally consistent, because its resources match the listener it is running.
 The change then rolls through the cluster the same safe way a normal restart does, and clients can always refresh metadata against the parts of the cluster that are still up.
+This does not remove the window entirely: a client can still hit the single broker that is currently restarting, and bootstrap-only clients depend on the final bootstrap switch (see below).
+
+## Existing workaround
+
+A connectivity change can already be rolled out safely today, with no operator change, by never mutating an in-use listener:
+
+1. Add the new listener on a new port, alongside the existing one.
+2. Once the roll is complete, move clients to the new listener.
+3. Once clients have moved, remove the old listener.
+
+This avoids both failure modes, because the existing listener and its per-broker resources are never switched while in use.
+It is the recommended approach whenever the operator team controls, or can coordinate with, the clients.
+
+This proposal only helps the case where that discipline is not followed and the listener `type` or `port` is changed in place.
+Today such an in-place edit turns into a cluster-wide outage for the duration of the roll; the value here is turning that into an ordinary rolling restart, not enabling anything otherwise impossible.
 
 ## Proposal
 
@@ -147,7 +158,7 @@ This is different from the current behaviour, where a not-yet-rolled broker's mi
 
 ### KRaft assumption
 
-The partial-roll correctness argument depends on KRaft semantics and applies to KRaft-based clusters only:
+The partial-roll correctness argument depends on KRaft broker-registration semantics:
 
 - Each broker registers its own `advertised.listeners` with the KRaft controller on start-up, and the controller propagates the full set of broker endpoints to all brokers.
   A broker re-registering a new endpoint when it rolls is therefore enough for the rest of the cluster, and for client metadata, to see the change.
@@ -155,8 +166,6 @@ The partial-roll correctness argument depends on KRaft semantics and applies to 
 - Each broker's advertised address depends only on that broker's own resources, so its config can be rendered from its own resources alone, with no cross-broker dependency.
   For `nodeport` the advertised host is resolved by the pod from its scheduled node (via an env var) and only the port comes from the broker's `Service`; for `loadbalancer` the address comes from that broker's LB `Service` ingress; for `cluster-ip` from its per-broker DNS name; for `route` and `ingress` from that broker's `Route` or `Ingress` host.
 - Controller-only KRaft nodes have no client listeners and are skipped by the per-broker resource and config steps.
-
-ZooKeeper-based clusters are explicitly out of scope.
 
 ### Implementation sketch
 
@@ -242,15 +251,14 @@ The downside is that it spins up a fresh roller per broker, which loses the cros
 Giving up the roller's global safety reasoning to keep a code boundary tidy is the wrong trade for the operator's most safety-critical path, so this variant is rejected.
 The cost of the chosen approach, widening `KafkaRoller`'s responsibility, is contained by the strict hook placement and idempotency requirements above and must be covered by tests.
 
-### Feature gate and rollout
+### Rollout and the limits of gating
 
-Because this changes the reconcile and roll path, the operator's most safety-critical area, it is introduced behind a feature gate (for example `CoupledListenerRollout`), following Strimzi's usual gate lifecycle:
+A feature gate (for example `CoupledListenerRollout`) is the obvious way to ship this, following Strimzi's usual Alpha/Beta/GA lifecycle.
 
-- **Alpha (disabled by default):** opt-in for early adopters and CI; the current all-at-once behaviour remains the default.
-- **Beta (enabled by default):** after the test matrix below is green across the supported listener types, with the gate still available to disable.
-- **GA / gate removal:** once proven in the field.
-
-When the gate is disabled, the code path is exactly today's behaviour, so the change is safe to ship dark.
+It is worth being honest about how much a gate actually buys here.
+The natural off-switch is the connectivity-change detector itself: with no connectivity-affecting change, the reconcile keeps exactly today's flow.
+But the change is spread across the reconcile and roll path (`KafkaReconciler` ordering, the `KafkaListenersReconciler` split, and the `KafkaRoller` hook), so the new code sits in the common path even when the gate is off and cannot be cleanly isolated behind it.
+That limits how much risk a gate removes, and is one of the reasons this change is hard to justify for the benefit it provides.
 
 ### Testing
 
@@ -266,18 +274,17 @@ This proposal affects the Strimzi Cluster Operator only: `KafkaReconciler` (reco
 
 No CRD or API changes are required.
 No other Strimzi projects are affected.
-Only KRaft-based clusters are in scope (see [KRaft assumption](#kraft-assumption)).
+The correctness argument relies on KRaft broker registration (see [KRaft assumption](#kraft-assumption)).
 
 ## Compatibility
 
-- **Gated** behind a feature gate that is disabled by default initially (see [Feature gate and rollout](#feature-gate-and-rollout)), so it ships with zero behaviour change until explicitly enabled.
+- **Gateable, but not cleanly:** a feature gate can default the behaviour off, but the new code is spread across the reconcile and roll path and cannot be fully isolated behind it (see [Rollout and the limits of gating](#rollout-and-the-limits-of-gating)).
 - **Behaviour is unchanged** for non-connectivity-affecting reconciliations, and for connectivity changes on internal listeners, which fall back to the current behaviour.
 - **No API or CRD change.**
 - **Reconciliation takes longer** for connectivity-affecting changes, because per-broker resource reconciliation (and waiting for an asynchronously-assigned address) is interleaved with the roll.
   This is most pronounced for `loadbalancer`, where each per-broker LB is provisioned by the cloud (often minutes) and is now serialized across the roll; for large clusters (200+ brokers) the total can be very large.
   Per-broker waits are bounded by `operationTimeoutMs`, but the overall reconcile may approach or exceed the reconciliation interval, so overlap and lock behaviour and progress logging must be considered.
-  The migration is resumable (per-broker convergence guard), so an aborted reconcile continues on the next pass rather than restarting from scratch.
-- **Listener status** is fully populated only after the roll completes; intermediate reconcile passes may report a mix of old and new per-broker addresses, all valid at the time.
+  The migration is resumable: an aborted reconcile continues with the not-yet-converged brokers on the next pass, the same way the operator already resumes any interrupted roll.
 
 ## Rejected alternatives
 
