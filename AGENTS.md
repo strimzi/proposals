@@ -17,7 +17,7 @@
 ### Proposal Format
 
 - Proposal files must be Markdown
-* You MUST follow a strict one sentence per line format
+- You MUST follow a strict one sentence per line format
 - Do NOT number proposal sections (e.g., "1. Motivation", "2. Proposal"), use Markdown headers only (`##`, `###`)
 - DO use numbered lists within sections when showing sequential steps
 - DO use bullet points for non-sequential items
