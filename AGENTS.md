@@ -12,8 +12,16 @@
 - When opening a PR with an AI tool, always use `.github/PULL_REQUEST_TEMPLATE.md`.
 - Do not update `README.md` when opening a proposal PR; update the index only at the end before maintainers merge the PR.
 - `README.md` is the proposal index and is ordered newest/highest number first.
-- Proposal files must be Markdown and follow a strict one sentence per line format.
 - Name proposal-specific images/assets with the same numeric prefix as the proposal, following existing files such as `images/144-...svg`.
+
+### Proposal Format
+
+- Proposal files must be Markdown
+* You MUST follow a strict one sentence per line format
+- Do NOT number proposal sections (e.g., "1. Motivation", "2. Proposal"), use Markdown headers only (`##`, `###`)
+- DO use numbered lists within sections when showing sequential steps
+- DO use bullet points for non-sequential items
+- DO NOT use emojis as bullet points
 
 ## Verification
 
