@@ -14,5 +14,6 @@ _Please describe your pull request_
 _Please go through this checklist and make sure all applicable tasks have been done_
 
 - [ ] AI assistance was used to create this PR (see the [Strimzi AI policy](https://github.com/strimzi/governance/blob/main/AI_POLICY.md))
+- [ ] The proposal uses Markdown format with one sentence per line
 - [ ] BEFORE MERGING: The next free sequence number was used for the proposal and all its assets (images, etc.)
 - [ ] BEFORE MERGING: The proposal index in README.md was updated
