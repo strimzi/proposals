@@ -116,6 +116,19 @@ It cannot be a single cluster-global flag.
 Brokers already at the desired state are skipped, so a re-run resumes the migration instead of re-rolling the whole cluster.
 This makes the operation convergent and resumable.
 
+### Startup and recovery
+
+The coupled path is only for an in-place change to a listener that brokers are actively serving.
+Initial cluster creation and recovery are different: the per-broker resources are simply absent, not switched under a running broker, so there is no mismatch window to protect.
+In those cases the operator keeps the current up-front reconciliation and creates all listener resources before the pods start.
+
+Brokers also do not depend on the external client listener to find each other.
+Quorum and replication use the internal control-plane and replication listeners on the headless `brokers` service, which are always reconciled up front and are never part of a connectivity change (see [Precondition](#precondition-the-internal-listeners-are-never-part-of-the-change)).
+So bringing brokers up one by one during startup or recovery is unaffected by this proposal.
+
+The cost is that the detector must reliably distinguish an in-place change to a serving listener from absent resources during creation or recovery, and fall back to the up-front path for the latter.
+The combined case, where a recovery happens while a connectivity change is still pending in the custom resource, is exactly the kind of multi-state edge case that makes this harder to justify.
+
 ### Per-broker rollout loop
 
 For each broker that is not yet converged, in the order and under the safety gates the existing roll already enforces:
