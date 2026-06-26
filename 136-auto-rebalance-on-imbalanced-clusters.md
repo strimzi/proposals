@@ -665,7 +665,7 @@ spec:
 **Behavior:**
 
 - **When maintenance windows are configured**:
-  - When an anomaly is detected outside a maintenance window, the operator records the detection but does NOT trigger a rebalance
+  - When an anomaly is detected outside a maintenance window, the operator does receive the anomaly by Cruise Control's anomaly detector mechanism but does NOT trigger a rebalance
   - During the next reconciliation that falls within a maintenance window, the operator queries Cruise Control's `state` endpoint
   - If the anomaly still exists (based on `detectionDate` comparison against `lastRebalanceCompletionTime`), the rebalance is triggered
   - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window check using `Util.isMaintenanceTimeWindowsSatisfied(reconciliation, maintenanceWindows, clock.instant())`
@@ -812,10 +812,9 @@ These metrics will be exposed by the operator and will only be available when th
 #### Detecting Persisting Anomalies with Metrics and Alerts
 
 An anomaly may persist after a rebalance if cluster constraints prevent full optimization, new load patterns emerge immediately, or the rebalance only partially addresses violations.
-When this happens, Cruise Control keeps the same anomaly entry with the original `detectionDate`, preventing automatic retriggering (since `detectionDate < lastRebalanceCompletionTime`).
-
-To avoid rebalance loops and cluster instability, the operator does not automatically retry.
-Users can optionally monitor the exposed metrics and configure alerts to detect potential issues.
+When this happens, Cruise Control keeps detecting the same anomaly entry with a different anomaly name and different detection time.
+To avoid rebalance loops and cluster instability, the users can make use of the metrics exposed by the operator.
+Users can monitor the exposed metrics and configure alerts to detect potential issues.
 Example alert conditions:
 
 - **Frequent rebalances**: More than 3 auto-rebalances triggered within 1 hour may indicate a persisting anomaly
