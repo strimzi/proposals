@@ -12,7 +12,7 @@ Then administrators must set metrics subscriptions to define the metrics clients
   --interval 30000
 ```
 A subscription is composed of:
-- A name: This can be provided by the administrators or generated using the `--generate-name` flag. This is used to unique identify the subscription to describe, alter or delete it.
+- A name: This can be provided by the administrators or generated using the `--generate-name` flag. This is used to uniquely identify the subscription to describe, alter or delete it.
 - A list of metric prefixes: They indicate which metrics the clients should send to the brokers. It can be set to `*` to request all metrics.
 - An optional list of client matching filters: They indicate which clients this subscription is for. The filters are `client_id`, `client_instance_id`, `client_software_name`, `client_software_version`, `client_source_address`, `client_source_port`. If not specified, the subscription applies to all clients.
 - An interval: This indicates how often clients matching this subscription should send their metrics. The interval is in milliseconds and it must be between 100 and 3600000 (1 hour). If not specified, it defaults to 300000 (5 minutes).
