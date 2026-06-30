@@ -290,21 +290,29 @@ Every reconciliation, the operator will:
 
 1. **List all `KafkaRebalance` resources** for the cluster using `kafkaRebalanceOperator.listAsync(namespace, Labels.fromMap(Map.of(Labels.STRIMZI_CLUSTER_LABEL, clusterName)))`
 2. **Extract the state** of each `KafkaRebalance` using the existing `KafkaRebalanceUtils.rebalanceState()` utility method
-3. **Check for active states**: A rebalance is considered "active" if any `KafkaRebalance` resource is in one of these states:
-   - `New` - Resource just created, waiting for operator processing
-   - `PendingProposal` - Cruise Control is generating the rebalance proposal
-   - `ProposalReady` - Proposal generated, waiting for user approval (for manual rebalances)
-   - `Rebalancing` - Rebalance is actively executing partition movements
+3. **Check for actively executing rebalances**: A rebalance is considered "active" if any `KafkaRebalance` resource is in the `Rebalancing` state (partition movements are currently executing)
 
-If any `KafkaRebalance` resource is in an active state, the operator will skip anomaly detection for imbalance mode and wait for the next reconciliation cycle.
-This approach works uniformly for:
-- **Auto-generated rebalances**: Created by the operator for scale-up, scale-down, or imbalance scenarios
-- **Manual rebalances**: Created by users with arbitrary names
+##### Interaction with Manual Rebalances
+
+The operator handles manual and auto-generated `KafkaRebalance` resources differently based on their state:
+
+- **Manual rebalances in `New`, `PendingProposal`, or `ProposalReady` states**: 
+  - These represent rebalances that were created by users but not yet approved
+  - The operator will **ignore** these manual rebalances and proceed with auto-rebalance on imbalance
+  - A log message will be emitted: `Manual KafkaRebalance {name} is in {state} state and will be ignored. Auto-rebalance on imbalance will proceed.`
+
+- **Manual rebalances in `Rebalancing` state**:
+  - The operator will **skip** auto-rebalance creation and wait for the manual rebalance to complete
+  - A log message will be emitted: `Manual KafkaRebalance {name} is actively rebalancing. Auto-rebalance on imbalance will be skipped.`
+
+- **Auto-generated rebalances** (identified by `strimzi.io/auto-rebalancing` finalizer):
+  - These take precedence as they are managed by the auto-rebalance state machine
+  - Scale-up/scale-down rebalances will interrupt imbalance rebalances as described in the FSM section
 
 The implementation leverages the existing `KafkaRebalanceUtils` class which is already used throughout the Strimzi codebase for state extraction and validation.
 All `KafkaRebalance` resources (manual and auto-generated) have the `strimzi.io/cluster` label, allowing the operator to discover them via label selector.
 
-If there is no active rebalance, then we can move forward to check if there were any detected goal violations or not.
+If there is no actively executing rebalance (i.e., no `Rebalancing` state detected), then we can move forward to check if there were any detected goal violations or not.
 The `KafkaAutoRebalanceReconciler` will query the Cruise Control state endpoint with the anomaly detector substate during every reconciliation if no rebalance is already running.
 The operator will query the Cruise Control service:
 ```
@@ -486,7 +494,10 @@ This ensures anomalies fixed by either manual or auto-rebalances don't trigger d
 
 #### What happens if the anomaly is detected during a running rebalance
 
-Using the detection approach described in "Detecting Active Rebalances" section, if any active rebalance is detected, we ignore the newly detected anomaly since it might be resolved by the ongoing operation.
+Using the detection approach described in [Detecting Active Rebalances](#detecting-active-rebalances) section:
+- If any `KafkaRebalance` resource in `Rebalancing` state is detected (actively executing partition movements), we skip the auto-rebalance creation since the ongoing operation might resolve the anomaly
+- Manual rebalances in `New`, `PendingProposal`, or `ProposalReady` states are ignored (auto-rebalance proceeds as described in [Interaction with Manual Rebalances](#interaction-with-manual-rebalances))
+
 If the anomaly persists after the rebalance completes, Cruise Control will detect it again in a subsequent cycle and a new rebalance will be triggered.
 
 #### What happens if a rebalance fails
@@ -649,6 +660,7 @@ spec:
    - ✅ Rebalancing and certificate renewals respect the same time windows
    - ✅ Simpler configuration - one set of windows for all maintenance activities
    - ✅ Consistent maintenance scheduling across all operator operations
+   - Note: In case a rebalance is ongoing during the maintenance window and the maintenance window gets over, the rebalance will still continue unless its done.
 
 2. **Without maintenance windows (immediate rebalancing)**:
    ```yaml
@@ -665,13 +677,16 @@ spec:
 **Behavior:**
 
 - **When maintenance windows are configured**:
-  - When an anomaly is detected outside a maintenance window, the operator does receive the anomaly by Cruise Control's anomaly detector mechanism but does NOT trigger a rebalance
-  - During the next reconciliation that falls within a maintenance window, the operator queries Cruise Control's `state` endpoint
+  - Cruise Control continuously detects anomalies based on the `anomaly.detection.interval.ms` configuration (default: 5 minutes, as described in [Anomaly Detector Manager](#anomaly-detector-manager) section)
+  - When an anomaly is detected outside a maintenance window, Cruise Control raises the goal violation event periodically (every `anomaly.detection.interval.ms`), but the operator does NOT trigger a rebalance
+  - During each reconciliation that falls within a maintenance window, the operator queries Cruise Control's `state` endpoint
   - If the anomaly still exists (based on `detectionDate` comparison against `lastRebalanceCompletionTime`), the rebalance is triggered
-  - The anomaly detection continues every reconciliation, but rebalance triggering is gated by the maintenance window check using `Util.isMaintenanceTimeWindowsSatisfied(reconciliation, maintenanceWindows, clock.instant())`
+  - The anomaly detection by Cruise Control continues periodically regardless of maintenance windows, but rebalance triggering by the operator is gated by the maintenance window check using `Util.isMaintenanceTimeWindowsSatisfied(reconciliation, maintenanceWindows, clock.instant())`
+  - **Key point**: Cruise Control will keep raising the same goal violation event periodically (with updated `detectionDate` and new `anomalyId`) until the issue is fixed. The auto-rebalance will only execute once the maintenance window is satisfied and Cruise Control raises the event during that window.
 
 - **When no maintenance windows are configured**:
-  - Rebalance is triggered immediately when a fixable goal violation is detected
+  - Rebalance is triggered immediately when a fixable goal violation is detected by Cruise Control
+  - The operator still relies on Cruise Control's periodic anomaly detection (every `anomaly.detection.interval.ms`)
 
 **Emergency Override:**
 
