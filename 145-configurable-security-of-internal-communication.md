@@ -294,8 +294,8 @@ Changing the security configuration for an existing cluster could easily break t
 Therefore, we will have built-in protection to prevent that.
 The current security configuration will be tracked in the `Kafka` CR status.
 At the start of every reconciliation, Strimzi will compare the current and desired configuration.
-If the desired configuration contains invalid changes, Strimzi will reject it and continue using the old configuration.
-This is similar to the existing storage configuration protection mechanism.
+If the desired configuration contains invalid changes, Strimzi will reject it, and fail the reconciliation without applying any changes to the actual Kafka cluster.
+The user will be required to either revert the changes or to follow the correct procedure.
 
 When the current status is not present, the operator will accept the desired configuration and use it.
 This should happen only for:
@@ -344,6 +344,7 @@ This feature will be covered by system tests in several different ways:
     * Reconfigure it back to TLS+mTLS
     * Check that the cluster works
 * Upgrade tests using no encryption and Service Account authentication
+* A check that the encryption and authentication cannot be reconfigured without the correct process
 * Additionally, we would add a way to run all tests with no encryption and Service Account authentication
     * Either as a new pipeline
     * Or as a parameter to the existing pipelines
