@@ -2,7 +2,7 @@
 
 Apache Kafka 3.7.0 introduced the ability for Kafka clients to send their metrics to brokers via [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).
 
-The Kafka clients have this feature built-in and enabled by default. However for this feature to be usable, administrators must implement and provide a broker-side plugin to collect the metrics. The plugin must be a [`MetricReporter`](https://kafka.apache.org/43/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) instance. KIP-714 originally required implementing the [`ClientTelemetry`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetry.html) interface, but since Kafka 4.2.0 this interface is deprecated in favor of [`ClientTelemetryExporterProvider`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetryExporterProvider.html) which provides more context.
+The Kafka clients have this feature built-in and enabled by default. However for this feature to be usable, administrators must implement and provide a broker-side plugin to collect the metrics. The plugin must be a [`MetricReporter`](https://kafka.apache.org/43/javadoc/org/apache/kafka/common/metrics/MetricsReporter.html) instance. KIP-714 originally required implementing the [`ClientTelemetry`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetry.html) interface, but since Kafka 4.2.0 this interface is deprecated in favor of [`ClientTelemetryExporterProvider`](https://kafka.apache.org/43/javadoc/org/apache/kafka/server/telemetry/ClientTelemetryExporterProvider.html) which provides more context ([KIP-1217](https://cwiki.apache.org/confluence/x/6QnxFg)).
 
 Then administrators must set metrics subscriptions to define the metrics clients will send. There are no default subscriptions. Subscriptions can be set, updated and deleted at runtime via the `kafka-configs.sh` or `kafka-client-metrics.sh` tools, or via the `Admin` API. For example:
 ```sh
@@ -67,26 +67,10 @@ Kafka brokers expose a number of metrics to monitor the client metrics collectio
 
 Administrators should monitor these metrics when they set subscriptions.
 
-### Updates to strimzi-kafka-operator
-
-The `metricsConfig` definition will support the new configuration if the `type` is set to `strimziMetricsReporter`, via a new value `clientTelemetryLabels`. This new field directly maps to the `prometheus.metrics.reporter.client.telemetry.labels` configuration of the reporter.
-For example:
-```yaml
-metricsConfig:
-  type: strimziMetricsReporter
-  values:
-    allowList:
-      - "kafka_log.*"
-      - "kafka_network.*"
-    clientTelemetryLabels:
-      - "client_id"
-      - "principal"
-```
-If this value is not set, it will default to `client_id` like in the metrics reporter. Allowed values are `client_id`, `listener_name`, `security_protocol`, `principal`, `client_address`.
 
 ## Affected/not affected projects
 
-This affects metrics-reporter and strimzi-kafka-operator.
+This proposal only affects metrics-reporter. The updates to expose this feature in the cluster operator will be done via another proposal.
 
 ## Compatibility
 
