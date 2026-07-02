@@ -1,87 +1,149 @@
 # Wait for all desired pods to be scheduled before starting a rolling update
 
-This proposal adds an observation-based scheduling barrier between `StrimziPodSet` reconciliation and `KafkaRoller`: before the operator deletes any pod for a rolling restart, every pod desired by the cluster's `StrimziPodSets` must exist and be scheduled.
-It closes a race in which a rolled pod using node-pinned local storage permanently loses its node to a pod created moments earlier, leaving it `Pending` forever and failing every subsequent reconciliation.
+This proposal adds a new check to the Kafka reconciliation flow.
+Before `KafkaRoller` deletes any pod for a rolling update, the operator waits until all pods desired by the cluster's `StrimziPodSets` exist and are scheduled to a node.
+This closes a race condition between scale-up and rolling updates.
+When both happen in the same reconciliation, a restarted pod can lose its node to a pod that was created moments earlier.
+On clusters that use node-local storage, the restarted pod can then stay `Pending` forever.
+Every following reconciliation fails until a user intervenes.
 
 ## Current situation
 
-A single reconciliation of a `Kafka` custom resource can both create new pods (scale-up) and roll existing ones (revision change).
-Since [PR #10746](https://github.com/strimzi/strimzi-kafka-operator/pull/10746), `KafkaReconciler.podSet()` waits for the readiness of all pods in `KafkaCluster.addedNodes()` before `rollingUpdate()` starts `KafkaRoller`.
+A single reconciliation of a `Kafka` custom resource can do two things at once.
+It can create new pods (scale-up) and it can roll existing pods, for example because of a configuration change.
+Since [PR #10746](https://github.com/strimzi/strimzi-kafka-operator/pull/10746), `KafkaReconciler.podSet()` waits for all pods in `KafkaCluster.addedNodes()` to become ready before `rollingUpdate()` starts `KafkaRoller`.
 
-This guard is derived from intent, not observation: `addedNodes()` comes from `NodeIdAssignment.toBeAdded()`, which compares `KafkaNodePool.status.nodeIds` with the desired replicas, and `updateNodePoolStatuses()` persists the *desired* node IDs early in the reconcile pipeline, before `podSet()` runs.
-That makes it non-idempotent across a failed reconciliation:
+However, this wait is based on which nodes the current reconciliation thinks it is adding.
+It does not look at the actual state of the pods in Kubernetes.
+`addedNodes()` comes from `NodeIdAssignment.toBeAdded()`.
+That method compares the desired replicas with the node IDs recorded in the `KafkaNodePool` status.
+And `updateNodePoolStatuses()` stores the desired node IDs in the status early in the reconciliation, before `podSet()` runs.
+As a result, the wait does not work when a reconciliation fails and is retried:
 
-1. Reconciliation A persists the new node IDs into `KafkaNodePool.status`, then fails at a later stage (for example a transient `Secret` error) before any pod is created.
-2. Reconciliation B rebuilds its model from the updated status, so `addedNodes()` is empty; it still creates the missing pods via the `StrimziPodSet` diff, but has nothing to wait for.
-3. `KafkaRoller` deletes its first pod while the scheduler is still placing the newly created pods.
+1. Reconciliation A stores the new node IDs in the `KafkaNodePool` status.
+   It then fails at a later step, before any pods are created, for example because of a transient error while working with a `Secret`.
+2. Reconciliation B builds its model from the updated status, so `addedNodes()` is empty.
+   It still creates the missing pods through the `StrimziPodSet` diff, but it does not wait for them.
+3. `KafkaRoller` deletes the first pod for the rolling update while the scheduler is still placing the new pods.
 
-For most clusters an unfortunate placement is only a performance nuisance, but with node-local storage it is a deadlock.
-Local volumes (`local-path`, OpenEBS LVM, TopoLVM) with `volumeBindingMode: WaitForFirstConsumer` pin each pod to one node, typically combined with hard one-pod-per-host anti-affinity.
-While a pod is deleted for a roll it has no claim on its node: anti-affinity only counts pods present at scheduling time, and a bound `PersistentVolume` of a non-running pod repels nothing.
-If a new pod lands on the node in that window, its own local volume is provisioned there and the theft is permanent: the rolled pod's replacement is pinned to a taken node and stays `Pending` until a human deletes the squatting pod and its `PersistentVolumeClaim`.
+For most clusters, the worst outcome is that a pod ends up on a less suitable node.
+But when the cluster uses node-local storage, the cluster can end up in a state it cannot recover from on its own.
+Local storage provisioners such as `local-path`, OpenEBS LVM, or TopoLVM use `volumeBindingMode: WaitForFirstConsumer`.
+This pins each pod to the node where its volume was provisioned.
+Such clusters typically also use required pod anti-affinity so that at most one Kafka pod runs on each node.
+While a pod is deleted during a rolling update, nothing protects its node.
+The anti-affinity rule only considers pods that exist at scheduling time.
+And the bound `PersistentVolume` of a pod that is not running does not keep other pods away.
+If one of the new pods is scheduled to that node in this window, its own local volume is provisioned there.
+The node is now taken for good.
+The recreated pod is still pinned to the same node by its existing volume.
+It stays `Pending` until a user manually deletes the new pod and its `PersistentVolumeClaim`.
 
 ## Motivation
 
-This sequence was hit in production on Strimzi 0.47.0 by a single change that scaled a broker pool from 10 to 40 replicas and changed broker CPU resources.
-A reconciliation persisted the new node IDs, failed on a transient `Secret` error, and the retry created the 30 broker pods and started rolling in the same second.
-One new broker was scheduled onto the node of the just-deleted KRaft controller pod; the recreated controller was pinned there by its metadata volume and stuck `Pending`, the roll timed out with the quorum at two of three controllers, and every reconciliation failed until manual `PersistentVolumeClaim` and pod deletion.
+We hit this issue in production with Strimzi 0.47.0.
+A single change scaled a broker node pool from 10 to 40 replicas and changed the broker CPU resources at the same time.
+The first reconciliation stored the new node IDs in the node pool status and then failed with a transient `Secret` error.
+The retry created the 30 new broker pods and started the rolling update within the same second.
+One of the new brokers was scheduled to the node of a KRaft controller pod that had just been deleted for the rolling update.
+The recreated controller pod was pinned to that node by its metadata volume and stayed `Pending`.
+The rolling update timed out with only two of the three controllers running.
+Every following reconciliation failed until the pod and its `PersistentVolumeClaim` were deleted manually.
 
-The operator is the right place to fix this.
-Users cannot avoid the trigger: GitOps applies scale-up and revision change as one manifest change, and the race is reopened by operator-internal retries invisible to the user.
-Kubernetes cannot fix this side either, because during the deletion window the replacement pod does not exist, so no scheduler state can protect the node (kubernetes/kubernetes [#128164](https://github.com/kubernetes/kubernetes/issues/128164), closed unresolved, and [#135771](https://github.com/kubernetes/kubernetes/issues/135771) track adjacent variants).
-Only the component that decides *when to delete* a pod can refuse to open the window while competing pods are unscheduled.
+The operator seems to be the best place to address this.
+Users cannot easily avoid the trigger.
+GitOps tooling applies the scale-up and the configuration change as a single change.
+And the retry that reopens the race happens inside the operator, where users do not see it.
+Kubernetes cannot solve it either.
+The replacement pod does not exist during the deletion window, so there is nothing the scheduler could use to protect the node.
+The Kubernetes issues [#128164](https://github.com/kubernetes/kubernetes/issues/128164) (closed without a fix) and [#135771](https://github.com/kubernetes/kubernetes/issues/135771) describe related cases.
+The operator is the component that decides when a pod is deleted.
+So it can simply avoid deleting pods while other pods are still waiting to be scheduled.
 
 ## Proposal
 
-Add a scheduling barrier to `KafkaReconciler.podSet()`, after the `StrimziPodSet` reconciliation and before `rollingUpdate()`.
-The barrier waits until every pod listed in the desired `StrimziPodSets` exists and is scheduled, meaning its `PodScheduled` condition is `True` (equivalently, `spec.nodeName` is set).
-Because it is derived purely from observed pod state, it holds regardless of which reconciliation created the pods and is idempotent across failed and retried reconciliations, unlike the current `addedNodes()`-based guard.
+A new wait will be added to `KafkaReconciler.podSet()`, after the `StrimziPodSet` resources are reconciled and before `rollingUpdate()` is called.
+The operator will wait until every pod listed in the desired `StrimziPodSets` exists and is scheduled.
+A pod counts as scheduled when its `PodScheduled` condition is `True`, which is equivalent to `spec.nodeName` being set.
+This check looks at the actual state of the pods.
+So it does not matter which reconciliation created them, and it keeps working when a previous reconciliation failed and was retried.
+This is the main difference from the existing `addedNodes()` based wait.
 
-- The barrier waits for scheduling only, not readiness: node claims are settled at scheduling time (seconds), while readiness can take minutes and a roll is often the remedy for an unready pod.
-- The existing `waitForNewNodes()` readiness wait is kept unchanged; this proposal adds a precondition for rolling, not new scale-up semantics.
-- Unscheduled pods that the roll itself would restart (for example an old-revision pod left `Pending` by a resource-request change) are exempt and rolled first.
-Deleting an unscheduled pod vacates no node, so it cannot open the race window, and `KafkaRoller` already waits for each restarted pod's readiness — hence scheduling — before deleting the next one.
-Without this exemption the barrier would block forever on a `Pending` pod whose fix is the roll itself.
-- If a desired pod is not scheduled within the existing operation timeout, the reconciliation fails *before* any pod is deleted, leaving the cluster running with a diagnosable `Pending` pod instead of deadlocked mid-roll.
-- The barrier applies unconditionally, not only when node-local storage is detected: the wait is cheap (a no-op when no pods were created) and avoids fragile detection of storage classes and affinity rules.
+Some more details about the behavior:
 
-No API, CRD, or configuration change is required; this is an ordering fix in the reconcile flow.
+- The operator waits only for the pods to be scheduled, not for them to be ready.
+  The node assignment is decided at scheduling time and usually takes seconds, while readiness can take much longer.
+  And a rolling update is often exactly what is needed to fix an unready pod.
+- The existing readiness wait for newly added nodes (`waitForNewNodes()`) stays unchanged.
+  This proposal only adds a precondition for the rolling update and does not change how scale-up works.
+- Pods that are not scheduled but would be restarted by the rolling update anyway are not waited for and are rolled first.
+  An example is a pod with an old revision that is `Pending` because of a change to its resource requests.
+  Deleting an unscheduled pod does not free up any node, so it cannot trigger the race.
+  And `KafkaRoller` already waits for each restarted pod to become ready before it moves to the next one.
+  Without this exception, the wait could block forever on a `Pending` pod that only the rolling update can fix.
+- If a desired pod is not scheduled within the existing operation timeout, the reconciliation fails before any pod is deleted.
+  The cluster keeps running and the `Pending` pod can be investigated.
+  This is better than the cluster being stuck in the middle of a rolling update.
+- The wait applies to all clusters, not only to those using node-local storage.
+  It completes immediately when no new pods were created, so the cost is negligible.
+  Trying to detect the storage classes and affinity rules for which the race matters would be complicated and fragile.
+
+No API, CRD, or configuration changes are needed.
+This proposal only changes the ordering of steps within the reconciliation.
 
 ### What this does not fix
 
-A pod belonging to another Kafka cluster, another namespace, or a non-Strimzi workload can still take the node during a roll window.
-Closing that general window requires scheduler-side support (for example extending the KEP-5278 `NominatedNodeName` reservation to volume-pinned pods) and is out of scope here.
+This proposal only stops the operator from racing against itself.
+A pod from another Kafka cluster, another namespace, or a completely different workload can still take the node while a pod is deleted during the rolling update.
+Closing this window completely would need support from the Kubernetes scheduler, for example extending the `NominatedNodeName` reservation from KEP-5278 to pods with node-local volumes.
+That is out of scope of this proposal.
 
 ## Affected/not affected projects
 
-Affected: `strimzi-kafka-operator` cluster operator only (`KafkaReconciler`).
-Not affected: all other Strimzi projects, operands, and CRDs.
+This proposal affects only the Strimzi Cluster Operator in `strimzi-kafka-operator`, and there mainly the `KafkaReconciler` class.
+Other Strimzi projects, operands, and CRDs are not affected.
 
 ## Compatibility
 
-The change is behavioural only and backwards compatible.
-Reconciliations that combine pod creation with a rolling update start the roll a few seconds later; roll-only or scale-only reconciliations pass the barrier immediately.
-A cluster whose new pods cannot be scheduled at all now fails reconciliation before rolling instead of deadlocking after, surfacing the same problem earlier and with less damage.
+This proposal does not change any APIs, only the behavior of the Cluster Operator.
+The change is backwards compatible.
+Reconciliations that create new pods and roll existing pods at the same time will start the rolling update a few seconds later.
+Reconciliations that only roll pods or only scale up are not delayed.
+When the new pods of a cluster cannot be scheduled at all, the reconciliation now fails before the rolling update instead of getting stuck in the middle of it.
+This surfaces the same problem, but earlier and without leaving the cluster in a broken state.
 
 ## Rejected alternatives
 
-### Fix only the status-ordering bug in the existing guard
+### Fixing only the status update ordering
 
-Persisting the node pool status after pod creation would close the specific failure path, but the guard would remain intent-based and any future path that creates pods without registering them as "added" silently reopens the race.
-The observation-based barrier is robust to all such paths; the status-ordering cleanup can still be done independently.
+The failure path described above could also be closed by updating the `KafkaNodePool` status only after the pods were created.
+But the wait would still depend on the operator correctly tracking which pods it added.
+Any future code path that creates pods without registering them as added would introduce the same race again.
+Checking the actual pod state is more robust against such changes.
+The status update ordering can still be improved independently of this proposal.
 
-### Pre-pin the replacement pod to its node
+### Pre-pinning the replacement pod to its node
 
-`spec.nodeName` bypasses the scheduler entirely and a hostname `nodeSelector` reserves nothing; neither helps, because the race is won during the window when the replacement pod does not exist yet.
+Setting `spec.nodeName` on the replacement pod would bypass the scheduler completely.
+A `nodeSelector` with the node's hostname does not reserve anything.
+And neither helps, because the race is decided in the window when the replacement pod does not exist yet.
 
-### Set `nominatedNodeName` on the replacement pod
+### Setting `nominatedNodeName` on the replacement pod
 
-KEP-5278's beta scope (Kubernetes v1.35) restricts writes to the kube-scheduler, and it suffers the same non-existence window as pre-pinning.
+In its beta scope (Kubernetes 1.35), KEP-5278 only allows the kube-scheduler to write the `nominatedNodeName` field.
+And it has the same problem as pre-pinning: during the deletion window there is no pod to set the field on.
 
-### Wait for readiness instead of scheduling
+### Waiting for readiness instead of scheduling
 
-Gating all rolls on full readiness could deadlock the operator (a roll is often the remedy for an unready pod) and adds minutes of latency without adding safety over the scheduled state.
+The operator could wait for all pods to be ready instead of just scheduled.
+But a rolling update is often what fixes an unready pod, so this could deadlock the operator.
+It would also delay the rolling update by minutes without making it any safer.
+The node assignment is already settled once the pod is scheduled.
 
-### Document the limitation instead of fixing it
+### Documenting the limitation instead of fixing it
 
-GitOps tooling applies scale-up and revision change as one change, the race is reopened by retries the user never sees, and the failure mode (a deadlocked quorum member) is severe.
+The issue could be documented as a known limitation, advising users not to combine scale-up with changes that trigger a rolling update.
+But GitOps tooling applies both as a single change.
+The retry that triggers the race happens inside the operator, where users cannot see it.
+And the consequences are severe: a quorum member stuck `Pending` and failing reconciliations.
+Documentation alone therefore does not seem sufficient.
