@@ -68,10 +68,33 @@ Consolidate auxiliary configuration fields into a new `spec.config` map, keeping
 
 - `mode`: A string representing the rebalancing operation (e.g. `full`, `add-brokers`, `remove-brokers`, `remove-disks`)
 - `brokers`: A list of integers identifying the brokers the operation targets.
+  Accepted in 2 out of 4 rebalancing modes.
+  This field will remain a top-level field because it is simpler for users to work with and easier to validate.
 - `volumes`: A list of objects, each containing a `brokerId` (integer) and `volumeIds` (list of integers), identifying the volumes the operation targets. 
 Replaces the current `moveReplicasOffVolumes` field with a generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
-- `config`: a map replacing the existing primitive fields (`skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `goals`, `replicaMovementStrategies`) with their upstream Cruise Control key-value equivalents.
-These primitive fields are the primary source of API sprawl.
+  Accepted in 1 out of 4 rebalancing modes.
+  This field will remain a top-level field because it is simpler for users to work with and easier to validate.
+- `config`: a map replacing the existing primitive fields with their upstream Cruise Control key-value equivalents:
+  - `skipHardGoalCheck`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts a simple boolean value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `rebalanceDisk`: Accepted in 1 out of 4 rebalancing modes.
+    Since this field accepts a simple boolean value exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `excludedTopics`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts a String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `concurrentPartitionMovementsPerBroker`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `concurrentIntraBrokerPartitionMovements`: Accepted in 1 out of 4 rebalancing modes.
+    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `concurrentLeaderMovements`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `replicationThrottle`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `goals`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts a simple String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `replicaMovementStrategies`: Accepted in 3 out of 4 rebalancing modes.
+    Since this field accepts simple String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+
+  These primitive fields are the primary source of API sprawl.
 Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
 This removes the translation layer between Strimzi field names and Cruise Control parameters, allowing users to consult Cruise Control documentation directly and new Cruise Control parameters to be supported without changes to the Strimzi API.
 
@@ -120,20 +143,24 @@ The following config keys will replace the primitive fields that are currently u
 ### Implementation Strategy
 
 1. **Introduce the new `config` map and `volumes` field** while maintaining backward compatibility:
-   - Accept both old top-level primitive fields and new `config` map.
-   - Accept both `moveReplicasOffVolumes` and `volumes` (mapped to the same internal representation)
-   - If both old and new forms are provided, the new form takes precedence and a warning will be logged that the old form is ignored in favor of the new form.
-   - Log deprecation warnings when old top-level primitive fields or `moveReplicasOffVolumes` are used
+   - Add a `config` field of type Map<String, String> and a `volumes` field of type List<BrokerAndVolumeIds> to the `KafkaRebalanceSpec` alongside the existing fields.
+   No existing fields are removed so the legacy fields (for example, `moveReplicasOffVolumes` and `goals`) will continue to be supported when specified in the `KafkaRebalance` resource.
+   - Ensure both the legacy fields and the new `config` and `volumes` fields use the same implementation underneath.
 
-2. **Update documentation** to promote the new structure while documenting the old structure as deprecated.
+2. **Add validation** that warns about using old and new API structures.
+   - Update the KafkaRebalanceAssemblyOperator to ignore the legacy fields when they conflict with the new fields, use the new fields, and log warnings indicating that the legacy fields have been ignored.
+   - Update the KafkaRebalanceAssemblyOperator to log deprecation warnings whenever legacy fields are used.
 
-3. **Update examples** to show the usage of the deprecated and the new structure.
+3. **Deprecate old fields and plan removal**
+   - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies` and `moveReplicasOffVolumes`
+   - These fields will be removed in a future API version.
 
-4. **Add validation** that warns about mixing old and new structures.
+4. **Update examples** to encourage use of new API structure
+   - Ensure the packaged `KafkaRebalance` resource examples are updated to use new API structure.
 
-5. **Deprecate old fields and plan removal** Mark the old top-level primitive fields: `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`,
-  `replicationThrottle`, `replicaMovementStrategies` and `moveReplicasOffVolumes` as deprecated in the current API version.
-  These fields will be removed in the next API version.
+5. **Update documentation** to promote the new structure while documenting the old structure as deprecated.
+   - Add a table to the documentation mapping new fields to the corresponding legacy fields that they are replacing.
+   - Add examples to show how to migrate from the legacy to the new API structure.
 
 ### Validation Improvements
 
