@@ -122,6 +122,20 @@ The default expiration for the tokens will be 3600 seconds, which is the recomme
 
 ![Service Account-based authentication](./images/145-configurable-security-of-internal-communication.svg)
 
+Using the Service Account for authentication would introduce stronger dependency on the Kubernetes API.
+The tokens have default expiration of 1 hour and typically do not use longer expiration then 24 hours.
+So when the Kubernetes API is not available when the token needs to be refreshed, the authentication would fail.
+Today, we also rely on the Kubernetes API to load the certificates.
+But because they are long-lived, a running Kafka cluster might work for much longer before it is impacted by Kubernetes API server outage.
+
+However, this is acceptable trade-of:
+* We are using more secure short-lived credentials which always carry this risk
+* I do not think outages when the Kubernetes API server is down but everything else in the Kubernetes cluster is stable and available is rare.
+  In many situation, Kubernetes API outages would be accompanied by outages of the worker nodes, Pod restarts, etc.
+  In which case even the operands reliant on mTLS would be affected.
+* The Service Account based authentication is an opt-in feature.
+  User who prefer to use on mTLS can remain on it.
+
 #### Kafka Authentication
 
 On the Apache Kafka side, we will use the existing Strimzi OAuth library to perform authentication on the control plane and replication listeners.
@@ -301,6 +315,11 @@ When the current status is not present, the operator will accept the desired con
 This should happen only for:
 * Newly deployed clusters
 * When the user executes the configuration change procedure (described in the previous section)
+
+The operator will not check that the Pods are really stopped.
+Checking that pods are present would be nontrivial.
+It might for example cause issues in case the operator fails during the initial reconciliation.
+Checking that the status section is not present should be sufficient as it indicates a new cluster or a clear intent from the user.
 
 This ensures that a random change to the security configuration does not break the Kafka cluster.
 
