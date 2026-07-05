@@ -51,6 +51,9 @@ Strimzi users seem to request this for two main reasons.
 
 The first reason is performance and cost.
 Using TLS for internal communication within the cluster has significant performance and cost implications.
+Not having to encrypt / decrypt the data means that we need less processing in the clients and brokers which should help to reduce latency and increase performance.
+Disabling TLS should also allow Kafka to use the _zero-copy_ principle when dispatching data to consumers.
+Reducing the CPU load required for the TLS processing also help to reduce the overall resource requirement and reduce the costs.
 Especially when running in isolated environments, some users are willing to skip TLS encryption for performance gains or cost optimizations.
 
 The second reason is service mesh integration.
@@ -313,7 +316,7 @@ The user will be required to either revert the changes or to follow the correct 
 
 When the current status is not present, the operator will accept the desired configuration and use it.
 This should happen only for:
-* Newly deployed clusters
+* Newly deployed clusters (they do not have the security set in the `.status` section, so the operator allows configuring the cluster security in any way)
 * When the user executes the configuration change procedure (described in the previous section)
 
 The operator will not check that the Pods are really stopped.
