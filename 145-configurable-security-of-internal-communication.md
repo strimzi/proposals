@@ -87,7 +87,7 @@ The Service Account tokens can be used in an OAuth-like fashion and are supporte
 They work on most Kubernetes clusters without requiring additional dependencies such as Keycloak.
 
 The main purpose of Service Account-based authentication is to provide an alternative authentication mechanism when TLS encryption is disabled.
-However, users will be able to use the Service Account-based authentication can be used when TLS is disabled or not.
+However, users will be able to use the Service Account-based authentication regardless of whether TLS is disabled or not.
 For example, if they prefer the use of short-lived tokens over long-lived certificates for authentication, they might want to use the TLS encryption with Service Account authentication.
 
 ### Disabling TLS
@@ -135,8 +135,9 @@ But because they are long-lived, a running Kafka cluster might work for much lon
 
 However, this is acceptable trade-of:
 * We are using more secure short-lived credentials which always carry this risk
-* I do not think outages when the Kubernetes API server is down but everything else in the Kubernetes cluster is stable and available is rare.
-  In many situation, Kubernetes API outages would be accompanied by outages of the worker nodes, Pod restarts, etc.
+* Outages of the Kubernetes API server are not a major concern.
+  The Kubernetes control plane supports high availability and should use it in production-grade Kubernetes clusters.
+  Also, in many situation, Kubernetes API outages would be accompanied by outages of the worker nodes, Pod restarts, etc.
   In which case even the operands reliant on mTLS would be affected.
 * The Service Account based authentication is an opt-in feature.
   User who prefer to use on mTLS can remain on it.
@@ -206,7 +207,7 @@ This will remain unchanged for the time being, and the new cluster configuration
 
 In the long term, we should aim to add support for Service Account-based authentication to the Cruise Control HTTP interface as well.
 That would also help improve some of the limitations of the current authentication model, such as lack of credential rotation.
-However, the Cruise Control community currently seems dysfunctional.
+However, the development and maintenance of the Cruise Control project seems to be paused for the moment.
 This should be revisited later depending on the future of Cruise Control.
 
 ### Configuring the Internal Cluster Security
@@ -223,6 +224,9 @@ Given that we just released version 1.0.0 and finalized the `v1` API, we should 
 The cluster security would be configured in the `strimzi.io/cluster-security` annotation.
 This annotation would contain JSON with the configuration.
 When the annotation is not set, Strimzi will default to the current state with TLS encryption and mTLS authentication.
+
+The reason why a single annotation with JSON object is used instead of having multiple annotations with a single value is because it gives us the flexibility to add additional values if needed.
+For example, if it turns out that users want to configure the token expiration or use different Kubernetes endpoints as part of the token authentication, the corresponding fields can be easily added to the JSON structure.
 
 It will initially contain two sections:
 * `encryption`
@@ -358,6 +362,14 @@ It will be instantiated at the beginning of the Kafka reconciliation in the `Kaf
 It will be passed through the various reconcilers and model classes.
 The `KafkaClusterSecurity` object will hold the information about the security configuration.
 It will be used to decide how to configure the different security aspects, such as client or broker configuration.
+
+This will be done in different places across the codebase, typically through a series of if-else conditions that will be used to determine and set the correct configurations.
+For example:
+* In the `DefaultKafkaAgentClientProvider` and `KafkaAgentClient` classes to access the Kafka cluster with the correct security configuration
+* In the `KafkaBrokerConfigurationBuilder` and `KafkaCluster` classes to configure the Apache Kafka brokers and controllers
+* In Entity Topic and User Operator model classes to configure the User and Topic Operators
+* In the Kafka Exporter model class to configure the Kafka Exporter
+* In the Cruise Control model class to configure Cruise Control
 
 ### Testing Strategy
 
