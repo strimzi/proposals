@@ -221,7 +221,7 @@ Using an annotation means:
 Once both the work on this proposal and the cert-manager integration are complete, we can try to come up with a permanent API.
 Given that we just released version 1.0.0 and finalized the `v1` API, we should have enough time to finalize it before the next API version change.
 
-The cluster security would be configured in the `strimzi.io/cluster-security` annotation.
+The cluster security would be configured in the `strimzi.io/internal-cluster-security` annotation.
 This annotation would contain JSON with the configuration.
 When the annotation is not set, Strimzi will default to the current state with TLS encryption and mTLS authentication.
 
@@ -243,7 +243,7 @@ The following configuration would have the same meaning as the current defaults:
 ```yaml
 metadata:
   annotations:
-    strimzi.io/cluster-security: |
+    strimzi.io/internal-cluster-security: |
                       {
                           "encryption":
                               {
@@ -269,7 +269,7 @@ The configuration with no encryption and Service Account-based authentication wo
 ```yaml
 metadata:
   annotations:
-    strimzi.io/cluster-security: |
+    strimzi.io/internal-cluster-security: |
                       {
                           "encryption":
                               {
@@ -322,7 +322,7 @@ This should happen only for:
 * When the user executes the configuration change procedure (described in the previous section)
 
 The Strimzi cluster Operator will for every reconciliation:
-* Construct the desired configuration from the `strimzi.io/cluster-security` annotation (or use the current defaults if the annotation is missing)
+* Construct the desired configuration from the `strimzi.io/internal-cluster-security` annotation (or use the current defaults if the annotation is missing)
 * Check if the current configuration is stored in the `.status` section of the `Kafka` CR
 * If the current configuration is missing (for a new cluster or for a cluster where the user removed it manually as part of the _migration_), the desired changes will be used
 * If the current configuration is present, it will compare the desired and current configurations and:
