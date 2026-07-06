@@ -86,7 +86,9 @@ The proposed alternative authentication mechanism is based on Kubernetes Service
 The Service Account tokens can be used in an OAuth-like fashion and are supported by Apache Kafka's `OAUTHBEARER` SASL mechanism.
 They work on most Kubernetes clusters without requiring additional dependencies such as Keycloak.
 
-While the main purpose of Service Account-based authentication is to provide an alternative authentication mechanism when TLS encryption is disabled, users can also use it with TLS encryption enabled.
+The main purpose of Service Account-based authentication is to provide an alternative authentication mechanism when TLS encryption is disabled.
+However, users will be able to use the Service Account-based authentication can be used when TLS is disabled or not.
+For example, if they prefer the use of short-lived tokens over long-lived certificates for authentication, they might want to use the TLS encryption with Service Account authentication.
 
 ### Disabling TLS
 
@@ -310,14 +312,18 @@ Once the reconciliation is unpaused, the Strimzi Cluster Operator will recreate 
 Changing the security configuration for an existing cluster could easily break the cluster.
 Therefore, we will have built-in protection to prevent that.
 The current security configuration will be tracked in the `Kafka` CR status.
-At the start of every reconciliation, Strimzi will compare the current and desired configuration.
-If the desired configuration contains invalid changes, Strimzi will reject it, and fail the reconciliation without applying any changes to the actual Kafka cluster.
-The user will be required to either revert the changes or to follow the correct procedure.
-
 When the current status is not present, the operator will accept the desired configuration and use it.
 This should happen only for:
 * Newly deployed clusters (they do not have the security set in the `.status` section, so the operator allows configuring the cluster security in any way)
 * When the user executes the configuration change procedure (described in the previous section)
+
+The Strimzi cluster Operator will for every reconciliation:
+* Construct the desired configuration from the `strimzi.io/cluster-security` annotation (or use the current defaults if the annotation is missing)
+* Check if the current configuration is stored in the `.status` section of the `Kafka` CR
+* If the current configuration is missing (for a new cluster or for a cluster where the user removed it manually as part of the _migration_), the desired changes will be used
+* If the current configuration is present, it will compare the desired and current configurations and:
+    * Fail the reconciliation if they differ (=> someone changed the configuration for an existing cluster)
+    * Proceed with the reconciliation if they match
 
 The operator will not check that the Pods are really stopped.
 Checking that pods are present would be nontrivial.
@@ -410,6 +416,8 @@ However, to keep the scope of this proposal under control, this is not part of t
 
 This proposal focuses only on the Apache Kafka clusters managed through the `Kafka` and `KafkaNodePool` custom resources.
 While it might serve as an inspiration for securing Connect or MirrorMaker 2 clusters in the future, they are out of scope for this proposal.
+As Connect and MirrorMaker 2 do not use any TLS encryption or mTLS authentication for their internal communication, they are not directly related to this proposal which focuses on disabling TLS / mTLS in the Kafka clusters.
+Introducing the Service Account based authentication for Connect and MirrorMaker 2 directly in this proposal would also significantly increase the scope and size of this proposal.
 
 ## Affected Projects
 
