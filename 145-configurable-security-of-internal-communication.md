@@ -201,9 +201,15 @@ It will use the token obtained through the `TokenRequest` API similarly to how t
 
 #### Cruise Control Authentication
 
-Cruise Control will use the Service Account tokens when connecting to the Kafka cluster to collect its metrics.
-However, it uses its own API key-based authentication for its HTTP interface.
-This will remain unchanged for the time being, and the new cluster configuration will only be used to enable or disable TLS encryption.
+Cruise Control is connecting to the Kafka cluster using the Kafka protocol to collect metrics as well as to balance the Kafka cluster (execute reassignments, etc.).
+The Kafka connections will be configurable as described in this protocol.
+So users would be able to disable TLS / mTLS as well as use the Service Account tokens.
+
+However, Cruise Control also has its own HTTP-based listener for its own REST API.
+This API is used by the Cluster and Topic Operators to communicate with Cruise Control
+This HTTP API uses its own API key-based authentication.
+This will remain unchanged for the time being, and the new cluster configuration will only be used to enable or disable TLS encryption on the HTTP API.
+The authentication will remain unchanged.
 
 In the long term, we should aim to add support for Service Account-based authentication to the Cruise Control HTTP interface as well.
 That would also help improve some of the limitations of the current authentication model, such as lack of credential rotation.
