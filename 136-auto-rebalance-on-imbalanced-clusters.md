@@ -11,7 +11,7 @@ Currently, if the cluster is imbalanced, the user would need to manually rebalan
 With Strimzi, if you want to rebalance due to cluster imbalance, the only available approach today is manual intervention - there is no automated mechanism for rebalancing on imbalance.
 Automating this process would reduce operational overhead and benefit all users by eliminating the need for constant manual monitoring and rebalancing.
 
-### Introduction to Self Healing in Cruise Control
+## Introduction to Self Healing in Cruise Control
 
 In order to understand how we plan to automatically fix unbalanced Kafka clusters, the sections below will go over how Cruise Control's anomaly detection and self-healing features work to detect the anomalies in the cluster and fix them.
 
@@ -22,7 +22,7 @@ The anomaly detector manager detects an anomaly (using the detector classes) and
 The notifier then decides what action to take on the anomaly whether to fix it, ignore it, or delay it.
 Cruise Control provides various notifiers to alert the users about the detected anomaly in several ways like Slack, Alerta, MS Teams etc.
 
-#### Anomaly Detector Manager
+### Anomaly Detector Manager
 
 The anomaly detector manager helps in detecting the anomalies as well as handling them.
 It acts as a coordinator between the detector classes and the classes which will handle resolving the anomalies.
@@ -45,7 +45,7 @@ If self-healing is enabled and the action is `FIX`, then the anomaly detector ma
 
 Anomaly detection also has various [configurations](https://github.com/linkedin/cruise-control/wiki/Configurations#anomalydetector-configurations), such as the detection interval and the anomaly notifier class, which can affect the performance of the Cruise Control server and the latency of the anomaly detection.
 
-#### Notifiers in Cruise Control
+### Notifiers in Cruise Control
 
 Whenever anomalies are detected, Cruise Control provides the ability to notify the user regarding the detected anomalies using optional notifier classes.
 The notification sent by these classes increases the visibility of the operations that are taken by Cruise Control.
@@ -68,7 +68,7 @@ This pluggable mechanism provides flexibility for integrating with organization-
 
 There are multiple other [self-healing notifier](https://github.com/linkedin/cruise-control/wiki/Configurations#selfhealingnotifier-configurations) related configurations you can use to make notifiers more efficient as per the use case.
 
-#### Self Healing
+### Self Healing
 
 If self-healing is enabled, Cruise Control will either fix or not fix the detected anomaly based on the action returned by the configured notifier.
 If the notifier has returned `FIX` as the action then the classes which are responsible for resolving the anomaly would be called.
@@ -85,7 +85,7 @@ In Strimzi's current implementation of Cruise Control, fixing these issues needs
 Users can currently enable anomaly detection and can also [set](https://strimzi.io/docs/operators/latest/full/deploying.html#setting_up_alerts_for_anomaly_detection) the notifier to one of those included with Cruise Control (`SelfHealingNotifier`, `AlertaSelfHealingNotifier`, `SlackSelfHealingNotifier` etc.).
 All the `self.healing` prefixed properties are currently disabled in Strimzi's Cruise Control integration because, initially, it was not clear how self-healing would act if pods were rolled in the middle of rebalances or how Strimzi triggered manual rebalances should interact with Cruise Control triggered self-healing ones.
 
-### Proposal
+## Proposal
 
 This proposal is concerned with giving users the option to have their Kafka clusters balanced automatically whenever they become imbalanced due to overloaded brokers, high CPU usage, or similar constraints.
 However, the proposal is not to rely on the Cruise Control self-healing implementation directly.
@@ -175,6 +175,7 @@ The operator copies over goals and rebalancing options from the referenced `temp
 If the user has not configured the anomaly detection goals in Cruise Control section of the Kafka CR then the operator will set the default goals to be used by the anomaly detector. 
 The default anomaly detection goals set by the operator are `RACK_AWARENESS_GOAL`, `MIN_TOPIC_LEADERS_PER_BROKER_GOAL`, `REPLICA_CAPACITY_GOAL`, `DISK_CAPACITY_GOAL`.
 These are similar to the default goals used for `KafkaRebalance` if the users don't set the rebalance goals.
+
 **Template Goal Validation:**
 
 If the user specifies a rebalance template, the operator validates that the goals in the template are a subset of the anomaly detection goals configured for Cruise Control.
@@ -215,7 +216,7 @@ The `KafkaAutoRebalanceReconciler` retrieves the anomaly detection goals from th
   - Users must correct the template configuration to resume imbalance auto-rebalancing
 
 The `KafkaRebalance` has 4 modes: `full`, `add-broker`, `remove-broker` and `remove-disks` mode.
-The `imbalance` mode will be mapped to the `full` mode in the generated KafkaRebalance resource which means that the generated `KafkaRebalance` custom resource will have the mode set as `full` which within the Strimzi rebalancing operator means calling the Cruise Control API to run a rebalancing taking all brokers into account.
+The `imbalance` mode will use the `full` mode in the generated KafkaRebalance resource which means that the generated `KafkaRebalance` custom resource will have the mode set as `full` which within the Strimzi rebalancing operator means calling the Cruise Control API to run a rebalancing taking all brokers into account.
 
 The generated `KafkaRebalance` custom resource will be called `<my-cluster-name>-auto-rebalancing-imbalance`, where the `<my-cluster-name>` part comes from the `metadata.name` in the `Kafka` custom resource, and the `-imbalance` suffix indicates that this rebalance was triggered by detected goal violations in the cluster.
 
@@ -245,7 +246,7 @@ This finalizer mechanism is also used for the existing auto-scaling operations (
 The finalizer is removed when Cruise Control indicates that the partition reassignment (rebalance) process has finished, allowing the generated `KafkaRebalance` custom resource to be deleted by the operator itself.
 In case the rebalance finishes with an error, the error message will be propagated to the Kafka custom resource just like we do for the `remove-broker` and `add-broker` operations, and the generated `KafkaRebalance` will be deleted.
 
-#### State endpoint in Cruise Control
+### State endpoint in Cruise Control
 
 Cruise Control provides the `state` endpoint to query the state of Cruise Control at any time by issuing a HTTP GET request.
 The operator will use this endpoint with specific substates to coordinate auto-rebalancing operations.
@@ -264,7 +265,7 @@ The following diagram depicts the complete auto-rebalance on imbalance process, 
 
 ![flow-diagram-auto-rebalance-on-imbalance](images/136-auto-rebalance-imbalance.png)
 
-#### Reconciliation logic using the state endpoint
+### Reconciliation logic using the state endpoint
 
 The operator will interact with the Cruise Control `state` endpoint to understand when an anomaly is detected and when it should take any action.
 The `KafkaAutoRebalanceReconciler` class will hold all the logic for the auto-rebalance triggered on scale up, scale down or imbalance.
@@ -283,7 +284,7 @@ If a scale operation interrupts an imbalance rebalance, the imbalance rebalance 
 After the scale operation completes, if the cluster is still imbalanced, Cruise Control will detect the goal violation again in a future reconciliation, and a fresh imbalance rebalance will be triggered.
 This prevents wasted work: scale operations change the cluster topology, making any in-progress imbalance rebalance based on outdated information.
 
-#### Detecting Active Rebalances
+### Detecting Active Rebalances
 
 To determine if a rebalance is already ongoing, the operator uses a unified approach that works for both manual and auto-generated `KafkaRebalance` resources.
 Every reconciliation, the operator will:
@@ -292,7 +293,7 @@ Every reconciliation, the operator will:
 2. **Extract the state** of each `KafkaRebalance` using the existing `KafkaRebalanceUtils.rebalanceState()` utility method
 3. **Check for actively executing rebalances**: A rebalance is considered "active" if any `KafkaRebalance` resource is in the `Rebalancing` state (partition movements are currently executing)
 
-##### Interaction with Manual Rebalances
+#### Interaction with Manual Rebalances
 
 The operator handles manual and auto-generated `KafkaRebalance` resources differently based on their state:
 
@@ -323,6 +324,8 @@ Here is an example JSON returned by the state endpoint when called with the `ano
 {
   "AnomalyDetectorState": {
     "selfHealingEnabled": [
+    ],
+    "selfHealingDisabled": [
       "BROKER_FAILURE",
       "DISK_FAILURE",
       "GOAL_VIOLATION",
@@ -330,7 +333,6 @@ Here is an example JSON returned by the state endpoint when called with the `ano
       "TOPIC_ANOMALY",
       "MAINTENANCE_EVENT"
     ],
-    "selfHealingDisabled": [],
     "selfHealingEnabledRatio": {
       "BROKER_FAILURE": 1.0,
       "DISK_FAILURE": 1.0,
@@ -382,7 +384,7 @@ We will process only the most recent goal violation (the first element in the li
 We will parse the data from Cruise Control into a JSON object and retrieve the `detectionDate` from the most recent entry in the `recentGoalViolations` field.
 This `detectionDate` timestamp will be used to determine whether a new auto-rebalance should be triggered.
 
-#### Logic to trigger rebalance
+### Logic to trigger rebalance
 
 To determine whether a detected anomaly should trigger a new rebalance, we need to compare the anomaly detection timestamp against the completion time of the most recent rebalance operation (whether manual or automatic).
 This ensures we don't retrigger rebalances for goal violations that were already addressed.
@@ -485,14 +487,14 @@ if (lastCompletionTime == null) {
 
 This ensures anomalies fixed by either manual or auto-rebalances don't trigger duplicate operations, even if the `KafkaRebalance` resources have been deleted.
 
-#### What happens if there are no rebalances running and an anomaly is detected (The Happy Path)
+### What happens if there are no rebalances running and an anomaly is detected (The Happy Path)
 
 1. The operator retrieves the `lastRebalanceCompletionTime` from the `<cluster-name>-rebalancing-tracker` ConfigMap and compares the anomaly `detectionDate` against this timestamp (see comparison logic in "Logic to trigger rebalance" section)
 2. If the comparison indicates a new anomaly, the operator transitions to `RebalanceOnImbalance` and creates a new `KafkaRebalance` resource
 3. Once the rebalance completes (transitions to `Ready` state), the `KafkaRebalanceAssemblyOperator` automatically updates the `lastRebalanceCompletionTime` field in the ConfigMap during its reconciliation
 4. The `KafkaAutoRebalanceReconciler` then detects the completion, transitions back to `Idle`, and deletes the auto-generated resource
 
-#### What happens if the anomaly is detected during a running rebalance
+### What happens if the anomaly is detected during a running rebalance
 
 Using the detection approach described in [Detecting Active Rebalances](#detecting-active-rebalances) section:
 - If any `KafkaRebalance` resource in `Rebalancing` state is detected (actively executing partition movements), we skip the auto-rebalance creation since the ongoing operation might resolve the anomaly
@@ -500,7 +502,7 @@ Using the detection approach described in [Detecting Active Rebalances](#detecti
 
 If the anomaly persists after the rebalance completes, Cruise Control will detect it again in a subsequent cycle and a new rebalance will be triggered.
 
-#### What happens if a rebalance fails
+### What happens if a rebalance fails
 
 When an auto-rebalance on imbalance fails (the `KafkaRebalance` resource transitions to `NotReady` state):
 
@@ -520,7 +522,7 @@ Instead:
 - This prevents repeated failed attempts while ensuring issues are eventually addressed once resolved
 - Users can monitor operator logs or set up log aggregation to track rebalance failures
 
-#### What happens if an unfixable goal violation happens
+### What happens if an unfixable goal violation happens
 
 The `recentGoalViolation` property in the JSON returned by the `state` endpoint with `anomaly_detector` substate also provides information on fixable goals and unfixable goals under the `fixableViolatedGoals` and `unfixableViolatedGoals` lists in the JSON.
 Here is an example JSON:
@@ -565,7 +567,7 @@ status:
 
 The warning message will include both the unfixable goals (requiring manual intervention) and any fixable goals (which will be addressed once the infrastructure constraints are resolved).
 
-#### What happens if the rebalance template contains invalid goals
+### What happens if the rebalance template contains invalid goals
 
 If the rebalance template specifies goals that are NOT included in the `anomaly.detection.goals` configuration, the validation will fail.
 This prevents the operator from triggering rebalances for goals that Cruise Control is not actively monitoring for violations.
@@ -601,7 +603,7 @@ Users must either:
 - Update the rebalance template to only include goals from the anomaly detection configuration, or
 - Update the Cruise Control `anomaly.detection.goals` configuration to include the additional goals
 
-#### Stopping a running rebalance
+### Stopping a running rebalance
 
 To stop a running rebalance, users can apply the `strimzi.io/rebalance=stop` annotation on the generated `KafkaRebalance` resource.
 This will stop the running rebalance and the stopped `KafkaRebalance` resource will be deleted.
@@ -696,7 +698,7 @@ If users need immediate rebalancing despite configured maintenance windows (e.g.
 
 Scale-up and scale-down auto-rebalance operations will continue to **ignore** maintenance windows (executed immediately), while imbalance auto-rebalance respects them.
 
-#### Handling Intra-Broker Disk Imbalances (JBOD Storage)
+### Handling Intra-Broker Disk Imbalances (JBOD Storage)
 
 For Kafka clusters using **JBOD storage with multiple disks**, the `imbalance` mode automatically handles both **inter-broker** (replicas distributed across brokers) and **intra-broker disk imbalances** (disk usage between disks on the same broker).
 
@@ -813,7 +815,7 @@ For JBOD clusters where inter-broker rebalancing may have left intra-broker viol
   - New anomaly with timestamp > ConfigMap's `lastRebalanceCompletionTime` → triggers new rebalance with `rebalanceDisk=true`
 - **Crash during intra-broker rebalance**: `KafkaRebalance` exists with `rebalanceDisk=true` → continue monitoring it from its current state
 
-#### Metrics for tracking the rebalance requests
+### Metrics for tracking the rebalance requests
 
 If users want to track when auto-rebalances happen, they can access the Strimzi [metrics](https://github.com/strimzi/strimzi-kafka-operator/blob/main/examples/metrics/grafana-dashboards/strimzi-operators.json#L712) for the `KafkaRebalance` custom resources.
 This includes tracking when they were visible/created.
@@ -824,11 +826,11 @@ Therefore, we will add a new counter metric named `strimzi_auto_rebalance_anomal
 We will also add labels to differentiate anomalies based on fixability (`fixable`, `unfixable`, `mixed`) and type of anomaly (`goal_violation`, `broker_failure`, `disk_failure`, etc.).
 These metrics will be exposed by the operator and will only be available when the user has configured the `imbalance` mode of auto-rebalance.
 
-#### Detecting Persisting Anomalies with Metrics and Alerts
+### Detecting Persisting Anomalies with Metrics and Alerts
 
 An anomaly may persist after a rebalance if cluster constraints prevent full optimization, new load patterns emerge immediately, or the rebalance only partially addresses violations.
 When this happens, Cruise Control keeps detecting the same anomaly entry with a different anomaly name and different detection time.
-To avoid rebalance loops and cluster instability, the users can make use of the metrics exposed by the operator.
+To monitor the rebalance loops and cluster instability, the users can make use of the metrics exposed by the operator.
 Users can monitor the exposed metrics and configure alerts to detect potential issues.
 Example alert conditions:
 
@@ -909,7 +911,7 @@ The FSM is initialized based on the `state` field.
 
 Let's see what happens during the auto-rebalancing process when the FSM starts from the **Idle** state and transitions to **RebalanceOnImbalance**.
 
-#### Idle
+##### Idle
 
 This state is set initially when a `Kafka` custom resource is created with the `spec.cruiseControl.autoRebalance` field configured.
 It is also the end state of a previously completed or failed auto-rebalancing operation.
@@ -917,7 +919,7 @@ In case of successful completion, once the rebalance moves to the `Ready` state,
 In case of failed auto-rebalancing, once the rebalance moves to the `NotReady` state, we will propagate the error to the Kafka CR, delete the generated `KafkaRebalance`, and set the state to `Idle`.
 In this state, the operator removes the finalizer and deletes the corresponding generated `KafkaRebalance` custom resource.
 
-#### RebalanceOnImbalance
+##### RebalanceOnImbalance
 
 In this state, goal violation anomalies were detected when we sent a request to the `state` endpoint with `anomaly_detector` substate.
 A `KafkaRebalance` resource will now be applied to the cluster to fix the cluster imbalance.
