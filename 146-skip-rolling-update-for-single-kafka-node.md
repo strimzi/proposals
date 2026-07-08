@@ -17,20 +17,18 @@ The existing per-node controls do the opposite: `strimzi.io/manual-rolling-updat
 ## Motivation
 
 The cluster-wide pause is the wrong tool for a single-node problem.
-Sometimes one node must be taken out of automatic rolling while the operator keeps managing the rest — for example a healthy node held for live investigation, a known-bad host awaiting a disk/hardware swap before it fails, or a node mid-rebalance a roll would interrupt.
-In these cases the node is still up and in-sync, so every other node keeps rolling normally; the cluster-wide pause is far too coarse, freezing config, cert rotation, scaling, and rolling for every healthy node too.
+Sometimes one node must be taken out of automatic rolling while the operator keeps managing the rest — for example a healthy node held for live investigation, a known-bad host awaiting a disk/hardware swap, or a node mid-rebalance a roll would interrupt.
 
-The feature began with a sharper incident: a broker stuck in a long on-disk log recovery, repeatedly force-restarted by the roller (`due to []` — no pending change), discarding in-progress recovery each time.
-That recovery case should already be handled by proposal [048](https://github.com/strimzi/proposals/blob/main/048-avoid-broker-restarts-when-in-recovery.md): the roller reads the Kafka Agent broker state and, on `RECOVERY`, stops instead of force-restarting.
-It looped only because the agent request failed and returned `BrokerState(-1)` instead of `RECOVERY` ([#12513](https://github.com/strimzi/strimzi-kafka-operator/issues/12513), fixed in [#12675](https://github.com/strimzi/strimzi-kafka-operator/pull/12675)), so 048's check fell through; the roller's per-broker Admin API probe then failed against the stuck broker, and once the backoff was exhausted this escalated to a force-restart.
-That part is a bug, and the [#12513](https://github.com/strimzi/strimzi-kafka-operator/issues/12513) fix lands independently of this proposal.
+The feature began with a sharper incident: a broker in a long on-disk log recovery was repeatedly force-restarted by the roller, discarding the in-progress recovery each time.
+That turned out to be a bug: proposal [048](https://github.com/strimzi/proposals/blob/main/048-avoid-broker-restarts-when-in-recovery.md) makes the roller stop on `RECOVERY`, but the agent request failed and returned `BrokerState(-1)` ([#12513](https://github.com/strimzi/strimzi-kafka-operator/issues/12513), fixed in [#12675](https://github.com/strimzi/strimzi-kafka-operator/pull/12675)), so 048's check fell through and the failing per-broker Admin API probe escalated to a force-restart once the backoff was exhausted.
+That fix lands independently of this proposal.
 
 A human lever is still needed for the cases 048 cannot see: a node not-ready for a non-`RECOVERY` reason (a degraded-but-alive disk, a hung mount) where the agent reports nothing actionable and a force-restart only reschedules the pod into a crash loop (`Multi-Attach` on `ReadWriteOnce` storage).
 The operator cannot auto-distinguish "stuck, restart me" from "intentionally not-ready, leave me" — only a human can — so the skip annotation is that deterministic override.
 
 The skip does **not** promise that the rest of the cluster keeps rolling freely.
-When a skipped broker is actually down it has already dropped out of its partitions' ISR, so a roll of another broker sharing an at-risk partition is deferred by the existing min-ISR check, exactly as any unsafe roll is today.
-The honest win over `pause-reconciliation`: all *non-rolling* reconciliation (scaling, PVCs, config/cert generation, status) continues cluster-wide and rolls of unaffected nodes proceed; only the flagged node and genuinely-unsafe rolls are held back.
+When a skipped broker is actually down, a roll of another broker sharing an at-risk partition is deferred by the existing min-ISR check, exactly as any unsafe roll is today.
+The win over `pause-reconciliation`: all *non-rolling* reconciliation (scaling, PVCs, config/cert generation, status) continues cluster-wide and rolls of unaffected nodes proceed; only the flagged node and genuinely-unsafe rolls are held back.
 
 ## Proposal
 
@@ -56,7 +54,7 @@ At the start of each reconciliation, `KafkaReconciler` resolves the `skip-rollin
 The set is applied at two places in the `reconcile()` pipeline:
 
 - `rollingUpdate()` — today it passes the unfiltered `kafka.nodes()` to `maybeRollKafka()` and on to `KafkaRoller`; the skipped IDs are removed from that set, so the roller never considers the node and none of its internal not-ready / force-restart paths can fire for it.
-  (Filtering the node set is required — a `RestartReasons` filter would not work, because the roller's force-restart decisions are made internally, after the readiness wait and the per-broker Admin API probe fail, and produce no predicate-visible reason.)
+  (A `RestartReasons` filter would not work: the roller's force-restart decisions are made internally and produce no predicate-visible reason.)
 - `podsReady()` — it runs right after `rollingUpdate()` and waits up to the operation timeout for every pod in `kafka.nodes()` to become Ready; the skipped node is removed from that list, otherwise a NotReady skipped pod would time this stage out on every reconciliation even though the roller ignored it.
 
 The later `serviceEndpointsReady()` and `headlessServiceEndpointsReady()` stages need no filtering: `Endpoints` readiness requires only one ready address, and the headless brokers service publishes not-ready addresses, so a single NotReady node does not block them.
@@ -69,7 +67,6 @@ Two things the skip must **not** do:
 - It must not make the node look removed: membership stages (KRaft register/unregister, scale-down) keep deriving membership from `kafka.nodes()`, which still includes the skipped node.
 - It must not advance cluster-wide state past the held node: a cluster-wide Kafka version / `metadata.version` change is deferred while any node is skipped, since the skipped node stays on its old version and finalizing the upgrade without it could leave it unable to rejoin.
   Only the upgrade rollout is held: all other reconciliation, including rolls of other nodes for other reasons, continues, and the deferral is logged and surfaced in the status condition.
-  This is one reason a skip must not be held across an upgrade (see "What a skip does not stop").
 
 ### Controller nodes
 
@@ -88,7 +85,7 @@ Skip suppresses only *automatic* rolls; an explicit `manual-rolling-update` is a
 
 Drain Cleaner is the awkward case: it is automated (so by that rule it *should* honor the skip) but it triggers rolls through the manual-rolling-update path, which the initial implementation of this feature cannot cleanly intercept.
 So a drain can still move a skipped node; while a node is skipped, exclude it from Drain Cleaner and cordon its host.
-A first-class Drain Cleaner integration that honors the skip is the named follow-up.
+A first-class Drain Cleaner integration that honors the skip can be added as a follow-up.
 
 ### What a skip does not stop
 
@@ -103,7 +100,7 @@ Because rolling is suppressed, a long-lived skip holds the node back from config
 A skip is intended to be short-lived and human-supervised, and must not be held across an upgrade or CA renewal.
 Nothing enforces that: the design provides visibility rather than enforcement.
 The status condition records when each skip started, the operator logs a warning on every reconciliation while a skip is active, and conflicts (a deferred version change, a certificate renewal not applied to the skipped node) are flagged in the condition.
-Automatic expiry of a forgotten skip is listed under future work.
+If visibility proves insufficient, automatic expiry of a skip after a configurable duration can be added as a follow-up.
 
 ### Status, security, and observability
 
@@ -142,12 +139,5 @@ Operators must lift all skips and confirm the nodes are healthy before downgradi
 - **A pod annotation.** Lost when the pod is recreated from the `StrimziPodSet` template; the durable surface must be the user-managed `KafkaNodePool`.
 - **A new `KafkaNodePool.spec` field.** Heavier than needed for a short-lived operational override; an annotation in the existing node-ID family is sufficient and consistent.
 - **A feature gate.** Opt-in by annotation and no change to default behavior, so a gate is not warranted.
-- **Raising `STRIMZI_OPERATION_TIMEOUT_MS`.** Operator-wide and blunt; slows every legitimate roll and still loops on any not-ready state longer than the new threshold.
-- **Making the readiness probe pass during recovery.** Lies to clients and load balancers and masks genuine not-ready states; the fix belongs in what the operator does with the state, not in falsifying it.
 - **Relying solely on the [#12513](https://github.com/strimzi/strimzi-kafka-operator/issues/12513) / 048 fix.** That fixes the recovery heuristic but not the non-recovery, agent-unreachable, or deliberate-hold cases; the two compose.
 - **Skipping controller nodes.** Thins the KRaft quorum majority for little benefit (controller recovery is fast); a controller-resolving ID is ignored and kept managed. This is a non-goal, not deferred work.
-
-## Future work
-
-- **First-class Drain Cleaner integration** so a skipped node is automatically excluded from drain-driven evictions.
-- **Auto-expiry of a skip** after a configurable duration, so a forgotten skip does not block cert rotation, config, or upgrades indefinitely.
