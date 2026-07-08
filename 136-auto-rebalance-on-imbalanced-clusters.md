@@ -144,6 +144,21 @@ spec:
 
 It is also possible to use the default Cruise Control rebalancing configuration by omitting the `template` field.
 
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+spec:
+  kafka:
+    # ...
+  cruiseControl:
+    # ...
+    autoRebalance:
+      # using the default Cruise Control rebalancing configuration when doing rebalance on imbalance
+      - mode: imbalance
+```
+
 The configuration for Cruise Control rebalance is provided through a `KafkaRebalance` custom resource which is specifically defined as a template and is referenced in the `template` field in the example above.
 A `KafkaRebalance` custom resource with the `strimzi.io/rebalance-template: true` annotation set can be used as a template.
 When a `KafkaRebalance` with this annotation is created, the cluster operator doesn't run any rebalancing.
@@ -172,13 +187,47 @@ spec:
 ```
 When the `template` is set, the operator automatically creates (or updates) a corresponding `KafkaRebalance` custom resource (based on the template) when a fixable anomaly is detected and notified by the `state` endpoint.
 The operator copies over goals and rebalancing options from the referenced `template` resource to the generated rebalancing one.
-If the user has not configured the anomaly detection goals in Cruise Control section of the Kafka CR then the operator will set the default goals to be used by the anomaly detector. 
-The default anomaly detection goals set by the operator are `RACK_AWARENESS_GOAL`, `MIN_TOPIC_LEADERS_PER_BROKER_GOAL`, `REPLICA_CAPACITY_GOAL`, `DISK_CAPACITY_GOAL`.
-These are similar to the default goals used for `KafkaRebalance` if the users don't set the rebalance goals.
+The copied over goals from the template are the goals that will be taken into consideration when the rebalance is running. 
+In case we don't provide a template, then the default Cruise Control rebalance configuration and goals will be used when doing the rebalance.
+
+The anomaly detection goals are the goals that will be used by the user to tell Cruise Control what type of anomalies it needs to track. For example:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: test-cluster
+spec:
+  kafka:
+    version: 4.3.0
+    metadataVersion: 4.3-IV0
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
+
+  cruiseControl:
+    config:
+      anomaly.detection.goals: >
+        com.linkedin.kafka.cruisecontrol.analyzer.goals.RackAwareGoal,
+        com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaCapacityGoal,
+        com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskCapacityGoal,
+        com.linkedin.kafka.cruisecontrol.analyzer.goals.MinTopicLeadersPerBrokerGoal
+```
+
+The default anomaly detection goals set by the operator are `RackAwareGoal`, `MinTopicLeadersPerBrokerGoal`, `ReplicaCapacityGoal`, `DiskCapacityGoal`.
+If the user has not configured the anomaly detection goals in Cruise Control section of the Kafka CR, then the operator will set the default anomaly detection goals configured by the operator to be used by the anomaly detector.
 
 **Template Goal Validation:**
 
-If the user specifies a rebalance template, the operator validates that the goals in the template are a subset of the anomaly detection goals configured for Cruise Control.
+If the user specifies a rebalance template, the operator validates that the goals in the template are a superset of the anomaly detection goals configured for Cruise Control.
 This ensures that the resulting rebalance proposal will actually try to address the root cause of the anomaly that was detected. 
 If the anomaly is due to a disk distribution goal violation but your rebalance optimization proposal does not use the DiskDistributionGoal, then it is wrong.
 
@@ -187,8 +236,8 @@ If the anomaly is due to a disk distribution goal violation but your rebalance o
 - The validation happens **after** Cruise Control is deployed but **before** any anomaly detection or rebalancing logic executes
 - The operator first checks if the `imbalance` mode is configured in `spec.cruiseControl.autoRebalance`
 - If `imbalance` mode is enabled and a template is specified, the operator validates that:
-  - All goals in the template exist in the `anomaly.detection.goals` configuration (or defaults if not configured)
-  - The `anomaly.detection.goals` is currently forbidden, but with this proposal, the users will be able to configure it with Cruise Control.
+  - All goals in the `anomaly.detection.goals` configuration (or defaults if not configured) exist in the template goals.
+  - The `anomaly.detection.goals` configuration is currently ignored by the operator (which uses a hard coded default set), but with this proposal, the users will be able to configure the goals and have them applied to Cruise Control.
   - The template reference points to a valid `KafkaRebalance` resource with the `strimzi.io/rebalance-template: true` annotation
 - This validation runs on **every reconciliation**, ensuring configuration changes are caught immediately
 - Configuration errors are detected early, preventing invalid auto-rebalance attempts and providing immediate feedback to users
@@ -405,10 +454,10 @@ This ConfigMap:
 
 **ConfigMap Lifecycle:**
 
-- **Creation**: Created automatically by the operator when the first rebalance (manual or auto-generated) completes 
+- **Creation**: Created automatically by the operator when the first rebalance (manual or auto-generated) completes. The ConfigMap is created with an **owner reference** to the Kafka CR, ensuring it is tied to the cluster lifecycle.
 - **Updates**: Updated by `KafkaRebalanceAssemblyOperator` whenever any `KafkaRebalance` resource (manual or auto-generated) transitions to a terminal state (`Ready`, `NotReady`, or `Stopped`)
 - **Persistence**: The ConfigMap is **not deleted** when rebalances complete or when the Kafka cluster is idle
-- **Deletion**: Only deleted when the Kafka cluster itself is deleted (via owner reference to the Kafka CR) or Cruise Control is deleted/disabled.
+- **Deletion**: Automatically deleted when the Kafka cluster itself is deleted (via owner reference to the Kafka CR) or when Cruise Control is deleted/disabled.
 - **Rationale**: Persisting the ConfigMap allows accurate timestamp comparison across reconciliations and operator restarts, preventing duplicate rebalancing operations
 
 Example ConfigMap:
@@ -421,6 +470,13 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
     strimzi.io/kind: Kafka
+  ownerReferences:
+  - apiVersion: kafka.strimzi.io/v1
+    kind: Kafka
+    name: my-cluster
+    uid: a1b2c3d4-e5f6-7890-abcd-1234567890ef
+    blockOwnerDeletion: true
+    controller: false
 data:
   lastRebalanceCompletionTime: "2026-06-03T14:23:45Z"
 ```
@@ -566,6 +622,27 @@ status:
 ```
 
 The warning message will include both the unfixable goals (requiring manual intervention) and any fixable goals (which will be addressed once the infrastructure constraints are resolved).
+
+**Manual Workaround**
+
+When unfixable hard goals block auto-rebalance but fixable goals need urgent attention (e.g., `RackAwareGoal` is unfixable due to insufficient racks while `DiskUsageDistributionGoal` violations are getting worse), users can manually trigger a rebalance that skips the unfixable hard goals:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaRebalance
+metadata:
+  name: manual-rebalance-skip-rack-goal
+  namespace: kafka
+spec:
+  goals:
+    - ReplicaCapacityGoal
+    - DiskCapacityGoal
+    - DiskUsageDistributionGoal
+    # RackAwareGoal intentionally excluded
+  skipHardGoalCheck: true  # Required to skip hard goals
+```
+
+This allows addressing fixable violations while infrastructure changes (adding racks, nodes, or resources) are in progress.
 
 ### What happens if the rebalance template contains invalid goals
 
@@ -1054,6 +1131,22 @@ Tests will use `MockCruiseControl` to simulate Cruise Control's `state` endpoint
    - Verify `<cluster-name>-rebalancing-tracker` ConfigMap's `lastRebalanceCompletionTime` is updated
    - Verify operator transitions to `Idle` and deletes resource
 
+### System Test
+
+A system test will be added to `CruiseControlST.java` following the pattern of `testAutoKafkaRebalanceScaleUpScaleDown()`:
+
+**Test: `testAutoRebalanceOnImbalance()`**
+
+1. Deploy Kafka cluster with JBOD storage and auto-rebalance `imbalance` mode enabled
+2. Configure fast anomaly detection (`anomaly.detection.interval.ms: 120000`)
+3. Create KafkaRebalance template resource with `strimzi.io/rebalance-template: "true"` annotation
+4. Create cluster imbalance (uneven partition distribution using AdminClient)
+5. Wait for Cruise Control anomaly detection (up to 3 minutes)
+6. Verify `<cluster>-auto-rebalancing-imbalance` KafkaRebalance resource is created
+7. Verify state transitions: `Idle` → `RebalanceOnImbalance` → `Idle`
+8. Verify KafkaRebalance resource is deleted after completion
+9. Verify `<cluster>-auto-rebalance-imbalance-tracker` ConfigMap contains completion timestamp
+
 ## Affected/not affected projects
 
 This change will affect the Strimzi cluster operator.
@@ -1121,4 +1214,22 @@ Cons:
 
 In the future, we plan to introduce auto-rebalance for topic-related and metric-related imbalances.
 Topic-related issues will require coordination with the Topic Operator, while metric-related issues will require coordination with the Kafka Admin API.
+We can also enhance the operator to automatically proceed with rebalancing fixable goals even when unfixable hard goals are present, by adding the `skipHardGoalCheck` field in the template:
+
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaRebalance
+metadata:
+  name: my-rebalance-template
+  annotations:
+    strimzi.io/rebalance-template: "true"
+spec:
+  goals:
+    - ReplicaCapacityGoal
+    - DiskCapacityGoal
+    - DiskUsageDistributionGoal
+    - RackAwareGoal  # May become unfixable
+  skipHardGoalCheck: true  # Allow rebalance even if hard goals (like RackAwareGoal) are violated
+```
+
 As this feature evolves, we can also explore ways to automatically fix issues like disk failures and broker failures, since the fix would be driven by the operator rather than Cruise Control directly.
