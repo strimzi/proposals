@@ -75,24 +75,42 @@ Replaces the current `moveReplicasOffVolumes` field with a generic name that can
   Accepted in 1 out of 4 rebalancing modes.
   This field will remain a top-level field because it is simpler for users to work with and easier to validate.
 - `config`: a map replacing the existing primitive fields with their upstream Cruise Control key-value equivalents:
-  - `skipHardGoalCheck`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts a simple boolean value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
-  - `rebalanceDisk`: Accepted in 1 out of 4 rebalancing modes.
-    Since this field accepts a simple boolean value exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
-  - `excludedTopics`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts a String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+  - `skipHardGoalCheck`: Accepted in 3 out of 4 of the rebalancing modes.
+    Although a top-level primitive boolean offers convenient CRD validation, placing it under `.spec.config` alongside the other configuration options is more consistent, intuitive, and scalable. 
+    The field is also expected to be used infrequently so the convenience tradeoff affects few users in practice.
+  - `rebalanceDisk`: Accepted in 1 out of 4 rebalancing modes and expected to be used frequently. 
+    However, when enabled, fields such as `replicationThrottle`, `goals`, and `concurrentPartitionMovementsPerBroker` are ignored. 
+    A top-level field that invalidates other top-level fields creates a confusing user experience.
+    This is a composability issue in the upstream Cruise Control API.
+    Placing the field under `.spec.config` keeps the problem in the Cruise Control API's domain while providing flexibility if the Cruise Control API evolves to fix it.
+  - `excludedTopics`: Accepted in 3 out of 4 rebalancing modes and is expected to see moderate to frequent use. 
+    However, CRD validation can only verify the value is a string, not whether the referenced topics exist, so a top-level field provides little practical benefit over `.spec.config`. 
+    Moving it to `.spec.config` alongside other configuration options keeps the API surface consistent.
   - `concurrentPartitionMovementsPerBroker`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
-  - `concurrentIntraBrokerPartitionMovements`: Accepted in 1 out of 4 rebalancing modes.
-    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+    We expect moderate usage of this field, but representing it as a primitive provides limited benefit.
+    While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
+    Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
+  - `concurrentIntraBrokerPartitionMovements`: Accepted in 1 out of 4 rebalancing modes and expected to be used infrequently.
+    Like the `rebalanceDisk` field, it cannot be combined with other rebalancing options in the current Cruise Control REST API. 
+    It is only applicable when `rebalanceDisk` is set to `true`.
+    This is a composability issue in the upstream Cruise Control API.
+    Placing the field under `.spec.config` keeps the problem in the upstream Cruise Control API's domain while providing flexibility if the upstream Cruise Control API evolves to fix it.
   - `concurrentLeaderMovements`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+    We expect low to moderate usage of this field, but representing it as a primitive provides limited benefit.
+    While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
+    Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
   - `replicationThrottle`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts an integer value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+    We expect moderate usage of this field but representing it as a primitive provides limited benefit.
+    While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
+    Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
   - `goals`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts a simple String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+    We expect high usage of this field but representing it as a primitive string provides limited benefit. 
+    The CRD validation can verify the value is a string but cannot check whether the referenced goals are valid. 
+    Moving this field under `.spec.config` alongside the other configuration options provides a more consistent user experience and its frequent use does not depend on top-level visibility.
   - `replicaMovementStrategies`: Accepted in 3 out of 4 rebalancing modes.
-    Since this field accepts simple String value, exposing it as a top-level field provides little benefit so it will be moved as an opaque configuration entry under the `.spec.config` section.
+    We expect infrequent usage of this field and representing it as a primitive provides limited benefit.
+    While CRD validation can verify that the value is a string, it does not check whether the referenced movement strategies are valid so this alone does not justify maintaining it as a top-level field.
+    Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
 
   These primitive fields are the primary source of API sprawl.
 Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
@@ -146,6 +164,17 @@ The following config keys will replace the primitive fields that are currently u
    - Add a `config` field of type Map<String, String> and a `volumes` field of type List<BrokerAndVolumeIds> to the `KafkaRebalanceSpec` alongside the existing fields.
    No existing fields are removed so the legacy fields (for example, `moveReplicasOffVolumes` and `goals`) will continue to be supported when specified in the `KafkaRebalance` resource.
    - Ensure both the legacy fields and the new `config` and `volumes` fields use the same implementation underneath.
+   - Following the same pattern used for `kafka.config` and `cruiseControl.config` sections of the `Kafka` resource
+  configuration, we will maintain `FORBIDDEN_PREFIXES` and `FORBIDDEN_PREFIX_EXCEPTIONS` constants in the
+  KafkaRebalanceSpec.
+     These constants will help filter keys in `spec.config` that conflict with operator-managed behavior or top-level fields, for example:
+      - `dryrun`: managed by the operator as part of the rebalance proposal lifecycle.
+      - `json`, `verbose`: response format parameters managed internally by the operator.
+      - `brokerid`: broker targeting is handled by the top-level brokers field.
+      - `destination_broker_ids`: volume targeting is handled by the top-level volumes field.
+
+     Forbidden keys are silently dropped with a warning log, consistent with existing Strimzi behavior for
+  `spec.cruiseControl.config` in the Kafka resource.
 
 2. **Add validation** that warns about using old and new API structures.
    - Update the KafkaRebalanceAssemblyOperator to ignore the legacy fields when they conflict with the new fields, use the new fields, and log warnings indicating that the legacy fields have been ignored.
@@ -158,9 +187,10 @@ The following config keys will replace the primitive fields that are currently u
 4. **Update examples** to encourage use of new API structure
    - Ensure the packaged `KafkaRebalance` resource examples are updated to use new API structure.
 
-5. **Update documentation** to promote the new structure while documenting the old structure as deprecated.
+5. **Update documentation** to promote the new structure while documenting the old structure as deprecated and point to the upstream [Cruise Control REST API Wiki](https://github.com/linkedin/cruise-control/wiki/REST-APIs) where needed.
    - Add a table to the documentation mapping new fields to the corresponding legacy fields that they are replacing.
    - Add examples to show how to migrate from the legacy to the new API structure.
+   - Using the `FORBIDDEN_PREFIXES` and `FORBIDDEN_PREFIX_EXCEPTIONS` constants maintained in the KafkaRebalanceSpec we will generate API documentation listing which upstream Cruise Control fields are unsupported by Strimzi.
 
 ### Validation Improvements
 
@@ -256,17 +286,34 @@ One example of this would be to add broker demotion support.
 
 With the proposed API, such a feature could look like this:
 
-#### Example of a `demote-brokers` rebalance
+#### Example of `demote-brokers` rebalance, demoting brokers
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
 metadata:
-  name: demote-brokers-example
+  name: demote-brokers-example-1
 spec:
   mode: demote-brokers
   brokers:
     - 3
     - 4
+  config:
+    exclude_recently_demoted_brokers: "true"
+```
+
+#### Example of `demote-brokers` rebalance, demoting disks of brokers
+```yaml
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaRebalance
+metadata:
+  name: demote-brokers-example-2
+spec:
+  mode: demote-brokers
+  volumes:
+    - brokerId: 3
+      volumeIds: [1, 2]
+    - brokerId: 4
+      volumeIds: [1]
   config:
     exclude_recently_demoted_brokers: "true"
 ```
