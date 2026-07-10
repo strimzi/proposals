@@ -108,7 +108,16 @@ This class will extend the original `PodTemplate` class and will add the templat
 The existing `PodTemplate` class will continue to be used for stateless Pod templates.
 The new `StatefulPodTemplate` class will be used for stateful Pod templates.
 
-Corresponding model classes and `TemplateUtils` will be updated to add the templated volumes to the generated Pods.
+The `TemplateUtils` class will be extended and new method `addAdditionalTemplatedVolumes(...)` will be added.
+This method be responsible for templating and creating the additional templated volumes.
+The existing `TemplateUtils.addAdditionalVolumes(...)` method will remain unchanged.
+In the places where we prepare the volumes for non-stateful Pods, `TemplateUtils.addAdditionalVolumes(...)` will be called as today without any change.
+In the places where we prepare the volumes for stateful Pods, the code will call both `TemplateUtils.addAdditionalVolumes(...)` and `TemplateUtils.addAdditionalTemplatedVolumes(...)` to add both the regular as well as the templated volumes.
+
+`TemplateUtils.addAdditionalVolumes(...)` has already validation for duplicate volume names.
+When duplicate volume name is found, an `InvalidResourceException` exception is raised.
+The same will be done also in `TemplateUtils.addAdditionalTemplatedVolumes(...)`.
+As we fail the reconciliation with exception in case of duplicate volume names, we can just run both methods one after each other and do not need to decide which one has priority.
 
 #### Handling Conflicts
 
