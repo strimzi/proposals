@@ -55,287 +55,236 @@ This enhancement is particularly valuable for:
 
 ### Overview
 
-Extend the auto-rebalancing mechanism to automatically cordon brokers during the scale down process.
+Extend the auto-rebalancing mechanism to automatically cordon brokers during the scale down process by integrating `cordoned.log.dirs` into the existing per-broker configuration pipeline.
 The operator will:
 
 1. Detect brokers scheduled for removal and block the scale down
-2. Cordon **all log directories** on those brokers by setting `cordoned.log.dirs=*` via the Kafka Admin API (using wildcard `*` to cordon all directories)
-3. Wait for the cordoning to take effect (across reconciliations)
-4. Proceed with the existing auto-rebalance workflow (create `KafkaRebalance` resource, etc.)
-5. Remove brokers after successful rebalancing to complete the scale down
-6. Handle cancelled scale down scenarios (uncordoning all log directories)
+2. Include `cordoned.log.dirs=*` in the desired per-broker configuration for those brokers, so that the existing configuration reconciliation applies it automatically
+3. Proceed with the existing auto-rebalance workflow (create `KafkaRebalance` resource, etc.)
+4. Remove brokers after successful rebalancing to complete the scale down
+5. Handle cancelled scale down scenarios automatically: when a broker is no longer scheduled for removal, its desired configuration omits `cordoned.log.dirs`, and the existing configuration diff uncordons it
+
+Even if cordoning brokers needs some time to propagate across the cluster, no explicit wait is considered to avoid over complexity.
+All the brokers to be removed will be cordoned eventually.
+The scale down will not complete until Cruise Control has moved all partitions off the brokers being removed, so any new partitions that sneak onto a broker during the brief propagation window will be moved as well.
+This time window can be considered negligible compared to the duration of a cluster rebalancing.
 
 The `cordoned.log.dirs` broker configuration property will be considered as **forbidden**.
 The users can't set it within the `Kafka` custom resource `spec.kafka.config` to prevent conflicts with operator-managed cordoning.
 Since broker configuration in Strimzi is common across all Kafka node pools, users cannot target specific brokers or log directories through the `Kafka` custom resource.
-The operator needs exclusive control over this property to manage the scale-down lifecycle correctly (cordoning before rebalancing, uncordoning on cancelled scale down).
+The operator needs exclusive control over this property to manage the scale-down lifecycle correctly.
+
+Despite the cordoning feature is available from Apache Kafka 4.3, there is no need for explicit Kafka version gating.
+The existing `KafkaConfigurationDiff` relies on the Kafka config model, which is selected based on the Kafka binary version.
+On Kafka < 4.3, `cordoned.log.dirs` is not in the config model, so the diff treats it as a "custom config" and silently skips it so the property appears in the desired configuration but is never applied to the broker.
+On Kafka >= 4.3, `cordoned.log.dirs` is in the config model, so the diff generates the appropriate `SET`/`DELETE` operations.
+
+It is worth noting that the Kafka binary version and the metadata version can differ during phased upgrades.
+KIP-1066 requires metadata version `IBP_4_3_IV0` for the controller to enforce cordoning during partition placement.
+If a cluster runs Kafka 4.3 but the metadata version has not been upgraded yet, the `cordoned.log.dirs` configuration will be accepted by the broker (since the binary supports it) but the controller will not enforce it.
+Cordoning is treated as best-effort in this scenario: the scale down still works correctly because Cruise Control moves all partitions off the brokers before they are removed, regardless of whether cordoning is active.
+Once the metadata version is upgraded, cordoning becomes effective automatically.
 
 ### Detailed workflow
 
-The cordoning logic is implemented in a new `KafkaClusterCreator.brokerCordoningCheck()` method, following the same pattern as the existing `brokerRemovalCheck()` method.
-The method sets a `cordoningCheckFailed` instance variable that indicates whether cordoning/uncordoning operations were performed and propagation is needed, similar to how `brokerRemovalCheck()` sets `scaleDownCheckFailed`.
-It also takes into account the fact that cordoning (or uncordoning) brokers needs some time for the configuration change to propagate across the cluster.
-This means that the auto-rebalancing, together with the actual scale-down, could be delayed across reconciliations, until the cordoning of brokers being removed is confirmed.
-The cordoning check runs on every reconciliation to ensure brokers are in the correct cordoning state, for scaling down or cleaning up (in case of cancelled scale down):
+The cordoning logic is integrated into the existing per-broker configuration pipeline.
+The existing `KafkaRoller` already reads broker configuration via `describeConfigs()` and applies changes via Kafka Admin API `incrementalAlterConfigs()`.
 
-- **Always check metadata version first**: Determines if cordoning is supported (Kafka 4.3+ with IBP_4_3_IV0+)
-- **Query all broker cordoning states**: Uses `describeLogDirs()` to check which brokers are currently cordoned
-- **Analyze and reconcile**: Compares current state against desired state (brokers being removed should be cordoned, others should not)
-- **Apply operations if needed**: Cordons brokers being removed, uncordons brokers no longer being removed (cleanup)
-- **Wait for cordoning propagation**: If operations were performed, revert scale down, and retry on next reconciliation
+When the operator detects a scale down, the existing `KafkaClusterCreator.brokerRemovalCheck()` saves the brokers scheduled for removal into `scalingDownBlockedNodes` before reverting the scale down.
+After the revert, the `KafkaCluster` model has `removedNodes()` empty (the scale down is reverted so that brokers are not removed yet), but the `scalingDownBlockedNodes` set preserves which brokers were originally targeted.
+This set already flows to the `KafkaAutoRebalancingReconciler` to trigger the `KafkaRebalance` resource creation with the removed brokers.
+With this proposal, it also flows to the `KafkaReconciler` to drive cordoning through the configuration pipeline.
 
-Following a more detailed flow of what happens within the `KafkaClusterCreator` class as cordoning check.
+The per-broker configuration is generated by the `KafkaBrokerConfigurationBuilder` class.
+A new `withCordonedLogDirs()` builder method writes `cordoned.log.dirs=*` for brokers in `scalingDownBlockedNodes`, and nothing for others.
+The existing configuration reconciliation then handles everything:
+
+- **Cordoning**: when `cordoned.log.dirs=*` is in the desired configuration but not on the broker, `KafkaConfigurationDiff` generates a `SET` operation applied via `incrementalAlterConfigs()` and no broker restart is needed since this is a dynamic per-broker config
+- **Uncordoning** (cancelled scale down): when `cordoned.log.dirs` is on the broker but not in the desired configuration, `KafkaConfigurationDiff` generates a `DELETE` operation to allow automatic cleanup
+- **No-op** (already cordoned): when the desired and live configurations match, no operation is generated
+
+The reconciliation ordering guarantees that cordoning is applied (during `KafkaReconciler.rollingUpdate()`) before auto-rebalancing starts (the `KafkaAutoRebalancingReconciler` runs after the full `KafkaReconciler` pipeline completes).
 
 ```
-├─ Check metadata version via describeFeatures()
-│   ├─ Fails → Log warning, skip cordoning, proceed with normal reconciliation
-│   └─ Succeeds → Parse metadata.version
-│       ├─ < IBP_4_3_IV0 → Skip cordoning, proceed with normal reconciliation
-│       └─ >= IBP_4_3_IV0 → Cordoning is supported, continue
-│
-└─ Query current cordoning state for all brokers
-    ├─ describeLogDirs() fails → Log warning, revert scale down (if any), retry next reconciliation
-    └─ describeLogDirs() succeeds → Analyze broker states
-        │
-        ├─ For each broker, determine state:
-        │   ├─ If cordoned=true AND removed=false → Collect in "to-uncordon" set
-        │   ├─ If cordoned=false AND removed=true → Collect in "to-cordon" set
-        │   └─ Otherwise (correct state) → Skip
-        │
-        ├─ Are both collections empty?
-        │   ├─ Yes → All brokers in correct state, proceed with normal reconciliation (scale down if any)
-        │   │
-        │   └─ No → Operations needed
-        │       ├─ Cordon brokers in "to-cordon" set (if not empty)
-        │       ├─ Uncordon brokers in "to-uncordon" set (if not empty)
-        │       ├─ Operations succeed or fail → Mark check as failed
-        │       └─ Revert scale down (if any), wait for propagation, retry next reconciliation
+KafkaClusterCreator.prepareKafkaCluster()
+  ├─ Detects scale down, brokerRemovalCheck() finds brokers still in use
+  ├─ Saves scalingDownBlockedNodes (before revert)
+  └─ Reverts scale down → KafkaCluster model with removedNodes() = []
+
+KafkaAssemblyOperator
+  ├─ Passes scalingDownBlockedNodes to KafkaReconciler (new)
+  └─ Passes scalingDownBlockedNodes to KafkaAutoRebalancingReconciler (existing)
+
+KafkaReconciler.reconcile()
+  ├─ brokerConfigurationConfigMaps(): generates per-broker ConfigMaps
+  │   └─ For brokers in scalingDownBlockedNodes, the desired config includes cordoned.log.dirs=*
+  └─ rollingUpdate(): KafkaRoller diffs current vs desired config
+      └─ Applies cordoned.log.dirs=* via incrementalAlterConfigs()
+
+KafkaAutoRebalancingReconciler.reconcile()   (runs after KafkaReconciler completes)
+  └─ Sees scalingDownBlockedNodes, creates KafkaRebalance with remove-brokers mode
 ```
 
 #### Detailed step-by-step workflow
 
-**Step 1: Check if cordoning is supported (metadata version check)**
+**Step 1: Scale down detected and blocked**
 
-When `KafkaClusterCreator.prepareKafkaCluster()` is called, always check if cordoning is supported, even when no scale down is happening.
-This is necessary to handle cleanup when users cancel a scale down operation.
-If a scale down was initiated, brokers were cordoned, but then the user reverted the `KafkaNodePool` replicas back before the scale down happened, those brokers remain cordoned.
-The check must run on every reconciliation to detect and uncordon such orphaned brokers.
-Without this cleanup, cordoned brokers would remain excluded from partition placement indefinitely.
+When `KafkaClusterCreator.prepareKafkaCluster()` is called and a scale down is requested, the existing `brokerRemovalCheck()` determines that the brokers scheduled for removal still have partition-replicas assigned.
+Before reverting the scale down, it saves the set of broker IDs into `scalingDownBlockedNodes`.
+The scale down is then reverted and the `KafkaCluster` model is rebuilt with the original replica count, so `removedNodes()` returns an empty set.
+The `scalingDownBlockedNodes` set is the only place that remembers which brokers were originally targeted for removal.
 
-Call `AdminClient.describeFeatures()` to get the finalized `metadata.version`:
+**Step 2: `scalingDownBlockedNodes` flows to `KafkaReconciler`**
 
-**If `describeFeatures()` fails (exception thrown):**
-- Unable to check metadata version, skipping cordoning
-- Return success and proceed with auto-rebalancing without cordoning
-- Metadata version check failure is treated as "cordoning unavailable" rather than blocking scale down
+The `KafkaAssemblyOperator` passes `scalingDownBlockedNodes` to the `KafkaReconciler` constructor (in addition to the existing flow to `KafkaAutoRebalancingReconciler`).
+The `KafkaReconciler` stores it and uses it during per-broker configuration generation.
 
-Proceeding the reconciliation when `describeFeatures()` fails also helps on a new Kafka cluster creation.
-In such a case, on the first reconciliation, the cluster doesn't exist yet and getting the `metadata.version` will fail without blocking the next steps.
+**Step 3: Per-broker configuration includes cordoning**
 
-**If `describeFeatures()` succeeds:**
-- Parse `metadata.version` from the response
-- **If `metadata.version` < IBP_4_3_IV0**:
-  - Cordoning is not supported
-  - Return success and proceed with standard auto-rebalancing without cordoning
-- **If `metadata.version` >= IBP_4_3_IV0**:
-  - Cordoning is supported, checking broker states at step 2
+The `KafkaReconciler` reconciliation pipeline generates per-broker configuration at two points, both of which need to include `cordoned.log.dirs=*` for brokers in `scalingDownBlockedNodes`:
 
-Checking the metadata version is necessary regardless of which Apache Kafka version the operator supports.
-Even if a future operator release requires Kafka 4.3+, users may still run with `metadata.version < IBP_4_3_IV0` (e.g., during phased upgrades or for compatibility reasons).
-In such cases, cordoning remains unavailable despite running Kafka 4.3+, so the runtime metadata version check is essential.
+1. During the `brokerConfigurationConfigMaps()` step, per-broker ConfigMaps are generated and stored in Kubernetes. For each broker, `KafkaBrokerConfigurationBuilder` is called with a cordoning flag based on whether the broker's node ID is in `scalingDownBlockedNodes`. If the flag is `true`, `cordoned.log.dirs=*` is included in the desired configuration for that broker via `withCordonedLogDirs()` builder method.
 
-**Step 2: Query current cordoning state for all brokers**
+2. During the later `rollingUpdate()` step, the `KafkaRoller` gets the desired configuration for each broker to diff it against the live configuration. This configuration must also include `cordoned.log.dirs=*` for the same brokers, to be consistent with the ConfigMaps generated in the previous step.
 
-Call `AdminClient.describeLogDirs()` for all brokers in the cluster (not just brokers being removed, if any).
-The API returns information about each log directory on each broker, including whether each directory is cordoned or not.
+**Step 4: `KafkaRoller` applies or removes the cordoning configuration**
 
-**If `describeLogDirs()` fails (exception thrown):**
-- Failed to check cordoning state
-- Set `cordoningCheckFailed = true`
-- Revert scale down if any (keep pods running)
-- Return (will retry on next reconciliation)
+During the `KafkaReconciler.rollingUpdate()` step of the reconciliation, the `KafkaRoller` processes each broker:
 
-**If `describeLogDirs()` succeeds:**
-- Parse the response to map each broker ID → is cordoned
-- For each broker:
-  - Get all its log directories and check if **ALL** log directories have `LogDirDescription.isCordoned() = true`
-  - A broker is considered cordoned **only if ALL** its log directories are cordoned
-  - Store the result in the map
-- Continue to Step 3
+- It reads the current broker configuration via `describeConfigs()`
+- It gets the desired configuration generated via the `KafkaCluster.generatePerBrokerConfiguration()` method and passed to the constructor
+- By using a `KafkaConfigurationDiff` instance, it compares the two and determines the operation needed:
+  - **Cordoning** (broker in `scalingDownBlockedNodes`): `cordoned.log.dirs=*` is in the desired configuration but not on the broker, so the diff generates a `SET` operation
+  - **Uncordoning** (cancelled scale down): `cordoned.log.dirs` is on the broker but not in the desired configuration (because `scalingDownBlockedNodes` is now empty), so the diff generates a `DELETE` operation
+  - **No-op** (already in correct state): the current and desired configurations match, so no operation is generated
+- The `KafkaRoller` applies the operation via `incrementalAlterConfigs()` as a dynamic per-broker config change, without restarting the broker
 
-**Step 3: Analyze broker states and collect cordoning/uncordoning operations needed**
+**Step 5: Auto-rebalancing starts**
 
-Initialize two collections:
-- `Set<Integer> brokersToCordon`: Brokers that need to be cordoned
-- `Set<Integer> brokersToUncordon`: Brokers that need to be uncordoned
+After `KafkaReconciler.reconcile()` completes, `KafkaAutoRebalancingReconciler` runs.
+It sees `scalingDownBlockedNodes` is not empty and creates a `KafkaRebalance` resource with `spec.mode: remove-brokers`.
+At this point, the brokers are already cordoned (or cordoning is propagating), so new partitions will not be assigned to them.
+Cruise Control starts moving existing partitions off the brokers being removed.
 
-For each broker in the cluster, determine its current and desired state:
-- Get whether the broker is currently cordoned (from Step 2 results)
-- Get whether the broker is being removed (from `kafka.removedNodes()`)
-- Compare the two states:
-  - **If cordoned AND not being removed**: Add to `brokersToUncordon` (orphaned cordoning, needs cleanup)
-  - **If not cordoned AND being removed**: Add to `brokersToCordon` (scale down in progress, needs cordoning)
-  - **Otherwise**: Broker is in correct state, skip (either being removed and already cordoned, or not being removed and not cordoned)
+**Step 6: Subsequent reconciliations during rebalancing**
 
-This logic handles all scenarios:
-- **Normal scale down**: Removed brokers are uncordoned → added to `brokersToCordon`
-- **Cordoning propagated**: Removed brokers are cordoned → both collections empty → proceed with auto-rebalancing
-- **User cancelled scale down**: Previously cordoned brokers are no longer being removed → added to `brokersToUncordon`
-- **Partial failure recovery**: Some removed brokers cordoned, others not → uncordoned ones added to `brokersToCordon`
-- **No scale down happening**: Any cordoned brokers from previous operations → added to `brokersToUncordon` for cleanup
+On each subsequent reconciliation while rebalancing is in progress:
+- `brokerRemovalCheck()` still finds the brokers in use (partitions being moved), so the scale down remains reverted and `scalingDownBlockedNodes` is repopulated
+- The desired configuration for the cordoned brokers still includes `cordoned.log.dirs=*`, so the `KafkaRoller` sees no diff and takes no action
+- The `KafkaAutoRebalancingReconciler` monitors the `KafkaRebalance` resource status and waits for rebalancing to complete
 
-Continue to Step 4.
+**Step 7: Scale down completes**
 
-**Step 4: Execute cordoning/uncordoning operations**
-
-**If both `brokersToCordon` and `brokersToUncordon` collections are empty:**
-- All brokers are in the correct state
-- All brokers in correct cordoning state, set `cordoningCheckFailed = false`
-- Return success and proceed with auto-rebalancing and scale down
-
-**If at least one collection is not empty:**
-
-Cordoning and/or uncordoning operations are needed, execute them:
-
-- **Cordon brokers** (if `brokersToCordon` not empty): Set `cordoned.log.dirs=*` via `incrementalAlterConfigs()` for each broker
-- **Un-cordon brokers** (if `brokersToUncordon` not empty): Delete `cordoned.log.dirs` config via `incrementalAlterConfigs()` for each broker
-
-In case of any failure to cordone/uncordone a broker, continue anyway (will retry on the next reconciliation).
-
-After operations (success or failure):
-- Set `cordoningCheckFailed = true` (operations were performed, need to wait for propagation)
-- If scale down is happening: revert scale down (keep pods running)
-- Save blocked nodes (if any): `scalingDownBlockedNodes.addAll(kafka.removedNodes())`
-- Update status: `status.autoRebalance.modes[remove-brokers].brokers` will be set if brokers are being removed (auto-rebalancing starts in same reconciliation)
-- Add warning condition if scale down reverted: "Reverting scale-down of KafkaNodePool X due to pending broker cordoning"
-- Return (next reconciliation will verify propagation)
-
-Reverting the scale down in case of failures helps with:
-- If cordoning fails due to transient error (network, broker unavailable), we'll retry on next reconciliation
-- If it's a permanent failure (permissions, unsupported despite version check), repeated warnings will alert operators
-- Reverting ensures pods aren't removed before cordoning is active
+Once Cruise Control has moved all partitions off the brokers being removed, the next reconciliation finds:
+- `brokerRemovalCheck()` sees the brokers are empty, so the scale down is not reverted this time and `scalingDownBlockedNodes` is empty
+- The `KafkaCluster` model has `removedNodes()` containing the brokers to remove
+- `scaleDown()` removes the pods for those brokers
+- No ConfigMaps are generated for the removed brokers, and the `KafkaRoller` does not process them (pods are gone)
+- The cordoning configuration is gone with the brokers, so no cleanup needed
 
 #### Reconciliation scenarios
 
-Following some examples showing how all the above steps fit within a single reconciliation loop but also together across multiple reconciliations. 
+Following some examples showing how all the above steps fit within a single reconciliation loop but also together across multiple reconciliations.
 
 **Reconciliation N (first detection of scale down):**
 1. Scale down detected: 5 → 3 (brokers [3, 4] to be removed)
-2. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-3. describeLogDirs: All brokers uncordoned
-4. Collections: `brokersToCordon = [3, 4]`, `brokersToUncordon = []`
-5. Execute: Cordon brokers [3, 4]
-6. Result: `cordoningCheckFailed = true`
-7. Revert scale down (pods stay at 5)
-8. Update status with blocked nodes [3, 4]
-9. Auto-rebalancing reconciler sees blocked nodes, updates status, but doesn't create KafkaRebalance yet (pods still exist)
+2. `brokerRemovalCheck()` finds brokers [3, 4] still have partitions → `scaleDownCheckFailed = true`
+3. `scalingDownBlockedNodes = [3, 4]` saved before revert
+4. Scale down reverted (pods stay at 5), `KafkaCluster` model rebuilt with `removedNodes() = []`
+5. `KafkaReconciler` runs with `scalingDownBlockedNodes = [3, 4]`
+6. `brokerConfigurationConfigMaps()`: ConfigMaps for brokers [3, 4] include `cordoned.log.dirs=*`
+7. `rollingUpdate()`: `KafkaRoller` diffs current vs desired for brokers [3, 4], applies `SET cordoned.log.dirs=*` via `incrementalAlterConfigs()`
+8. `KafkaAutoRebalancingReconciler` sees `scalingDownBlockedNodes = [3, 4]`, creates `KafkaRebalance` with `mode: remove-brokers`
 
-**Reconciliation N+1 (cordoning propagated):**
+**Reconciliation N+1 (rebalancing in progress):**
 1. Scale down detected: 5 → 3 (brokers [3, 4] to be removed)
-2. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-3. describeLogDirs: Brokers [0, 1, 2] uncordoned, brokers [3, 4] cordoned
-4. Collections: `brokersToCordon = []`, `brokersToUncordon = []` (all in correct state)
-5. Result: `cordoningCheckFailed = false`
-6. Auto-rebalancing starts (KafkaRebalance resource created)
-7. After rebalancing completes, proceed with scale down and pods [3, 4] removed
+2. `brokerRemovalCheck()` finds brokers [3, 4] still have partitions (being moved) → scale down reverted again
+3. `scalingDownBlockedNodes = [3, 4]`
+4. `KafkaReconciler` runs: desired config for [3, 4] still includes `cordoned.log.dirs=*`
+5. `rollingUpdate()`: `KafkaRoller` diffs current vs desired for brokers [3, 4] → no change (already cordoned), no action
+6. `KafkaAutoRebalancingReconciler` monitors `KafkaRebalance` status, rebalancing continues
 
-**Reconciliation N+1 (alternate: cordoning not yet propagated):**
-1. Scale down detected: 5 → 3
-2. Metadata version check: >= IBP_4_3_IV0
-3. describeLogDirs: Broker [3] cordoned, broker [4] not yet cordoned
-4. Collections: `brokersToCordon = [4]`, `brokersToUncordon = []`
-5. Execute: Cordon broker [4] again (idempotent)
-6. Result: `cordoningCheckFailed = true`
-7. Revert scale down (pods stay at 5), wait for next reconciliation
-
-**Reconciliation N+2 (cordoning fully propagated):**
+**Reconciliation N+K (rebalancing complete, scale down proceeds):**
 1. Scale down detected: 5 → 3 (brokers [3, 4] to be removed)
-2. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-3. describeLogDirs: Both [3, 4] cordoned
-4. Collections: `brokersToCordon = []`, `brokersToUncordon = []` (all in correct state)
-5. Result: `cordoningCheckFailed = false`
-6. Auto-rebalancing starts (KafkaRebalance resource created)
-7. After rebalancing completes, proceed with scale down and pods [3, 4] removed
+2. `brokerRemovalCheck()` finds brokers [3, 4] are empty → `scaleDownCheckFailed = false`
+3. `scalingDownBlockedNodes` is empty (no blocked nodes)
+4. Scale down NOT reverted: `KafkaCluster` model has `removedNodes() = [3, 4]`
+5. `scaleDown()` removes pods for brokers [3, 4]
+6. No ConfigMaps generated for removed brokers, `KafkaRoller` does not process them
+7. Cordoning configuration gone with the brokers, so no cleanup needed
 
 #### Rollback scenario (user cancels scale down)
 
-The user may initiate a scale down operation, causing the operator to cordon brokers. 
-Since cordoning requires propagation across reconciliations before the auto-rebalancing and actual scale down proceed, the user has a window of time to change their mind and revert the `KafkaNodePool` replicas back to the original count.
-In this scenario, the previously cordoned brokers must be uncordoned since they are no longer scheduled for removal.
-The cordoning check handles this cleanup automatically by detecting brokers that are cordoned but not in the removal list.
-Without such cleanup, the brokers would remain cordoned indefinitely and the controller would not assign any new partitions to them.
+The user may initiate a scale down operation, causing the operator to cordon brokers.
+If the user reverts the `KafkaNodePool` replicas back to the original count before the scale down completes, the previously cordoned brokers must be uncordoned since they are no longer scheduled for removal.
+The configuration pipeline handles this cleanup automatically.
+When `scalingDownBlockedNodes` is empty, the desired configuration for those brokers no longer includes `cordoned.log.dirs`, and the existing `KafkaConfigurationDiff` generates a `DELETE` operation to uncordon them.
+Without this cleanup, the brokers would remain cordoned indefinitely and the controller would not assign any new partitions to them.
 
 Following a sequence of reconciliations describing such scenario.
 
 **Reconciliation N:**
 1. Scale down detected: 5 → 3 (brokers [3, 4] to be removed)
-2. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-3. describeLogDirs: All brokers uncordoned
-4. Collections: `brokersToCordon = [3, 4]`, `brokersToUncordon = []`
-5. Execute: Cordon brokers [3, 4]
-6. Result: `cordoningCheckFailed = true`
-7. Revert scale down (pods stay at 5)
-8. Update status with blocked nodes [3, 4]
-9. Auto-rebalancing reconciler sees blocked nodes, updates status, but doesn't create KafkaRebalance yet (pods still exist)
+2. `brokerRemovalCheck()` finds brokers [3, 4] still have partitions → `scaleDownCheckFailed = true`
+3. `scalingDownBlockedNodes = [3, 4]` saved before revert, scale down reverted
+4. `KafkaReconciler` runs: `rollingUpdate()` applies `SET cordoned.log.dirs=*` on brokers [3, 4]
+5. `KafkaAutoRebalancingReconciler` creates `KafkaRebalance` with `mode: remove-brokers`
 
 **User reverts replicas back to 5 before next reconciliation**
 
 **Reconciliation N+1:**
-1. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-2. describeLogDirs: Brokers [0, 1, 2] uncordoned, brokers [3, 4] cordoned
-3. `removedNodes()` is empty (no scale down anymore)
-4. Collections analysis:
-   - For brokers [0, 1, 2]: `isCordoned=false, isRemoved=false` → correct state, skip
-   - For brokers [3, 4]: `isCordoned=true, isRemoved=false` → cleanup needed
-   - Result: `brokersToUncordon = [3, 4]`, `brokersToCordon = []`
-5. Execute: Uncordon brokers [3, 4]
-6. Result: `cordoningCheckFailed = true`
-7. No scale down to revert (no pods removed)
-8. Return (next reconciliation will verify uncordoning completed)
-
-**Reconciliation N+2 (uncordoning propagated):**
-1. No scale down detected (replicas back to 5)
-2. Metadata version check: >= IBP_4_3_IV0 → cordoning supported
-3. describeLogDirs: All brokers uncordoned
-4. Collections: `brokersToCordon = []`, `brokersToUncordon = []` (all in correct state)
-5. Result: `cordoningCheckFailed = false`
-6. Proceed with normal reconciliation
-
-The workflow always runs (even when `removedNodes()` is empty), so the collection logic automatically detects and cleans up orphaned cordoning from cancelled scale downs.
+1. No scale down detected (replicas are back to 5)
+2. `brokerRemovalCheck()` finds no removed nodes → `scaleDownCheckFailed = false`
+3. `scalingDownBlockedNodes` is empty
+4. `KafkaReconciler` runs: desired config for brokers [3, 4] does NOT include `cordoned.log.dirs`
+5. `rollingUpdate()`: `KafkaRoller` diffs current vs desired for brokers [3, 4], generates `DELETE` remove `cordoned.log.dirs` → brokers [3, 4] uncordoned
+6. Normal reconciliation proceeds
 
 ## Affected/not affected projects
 
-This proposal affects only the `strimzi-kafka-operator` by adding the logic for cordoning (and uncordoning when needed) brokers within the `KafkaClusterCreator` class.
+This proposal affects only the `strimzi-kafka-operator` by adding the cordoning logic into the existing per-broker configuration pipeline within `KafkaBrokerConfigurationBuilder`, `KafkaCluster`, `KafkaReconciler`, and `KafkaAssemblyOperator` classes.
 
 ## Compatibility
 
-The KIP-1066 is available in Kafka 4.3.0+ (metadata version IBP_4_3_IV0).
-Older Kafka versions or metadata versions do not support cordoning.
-With this proposal, the Strimzi Cluster Operator gracefully handles both scenarios:
-- **Kafka >= 4.3.0 with metadata.version >= IBP_4_3_IV0**: Enable automatic cordoning during scale down
-- **Kafka < 4.3.0 or metadata.version < IBP_4_3_IV0**: Use existing auto-rebalancing without cordoning (no behavior change)
+The KIP-1066 is available in Kafka 4.3.0+ and requires metadata version `IBP_4_3_IV0` or higher for the controller to enforce cordoning during partition placement.
+It is important to distinguish between the Kafka binary version and the metadata version, as they can differ during phased upgrades.
+
+This proposal does not require explicit version checks or runtime metadata version detection.
+Instead, it relies on the existing `KafkaConfigurationDiff` behavior with the Kafka config model.
+The config model is selected based on the Kafka binary version, not the metadata version.
+This leads to three possible scenarios:
+
+**Kafka binary < 4.3.0:**
+`cordoned.log.dirs` is not in the config model, so `KafkaConfigurationDiff` treats it as a "custom config" and silently skips it.
+The property appears in the desired configuration but is never applied to the broker.
+Scale down works as before without cordoning.
+
+**Kafka binary >= 4.3.0 with metadata version >= `IBP_4_3_IV0`:**
+`cordoned.log.dirs` is in the config model with `PER_BROKER` scope, so the diff generates `SET`/`DELETE` operations and the `KafkaRoller` applies them via `incrementalAlterConfigs()`.
+The controller enforces cordoning during partition placement.
+This is the fully effective scenario.
+
+**Kafka binary >= 4.3.0 with metadata version < `IBP_4_3_IV0` (phased upgrade):**
+`cordoned.log.dirs` is in the config model (based on the binary version), so the diff generates a `SET` operation and the broker accepts the configuration.
+However, the controller running at the older metadata version does not enforce cordoning during partition placement and the configuration is set but has no effect.
+This is a best-effort scenario: cordoning is a no-op, but the scale down still works correctly because Cruise Control moves all partitions off the brokers before they are removed, regardless of whether cordoning is active.
+Once the metadata version is upgraded to `IBP_4_3_IV0` or higher, cordoning becomes effective automatically on subsequent scale down operations.
 
 Upgrading the operator doesn't need any migration steps:
-- Upgrading the operator with existing Kafka < 4.3.0 clusters: No behavior change
-- Upgrading the operator with Kafka >= 4.3.0 clusters: Cordoning automatically enabled for subsequent scale down operations
-
-When upgrading an Apache Kafka cluster from 4.2 to 4.3, cordoning behavior depends on the `metadata.version`:
-- If `metadata.version` is also upgraded to IBP_4_3_IV0 or higher: Cordoning is automatically enabled
-- If `metadata.version` remains at < IBP_4_3_IV0 (e.g., for phased upgrades or compatibility): Cordoning remains disabled until the metadata version is upgraded
-
-This runtime check ensures the operator never attempts to use cordoning features when the cluster's metadata version doesn't support them, regardless of the Kafka binary version.
+- Upgrading the operator with existing Kafka < 4.3.0 clusters: No behavior change (cordoning is silently skipped by the config model)
+- Upgrading the operator with Kafka >= 4.3.0 clusters: Cordoning automatically enabled for subsequent scale down operations (effective only if metadata version also supports it)
 
 ### Impact on existing auto-rebalancing users
 
-**Users with auto-rebalancing enabled (Kafka < 4.3.0 or old metadata version):**
+**Users with auto-rebalancing enabled (Kafka < 4.3.0):**
 - No changes to behavior
 - Scale down continues to work as before
 - No action required
 
-**Users with auto-rebalancing enabled (Kafka >= 4.3.0 with metadata.version >= IBP_4_3_IV0):**
+**Users with auto-rebalancing enabled (Kafka >= 4.3.0):**
 - Automatic cordoning is enabled transparently
 - No configuration changes required
-- Scale down may take 1-2 additional reconciliation cycles for cordoning propagation
+- Cordoning is fully effective when metadata version >= `IBP_4_3_IV0`, best-effort otherwise
 
 **Users without auto-rebalancing:**
 - No impact (feature is opt-in via `spec.cruiseControl.autoRebalance`)
@@ -379,3 +328,16 @@ Handle cordoning at the beginning of reconciliation (in `KafkaClusterCreator.pre
 - Different semantics from broker unregistration: Broker unregistration cleans up metadata for deleted brokers (fire-and-forget), while uncordoning fixes state of running brokers (requires verification)
 - Must check `removedNodes()` anyway: End-of-reconciliation uncordoning still needs to check if scale down is in progress to avoid uncordoning legitimately cordoned brokers
 - No clear benefits: Doesn't reduce complexity, improve reliability, or better match existing patterns
+
+### Alternative 4: Standalone cordoning check in `KafkaClusterCreator`
+
+**Description:**
+Implement cordoning as a separate `brokerCordoningCheck()` method in `KafkaClusterCreator`, following the same pattern as the existing `brokerRemovalCheck()`.
+This method would use `describeFeatures()` to check the runtime metadata version, `describeLogDirs()` to query each broker's cordoning state, and direct `incrementalAlterConfigs()` calls to cordon or uncordon brokers.
+It would track state via a `cordoningCheckFailed` flag and wait for cordoning propagation across reconciliations before allowing the auto-rebalancing to proceed.
+
+**Rejection reasons:**
+- The regular configuration reconciliation in `KafkaRoller` would overwrite the cordoning set by the standalone check: `KafkaRoller` calls `describeConfigs()` and diffs against the desired configuration which does not include `cordoned.log.dirs`, generating a `DELETE` operation that unsets the cordoning. The operator would fight itself.
+- Requires additional Admin API calls (`describeFeatures()`, `describeLogDirs()`) that the integrated approach avoids entirely
+- Adds unnecessary reconciliation cycles by waiting for cordoning propagation, while the scale down already cannot complete until Cruise Control has moved all partitions
+- Introduces new state tracking (`cordoningCheckFailed`) and explicit uncordoning logic that the configuration pipeline handles automatically
