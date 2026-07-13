@@ -35,6 +35,7 @@ When a log directory is cordoned:
 - When **ALL** log directories on a broker are cordoned, the controller excludes the entire broker from partition placement decisions
 
 Cordoning log directories is done by setting the folders list within the `cordoned.log.dirs` property.
+This is a dynamic per-broker configuration property, so it can be applied via the Kafka Admin API without requiring a broker restart.
 For the scale-down use case, the Strimzi Cluster Operator will cordon **all log directories** on brokers being removed (by setting `cordoned.log.dirs=*`), ensuring those brokers are completely excluded from new partition assignments.
 
 This capability directly addresses the auto-rebalancing scale down limitation.
