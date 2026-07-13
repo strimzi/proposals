@@ -220,9 +220,7 @@ This should be revisited later depending on the future of Cruise Control.
 
 With the ongoing work on cert-manager support, we currently have multiple parallel streams of work related to cluster security that might lead to API changes.
 This proposal therefore suggests using only an annotation for now to configure cluster security.
-Using an annotation means:
-* We are not binding to a specific API layout just yet by adding it to the custom resource spec.
-* We indicate that this is an _early access_ feature.
+Using an annotation means that we are not binding to a specific API layout just yet by adding it to the custom resource spec.
 
 Once both the work on this proposal and the cert-manager integration are complete, we can try to come up with a permanent API.
 Given that we just released version 1.0.0 and finalized the `v1` API, we should have enough time to finalize it before the next API version change.
@@ -396,6 +394,12 @@ This feature will be covered by system tests in several different ways:
     * Or as a parameter to the existing pipelines
 
 Currently, there is no plan to cover things such as service mesh integration in the system tests.
+
+### Timeline
+
+This feature will be initially released as _early access_ to collect some early feedback from Strimzi users.
+Unless major issues are reported, the _early access_ label will be removed after 2 Strimzi minor releases (e.g. if it is added in Strimzi 1.2.0 as early access, the label would be removed in the 1.4.0 release).
+The _early access_ state of this feature will be communicated as part of the documentation and release notes (`CHANGELOG.md`).
 
 ### Documentation
 
