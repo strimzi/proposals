@@ -303,6 +303,7 @@ This will be done in several steps.
   In this phase, the annotation will still be supported, but it would internally convert to the new API (e.g. using an internal mutating Gatekeeper plugin).
   This phase will take several releases and users will have time to migrate from the annotation to the `Kafka` CR API during this time window.
 * In the Phase 2, we will drop the support for the annotation and only the `Kafka` CR API will be used.
+  The `strimzi.io/internal-cluster-security` annotation will be ignored by the Cluster Operator.
   Any clusters that were not migrated to the new API will not be broken, but their reconciliation will be failing until the resource is updated to use the new API.
 
 ### Changing the Configuration
