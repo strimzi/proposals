@@ -614,11 +614,7 @@ status:
     - type: Warning
       status: "True"
       reason: AutoRebalanceOnImbalanceFailure
-      message: |
-        The detected goal violation contains unfixable goals: [DiskDistributionGoal]. 
-        These violations typically require infrastructure-level changes such as adding more brokers, racks, or resources. 
-        Auto-rebalance will not be triggered until the unfixable goals are resolved.
-        Fixable goals detected: [NetworkInboundCapacityGoal]. These will be addressed once unfixable goals are resolved.
+      message: "Unfixable goals detected: [DiskDistributionGoal]. Auto-rebalance blocked until resolved. Fixable goals pending: [NetworkInboundCapacityGoal]."
 ```
 
 The warning message will include both the unfixable goals (requiring manual intervention) and any fixable goals (which will be addressed once the infrastructure constraints are resolved).
@@ -646,10 +642,12 @@ This allows addressing fixable violations while infrastructure changes (adding r
 
 ### What happens if the rebalance template contains invalid goals
 
-If the rebalance template specifies goals that are NOT included in the `anomaly.detection.goals` configuration, the validation will fail.
-This prevents the operator from triggering rebalances for goals that Cruise Control is not actively monitoring for violations.
+If the `anomaly.detection.goals` configuration contains goals that are NOT included in the rebalance template, the validation will fail.
+This ensures that when Cruise Control detects violations for monitored goals, the template includes those goals so the operator can fix the detected violations.
 
-For example, if the anomaly detection goals are configured as `[RackAwareGoal, ReplicaCapacityGoal, DiskCapacityGoal]` but the rebalance template specifies `[RackAwareGoal, CpuCapacityGoal]`, the validation will fail because `CpuCapacityGoal` is not in the anomaly detection goals list.
+For example, if the anomaly detection goals are configured as `[RackAwareGoal, ReplicaCapacityGoal, DiskCapacityGoal]` but the rebalance template only specifies `[RackAwareGoal, DiskCapacityGoal]`, the validation will fail because `ReplicaCapacityGoal` is monitored for violations but missing from the template.
+
+The template can include additional goals beyond what's monitored (e.g., template has `[RackAwareGoal, DiskCapacityGoal, CpuCapacityGoal]` while anomaly detection only monitors `[RackAwareGoal, DiskCapacityGoal]`) - this allows more comprehensive rebalancing.
 
 When this validation fails, the operator will:
 1. Add a warning condition to the `Kafka` CR status
@@ -669,16 +667,12 @@ status:
     - type: Warning
       status: "True"
       reason: InvalidRebalanceTemplateGoals
-      message: |
-        The rebalance template 'my-imbalance-rebalance-template' contains goals that are not configured in anomaly.detection.goals.
-        Invalid goals: [CpuCapacityGoal, NetworkInboundCapacityGoal]
-        Configured anomaly detection goals: [RackAwareGoal, ReplicaCapacityGoal, DiskCapacityGoal]
-        Please update the template to only include goals that are being monitored for anomalies.
+      message: "Anomaly detection goals [ReplicaCapacityGoal, NetworkInboundCapacityGoal] are missing from template 'my-imbalance-rebalance-template'. Add missing goals to template."
 ```
 
 Users must either:
-- Update the rebalance template to only include goals from the anomaly detection configuration, or
-- Update the Cruise Control `anomaly.detection.goals` configuration to include the additional goals
+- Update the rebalance template to include all goals from the anomaly detection configuration, or
+- Update the Cruise Control `anomaly.detection.goals` configuration to remove the goals that are missing from the template
 
 ### Stopping a running rebalance
 
@@ -1131,11 +1125,11 @@ Tests will use `MockCruiseControl` to simulate Cruise Control's `state` endpoint
    - Verify `<cluster-name>-rebalancing-tracker` ConfigMap's `lastRebalanceCompletionTime` is updated
    - Verify operator transitions to `Idle` and deletes resource
 
-### System Test
+### System Tests
 
-A system test will be added to `CruiseControlST.java` following the pattern of `testAutoKafkaRebalanceScaleUpScaleDown()`:
+The following system tests will be added to `CruiseControlST.java` following the pattern of `testAutoKafkaRebalanceScaleUpScaleDown()`:
 
-**Test: `testAutoRebalanceOnImbalance()`**
+#### 1. **Basic Auto-Rebalance on Imbalance** 
 
 1. Deploy Kafka cluster with JBOD storage and auto-rebalance `imbalance` mode enabled
 2. Configure fast anomaly detection (`anomaly.detection.interval.ms: 120000`)
@@ -1146,6 +1140,91 @@ A system test will be added to `CruiseControlST.java` following the pattern of `
 7. Verify state transitions: `Idle` → `RebalanceOnImbalance` → `Idle`
 8. Verify KafkaRebalance resource is deleted after completion
 9. Verify `<cluster>-auto-rebalance-imbalance-tracker` ConfigMap contains completion timestamp
+10. Wait for next anomaly detection cycle (2+ minutes)
+11. Verify no new rebalance is triggered (anomaly is fixed)
+
+#### 2. **Maintenance Window Integration** 
+
+Tests that auto-rebalance respects maintenance time windows.
+
+**Steps:**
+1. Deploy Kafka cluster with auto-rebalance `imbalance` mode and maintenance window set to future time
+2. Create cluster imbalance
+3. Wait for anomaly detection
+4. Verify auto-rebalance does NOT trigger (outside maintenance window)
+5. Verify state remains `Idle`
+6. Verify no KafkaRebalance resource is created
+7. Update maintenance window to current time
+8. Verify auto-rebalance triggers within detection interval
+9. Verify state transitions to `RebalanceOnImbalance`
+10. Verify KafkaRebalance resource is created and completes
+11. Verify state returns to `Idle`
+
+#### 3. **Scale Operations Interrupt Imbalance Rebalancing**
+
+Tests that scale operations take priority over imbalance rebalancing.
+
+**Steps:**
+1. Deploy Kafka cluster with auto-rebalance for all modes enabled
+2. Trigger imbalance rebalance by creating uneven partition distribution
+3. Wait for state `RebalanceOnImbalance` with active KafkaRebalance
+4. Trigger scale-down by reducing broker replicas in KafkaNodePool
+5. Verify imbalance KafkaRebalance is stopped (annotation `strimzi.io/rebalance=stop`)
+6. Verify imbalance KafkaRebalance is deleted
+7. Verify state transitions from `RebalanceOnImbalance` to `RebalanceOnScaleDown`
+8. Verify scale-down KafkaRebalance resource `<cluster>-auto-rebalancing-remove-brokers` is created
+9. Wait for scale-down rebalance completion
+10. Verify state transitions to `Idle`
+
+#### 4. **Rebalance Failure Handling**
+
+Tests operator behavior when auto-triggered rebalance fails.
+
+**Steps:**
+1. Deploy Kafka cluster with auto-rebalance `imbalance` mode
+2. Create cluster imbalance
+3. Wait for auto-rebalance trigger and KafkaRebalance creation
+4. Simulate rebalance failure by deleting Cruise Control pod while rebalancing
+5. Wait for KafkaRebalance to transition to `NotReady` state
+6. Verify operator logs warning about failure
+7. Verify state transitions back to `Idle`
+8. Verify failed KafkaRebalance resource is deleted
+9. Verify ConfigMap `lastRebalanceCompletionTime` is updated with failure timestamp
+10. Restart Cruise Control and wait for recovery
+11. Wait for next anomaly detection cycle
+12. Verify new rebalance attempt is triggered (detectionDate > failure timestamp)
+
+#### 5. **JBOD Intra-Broker Rebalancing** - `testAutoRebalanceOnImbalanceJBODIntraBroker()`
+
+Tests automatic intra-broker disk rebalancing for JBOD storage.
+
+**Steps:**
+1. Deploy Kafka cluster with JBOD storage (2+ volumes per broker)
+2. Configure `anomaly.detection.goals` to include `IntraBrokerDiskCapacityGoal` and `IntraBrokerDiskUsageDistributionGoal`
+3. Create uneven disk usage across volumes on same broker
+4. Wait for Cruise Control to detect intra-broker violation
+5. Verify inter-broker rebalance is triggered first (if inter-broker violations exist)
+6. Wait for inter-broker rebalance completion
+7. Verify intra-broker rebalance is triggered in next detection cycle
+8. Verify generated KafkaRebalance has `rebalanceDisk: true`
+9. Wait for intra-broker rebalance completion
+10. Verify ConfigMap is updated
+11. Verify state returns to `Idle`
+
+#### 6. **Crash Recovery from RebalanceOnImbalance State** - `testCrashRecoveryDuringImbalanceRebalance()`
+
+Tests operator crash recovery when in `RebalanceOnImbalance` state.
+
+**Steps:**
+1. Deploy Kafka cluster with auto-rebalance `imbalance` mode
+2. Create imbalance and trigger auto-rebalance
+3. Wait for state `RebalanceOnImbalance` and KafkaRebalance creation
+4. Simulate operator crash by deleting operator pod
+5. Wait for operator to restart
+6. **If KafkaRebalance still exists:** Verify operator continues monitoring from current state
+7. **If KafkaRebalance was deleted during crash:** Verify operator transitions to `Idle` and trusts Cruise Control to re-detect violations
+8. Verify eventual completion or re-trigger based on cluster state
+9. Verify ConfigMap is properly updated
 
 ## Affected/not affected projects
 
@@ -1231,5 +1310,7 @@ spec:
     - RackAwareGoal  # May become unfixable
   skipHardGoalCheck: true  # Allow rebalance even if hard goals (like RackAwareGoal) are violated
 ```
+
+Additionally, exponential backoff could be implemented for repeated rebalance failures by tracking failure history per goal type in the ConfigMap (consecutive failures, last failure time, next retry time), reducing load from persistent unfixable issues while still eventually retrying once resolved.
 
 As this feature evolves, we can also explore ways to automatically fix issues like disk failures and broker failures, since the fix would be driven by the operator rather than Cruise Control directly.
