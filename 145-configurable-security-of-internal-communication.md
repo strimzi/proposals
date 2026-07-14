@@ -293,6 +293,18 @@ At the start of the reconciliation, the Cluster Operator will validate the setti
 * Ensure the configuration is valid JSON with a valid layout
 * Ensure the configuration makes sense (e.g. no mTLS authentication with disabled encryption)
 
+#### Moving to the Final `Kafka` Custom Resource API
+
+Eventually - once we settle on the final `Kafka` API for configuring the cluster security (see the "Future Work" section below) - users will have to migrate from the `strimzi.io/internal-cluster-security` annotation to the new API.
+This will be done in several steps.
+
+* In the Phase 0 (this proposal), all users will rely on the annotation
+* In the Phase 1, we will introduce the new API in the `Kafka` CR.
+  In this phase, the annotation will still be supported, but it would internally convert to the new API (e.g. using an internal mutating Gatekeeper plugin).
+  This phase will take several releases and users will have time to migrate from the annotation to the `Kafka` CR API during this time window.
+* In the Phase 2, we will drop the support for the annotation and only the `Kafka` CR API will be used.
+  Any clusters that were not migrated to the new API will not be broken, but their reconciliation will be failing until the resource is updated to use the new API.
+
 ### Changing the Configuration
 
 Changing the encryption or authentication configuration while the Kafka cluster remains online and available would require a complicated multi-phase process.
@@ -395,15 +407,11 @@ This feature will be covered by system tests in several different ways:
 
 Currently, there is no plan to cover things such as service mesh integration in the system tests.
 
-### Timeline
-
-This feature will be initially released as _early access_ to collect some early feedback from Strimzi users.
-Unless major issues are reported, the _early access_ label will be removed after 2 Strimzi minor releases (e.g. if it is added in Strimzi 1.2.0 as early access, the label would be removed in the 1.4.0 release).
-The _early access_ state of this feature will be communicated as part of the documentation and release notes (`CHANGELOG.md`).
-
 ### Documentation
 
 This feature will initially be documented as _early access_.
+The documentation will also cover the existing limitations (such as the unnecessary rolling updates due to the Cluster CA) and their workarounds (using a long Cluster CA expiration time).
+And the (dis)advantages of using short lived tokens (such as improved zero-trust security, but reliance on the Kubernetes API server availability).
 
 ### Existing Limitations
 
@@ -411,12 +419,13 @@ Kafka Exporter currently does not support reading the tokens from a file.
 A PR will be opened to add this feature.
 Until it is merged and released, Kafka Exporter might be unavailable with Service Account-based authentication.
 
+### Timeline
+
+This feature will be initially released as _early access_ to collect some early feedback from Strimzi users.
+Unless major issues are reported, the _early access_ label will be removed after 2 Strimzi minor releases (e.g. if it is added in Strimzi 1.2.0 as early access, the label would be removed in the 1.4.0 release).
+The _early access_ state of this feature will be communicated as part of the documentation and release notes (`CHANGELOG.md`).
+
 ### Future Work
-
-#### Service Mesh Integration
-
-While disabling TLS acts as a key enabler for service mesh integration, this proposal does not propose any special features to integrate with any service mesh.
-If needed, that should be the subject of a separate future proposal.
 
 #### Strimzi Cluster CA
 
@@ -433,6 +442,24 @@ However, that means that Kafka clusters with disabled TLS would still depend on 
 Certificate or CA renewals would cause unnecessary rolling updates and might be a source of bugs.
 We should also aim to allow users to disable the Cluster CA completely.
 However, to keep the scope of this proposal under control, this is not part of this proposal and should be the subject of a future follow-up proposal.
+
+I will follow this proposal with a separate proposal to allow disabling the Strimzi CAs when not needed.
+
+#### Final `Kafka` Custom Resource API
+
+Once the all the relevant proposals are approved and implemented:
+* cert-manager support
+* Disabling TLS and mTLS for internal Kafka communication
+* Making the Cluster CA optional
+
+I will open the final proposal that will introduce the final shape of the _Cluster Security API_ in the `Kafka` custom resources.
+
+The migration from the `strimzi.io/internal-cluster-security` to the final API is described in one of the previous sections.
+
+#### Service Mesh Integration
+
+While disabling TLS acts as a key enabler for service mesh integration, this proposal does not propose any special features to integrate with any service mesh.
+If needed, that should be the subject of a separate future proposal.
 
 ## Out of Scope
 
