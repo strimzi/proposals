@@ -1127,15 +1127,18 @@ Tests will use `MockCruiseControl` to simulate Cruise Control's `state` endpoint
 
 ### System Tests
 
-The following system tests will be added to `CruiseControlST.java` following the pattern of `testAutoKafkaRebalanceScaleUpScaleDown()`:
+The system tests will be added to a new class named `AutoRebalanceOnImbalanceST.java` since we don't want to mix them up with the other system tests that we have for Cruise Control.
 
-#### 1. **Basic Auto-Rebalance on Imbalance** 
+We will be covering up the following scenarios to test the feature:
 
-1. Deploy Kafka cluster with JBOD storage and auto-rebalance `imbalance` mode enabled
-2. Configure fast anomaly detection (`anomaly.detection.interval.ms: 120000`)
-3. Create KafkaRebalance template resource with `strimzi.io/rebalance-template: "true"` annotation
-4. Create cluster imbalance (uneven partition distribution using AdminClient)
-5. Wait for Cruise Control anomaly detection (up to 3 minutes)
+#### 1. **Auto-Rebalance on Imbalance (The Happy Path)** 
+
+This scenario will assume that everything went well with the auto-rebalance and the anomaly was fixed correctly. To do the same, we will follow the below steps:
+
+1. Deploy Kafka cluster with auto-rebalance `imbalance` mode enabled
+2. Create KafkaRebalance template resource with `strimzi.io/rebalance-template: "true"` annotation
+4. Create cluster imbalance which can be easily done by populating a single broker with a lot of data and partition
+5. Wait for Cruise Control anomaly detection
 6. Verify `<cluster>-auto-rebalancing-imbalance` KafkaRebalance resource is created
 7. Verify state transitions: `Idle` → `RebalanceOnImbalance` → `Idle`
 8. Verify KafkaRebalance resource is deleted after completion
@@ -1145,7 +1148,7 @@ The following system tests will be added to `CruiseControlST.java` following the
 
 #### 2. **Maintenance Window Integration** 
 
-Tests that auto-rebalance respects maintenance time windows.
+This scenario will assume that everything auto-rebalance happens only during the maintenance window and gets skipped when not within the maintenance window. To do the same, we will follow the below steps:
 
 **Steps:**
 1. Deploy Kafka cluster with auto-rebalance `imbalance` mode and maintenance window set to future time
@@ -1160,60 +1163,9 @@ Tests that auto-rebalance respects maintenance time windows.
 10. Verify KafkaRebalance resource is created and completes
 11. Verify state returns to `Idle`
 
-#### 3. **Scale Operations Interrupt Imbalance Rebalancing**
+#### 3. **Crash Recovery from RebalanceOnImbalance State** 
 
-Tests that scale operations take priority over imbalance rebalancing.
-
-**Steps:**
-1. Deploy Kafka cluster with auto-rebalance for all modes enabled
-2. Trigger imbalance rebalance by creating uneven partition distribution
-3. Wait for state `RebalanceOnImbalance` with active KafkaRebalance
-4. Trigger scale-down by reducing broker replicas in KafkaNodePool
-5. Verify imbalance KafkaRebalance is stopped (annotation `strimzi.io/rebalance=stop`)
-6. Verify imbalance KafkaRebalance is deleted
-7. Verify state transitions from `RebalanceOnImbalance` to `RebalanceOnScaleDown`
-8. Verify scale-down KafkaRebalance resource `<cluster>-auto-rebalancing-remove-brokers` is created
-9. Wait for scale-down rebalance completion
-10. Verify state transitions to `Idle`
-
-#### 4. **Rebalance Failure Handling**
-
-Tests operator behavior when auto-triggered rebalance fails.
-
-**Steps:**
-1. Deploy Kafka cluster with auto-rebalance `imbalance` mode
-2. Create cluster imbalance
-3. Wait for auto-rebalance trigger and KafkaRebalance creation
-4. Simulate rebalance failure by deleting Cruise Control pod while rebalancing
-5. Wait for KafkaRebalance to transition to `NotReady` state
-6. Verify operator logs warning about failure
-7. Verify state transitions back to `Idle`
-8. Verify failed KafkaRebalance resource is deleted
-9. Verify ConfigMap `lastRebalanceCompletionTime` is updated with failure timestamp
-10. Restart Cruise Control and wait for recovery
-11. Wait for next anomaly detection cycle
-12. Verify new rebalance attempt is triggered (detectionDate > failure timestamp)
-
-#### 5. **JBOD Intra-Broker Rebalancing** - `testAutoRebalanceOnImbalanceJBODIntraBroker()`
-
-Tests automatic intra-broker disk rebalancing for JBOD storage.
-
-**Steps:**
-1. Deploy Kafka cluster with JBOD storage (2+ volumes per broker)
-2. Configure `anomaly.detection.goals` to include `IntraBrokerDiskCapacityGoal` and `IntraBrokerDiskUsageDistributionGoal`
-3. Create uneven disk usage across volumes on same broker
-4. Wait for Cruise Control to detect intra-broker violation
-5. Verify inter-broker rebalance is triggered first (if inter-broker violations exist)
-6. Wait for inter-broker rebalance completion
-7. Verify intra-broker rebalance is triggered in next detection cycle
-8. Verify generated KafkaRebalance has `rebalanceDisk: true`
-9. Wait for intra-broker rebalance completion
-10. Verify ConfigMap is updated
-11. Verify state returns to `Idle`
-
-#### 6. **Crash Recovery from RebalanceOnImbalance State** - `testCrashRecoveryDuringImbalanceRebalance()`
-
-Tests operator crash recovery when in `RebalanceOnImbalance` state.
+This scenario tests that in case the operator crashes during auto-rebalance, the operator should be able to proceed with the rebalance from where it left off. 
 
 **Steps:**
 1. Deploy Kafka cluster with auto-rebalance `imbalance` mode
@@ -1221,10 +1173,19 @@ Tests operator crash recovery when in `RebalanceOnImbalance` state.
 3. Wait for state `RebalanceOnImbalance` and KafkaRebalance creation
 4. Simulate operator crash by deleting operator pod
 5. Wait for operator to restart
-6. **If KafkaRebalance still exists:** Verify operator continues monitoring from current state
-7. **If KafkaRebalance was deleted during crash:** Verify operator transitions to `Idle` and trusts Cruise Control to re-detect violations
-8. Verify eventual completion or re-trigger based on cluster state
-9. Verify ConfigMap is properly updated
+6. Verify that auto-rebalance state is still `RebalanceOnImbalance`
+7. Make sure that the rebalance correctly moves to `Ready` state.
+
+
+### Manual Testing
+
+Since the testing for this feature is resource heavy and the test can take longer duration as well, we wouldn't be able to cover every scenario with a dedicated system test. It can also be hard to replicate some things that can further lead the test to be flaky. Therefore, we should also do some manual testing along with the system test.
+
+Some of the scenarios that can be interesting to test manually are:
+
+1. Testing intra-broker disk rebalancing for JBOD storage - In this scenario, we can try to generate an intra-broker imbalance and see if the auto-rebalance on imbalance is getting triggered correctly or not.
+2. Testing rebalance failure - We can test that in case of a rebalance failure, Cruise control is able to detect the rebalance again and the operator triggers another rebalance for the same.
+3. Testing that scaling operations are prioritized over auto-rebalance - We can test that whenever a scaling operation happens, the auto-rebalance is stopped in case it is running and the scaling operation finishes first 
 
 ## Affected/not affected projects
 
