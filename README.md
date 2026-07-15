@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 147 | [Use ubi10-micro as a base image](./147-use-ubi10-as-base-image.md)                                                                                                           |
 | 146 | [Add KIP-714 support to metrics-reporter](./146-metrics-reporter-kip-714.md) |
 | 145 | [Alerting for stuck reconciliations](./145-stuck-reconciliation-alerting.md) |
 | 144 | [Strimzi _Gatekeeper_ plugin system](./144-Strimzi-Gatekeeper-plugin-system.md) |
