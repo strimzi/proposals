@@ -44,20 +44,20 @@ This information is only enforced at runtime in `KafkaRebalanceAssemblyOperator`
 
 4. **Future Mode Constraints**: Adding new modes becomes increasingly difficult as the top-level namespace becomes crowded with mode-specific fields.
 
-5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name, making it unsuitable for reuse by future modes that target volumes for different purposes (e.g., broker demotion). 
+5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name, making it unsuitable for reuse by future modes that target volumes for different purposes (e.g., [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)). 
 This forces each new volume-related mode to introduce its own field.
 
 ## Motivation
 
 The motivation for this proposal stems from several factors:
 
-1. **Prevent API Debt**: As discussed in planning for future modes (like broker demotion support), we should not continue adding primitive fields to the top-level spec for every new mode.
+1. **Prevent API Debt**: As discussed in planning for future modes (like [broker demotion support](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)), we should not continue adding primitive fields to the top-level spec for every new mode.
 
 2. **Improve User Experience**: Users should be able to distinguish at a glance what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
 
 3. **Maintain Long-term API Sustainability**: The current trajectory will lead to a bloated and confusing API that becomes increasingly difficult to maintain and extend.
 
-4. **Prepare for Volume-Targeting Modes**: Future modes like broker demotion will need to target specific volumes on specific brokers. 
+4. **Prepare for Volume-Targeting Modes**: Future modes like [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907) will need to target specific volumes on specific brokers. 
 A generic `volumes` field allows these modes to reuse the existing targeting mechanism.
 
 ## Proposal
@@ -296,7 +296,7 @@ spec:
 
 This structure enables cleaner additions for future modes. 
 The top-level operand fields (`brokers`, `volumes`) provide a stable, reusable targeting mechanism and allow supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API.
-One example of this would be to add broker demotion support.
+One example of this would be to add [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907) support.
 
 With the proposed API, such a feature could look like this:
 
