@@ -45,6 +45,8 @@ More details can be found in the following sources: [RHEL 10 — Types of contai
 Because `micro` does not contain `microdnf` we need to handle the package installation in a builder stage and then copy the installed packages to the runtime image.
 This is done using `microdnf --installroot` which installs packages into a chroot directory, and then the chroot contents are copied into the `ubi-micro` runtime stage.
 
+#### Base image + operators
+
 **base/Dockerfile — before (ubi9-minimal):**
 ```dockerfile
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS downloader
@@ -61,51 +63,74 @@ COPY --from=downloader /usr/bin/tini /usr/bin/tini
 
 **base/Dockerfile — after (ubi10-micro):**
 ```dockerfile
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS downloader
-# ... download Tini (unchanged) ...
-
-# Install runtime dependencies into a chroot
+# Install runtime dependencies into a chroot and download prerequisites
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
+
+ARG JAVA_VERSION=21
+
 RUN mkdir -p /mnt/rootfs && \
     microdnf install \
         --installroot /mnt/rootfs \
-        --noplugins --config /etc/dnf/dnf.conf \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
         --setopt=cachedir=/var/cache/microdnf \
         --setopt=reposdir=/etc/yum.repos.d \
         --setopt=varsdir=/etc/dnf \
-        --setopt=install_weak_deps=0 --setopt=tsflags=nodocs \
-        --releasever 10 -y \
-        java-21-openjdk-headless openssl bash shadow-utils tzdata \
+        --setopt=install_weak_deps=0 \
+        --setopt=tsflags=nodocs \
+        --releasever 10 \
+        -y \
+        java-${JAVA_VERSION}-openjdk-headless \
+        openssl \
+        bash \
+        tzdata \
     && microdnf \
         --installroot /mnt/rootfs \
-        --noplugins --config /etc/dnf/dnf.conf \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
         --setopt=cachedir=/var/cache/microdnf \
         --setopt=reposdir=/etc/yum.repos.d \
         --setopt=varsdir=/etc/dnf \
         clean all
 
+# ... download Tini (unchanged) ...
+
 # Distroless runtime
 FROM registry.access.redhat.com/ubi10/ubi-micro:latest
 COPY --from=builder /mnt/rootfs /
-COPY --from=downloader /usr/bin/tini /usr/bin/tini
+COPY --from=builder /usr/bin/tini /usr/bin/tini
 ```
 
+#### Kafka images
 Images that extend the base image (e.g., kafka) need an additional builder stage for their specific tools:
 
 **kafka/Dockerfile — additional builder stage:**
 ```dockerfile
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS kafka-tools
+
 RUN mkdir -p /mnt/rootfs && \
-    microdnf install --installroot /mnt/rootfs \
-        --noplugins --config /etc/dnf/dnf.conf \
+    microdnf install \
+        --installroot /mnt/rootfs \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
         --setopt=cachedir=/var/cache/microdnf \
         --setopt=reposdir=/etc/yum.repos.d \
         --setopt=varsdir=/etc/dnf \
-        --setopt=install_weak_deps=0 --setopt=tsflags=nodocs \
-        --releasever 10 -y \
-        net-tools hostname findutils tar gzip unzip curl-minimal \
-    && microdnf --installroot /mnt/rootfs \
-        --noplugins --config /etc/dnf/dnf.conf \
+        --setopt=install_weak_deps=0 \
+        --setopt=tsflags=nodocs \
+        --releasever 10 \
+        -y \
+        net-tools \
+        hostname \
+        findutils \
+        tar \
+        gzip \
+        unzip \
+        curl-minimal \
+    && microdnf \
+        --installroot /mnt/rootfs \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
         --setopt=cachedir=/var/cache/microdnf \
         --setopt=reposdir=/etc/yum.repos.d \
         --setopt=varsdir=/etc/dnf \
@@ -115,6 +140,89 @@ FROM strimzi/base:latest
 COPY --from=kafka-tools /mnt/rootfs /
 # ... rest of Dockerfile unchanged ...
 ```
+
+#### Maven builder
+
+For `maven-builder` we use `registry.access.redhat.com/ubi9/openjdk-21:latest` as its base image.
+`openjdk-21:latest` has similar CVE surface as `ubi9-minimal` so we will adopt there similar approach as for other images.
+We will use `ubi10-micro` as a base and install `java-21-openjdk-headless` and other needed packages:
+
+
+```dockerfile
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
+
+ARG JAVA_VERSION=21
+
+RUN mkdir -p /mnt/rootfs && \
+    microdnf install \
+        --installroot /mnt/rootfs \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
+        --setopt=cachedir=/var/cache/microdnf \
+        --setopt=reposdir=/etc/yum.repos.d \
+        --setopt=varsdir=/etc/dnf \
+        --setopt=install_weak_deps=0 \
+        --setopt=tsflags=nodocs \
+        --releasever 10 \
+        -y \
+        java-${JAVA_VERSION}-openjdk-headless \
+        maven \
+        curl-minimal \
+        bash \
+        tzdata \
+    && microdnf \
+        --installroot /mnt/rootfs \
+        --noplugins \
+        --config /etc/dnf/dnf.conf \
+        --setopt=cachedir=/var/cache/microdnf \
+        --setopt=reposdir=/etc/yum.repos.d \
+        --setopt=varsdir=/etc/dnf \
+        clean all
+
+FROM registry.access.redhat.com/ubi10/ubi-micro:latest
+
+LABEL org.opencontainers.image.source='https://github.com/strimzi/strimzi-kafka-operator'
+
+ARG strimzi_version
+
+LABEL name='maven-builder' \
+    vendor='Strimzi' \
+    version="${strimzi_version}" \
+    release="${strimzi_version}" \
+    summary='Maven builder image of the Strimzi Kafka Operator.' \
+    description='Builder image used to dynamically create Kafka Connect images with user-provided plugins.'
+
+COPY --from=builder /mnt/rootfs /
+
+RUN echo "strimzi:x:1001:0::/home/strimzi:/bin/false" >> /etc/passwd && \
+    mkdir -p /home/strimzi && \
+    chown 1001:0 /home/strimzi && \
+    chmod 770 /home/strimzi
+
+USER 1001
+```
+
+#### Buildah + Kaniko
+
+For `buildah` and `kaniko` we do not build new images based on our base image, but we just retag existing upstream images.
+Any changes planned as part of this proposal does not affect `buildah` or `kaniko` images that we use.
+
+### Removing `shadow-utils`
+
+The current images install `shadow-utils` to get the `useradd` command for creating non-root users during the build.
+However, `shadow-utils` pulls in several dependencies and is never needed at runtime.
+With `ubi10-micro` we can drop it entirely by writing user entries directly to `/etc/passwd`:
+
+```dockerfile
+# Before (with shadow-utils)
+RUN useradd -r -m -u 1001 -g 0 kafka
+
+# After (no shadow-utils needed)
+RUN echo "kafka:x:1001:0::/home/kafka:/bin/false" >> /etc/passwd
+```
+
+This pattern is applied across all images that create users (`operator`, `kafka`, `maven-builder`).
+For images that need a home directory (e.g., `maven-builder`), the directory is created and permissions set explicitly.
 
 ### Quay scan differences
 
@@ -181,7 +289,8 @@ They also offer Strimzi hardened images.
 Wolfi is an open source project [licensed under Apache 2.0](https://edu.chainguard.dev/open-source/wolfi/faq/) which is fine for us.
 Chainguard describes their images as distroless, specially curated to run in cloud-native environments.
 
-However, there are a couple of differences that make it not suitable for us:
+However, there are several differences that make it not suitable for us:
+- the free tier only provides the `:latest` tag with no version pinning — if a new version introduces a breaking change, there is no way to stay on the previous version without a paid subscription
 - it uses `apk` instead of `dnf`/`microdnf` so we would need to rewrite most of our Dockerfiles
 - it is [supported only on `amd64` and `arm64`](https://edu.chainguard.dev/chainguard/chainguard-images/overview/#architecture/)
 
