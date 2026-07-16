@@ -1181,7 +1181,7 @@ Some of the scenarios that can be interesting to test manually are:
 ### Documentation
 
 This feature will initially be documented as an  _early access_ feature.
-The documentation will cover the existing limitations (such as how to deal with a persistent violations i.e., detecting them and fixing them) and their workarounds (urunning manual rebalance and detecting them by setting up alerts). 
+The documentation will cover the existing limitations (such as how to deal with a persistent violations i.e., detecting them and fixing them) and their workarounds (running manual rebalance and detecting them by setting up alerts). 
 It will also cover scenarios and examples on what steps to follow if we have both fixable and unfixable anomalies and how we can avoid the auto-rebalance to be blocked due to that.
 
 ## Affected/not affected projects
