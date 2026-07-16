@@ -909,17 +909,9 @@ Example alert conditions:
 - **Repeated goal violations**: Same goal violation detected multiple times in a short time window (e.g., >2 times in 30 minutes)
 - **Rebalance failures**: Unfixable goals detected or repeated NotReady states requiring manual intervention
 
-When such patterns are detected, check Kafka CR status for warnings, review `KafkaRebalance` resources, query Cruise Control's state endpoint for `balancednessScore`, and verify cluster capacity matches anomaly detection goals.
+**Alert Examples:**
 
-**Shipped Alert Examples:**
-
-The Strimzi project will not include pre-configured alerts for these metrics in the default shipped alerting rules.
-This decision is intentional because:
-- Alert thresholds are highly environment-specific (busy production clusters vs. development clusters have different normal behavior)
-- Different organizations have different tolerances for rebalancing frequency
-- Users should tune alerts based on their specific cluster characteristics and operational requirements
-
-However, the Strimzi documentation will include **example alert configurations** for common scenarios:
+The Strimzi documentation will include **example alert configurations** for common scenarios:
 - Example Prometheus alert for detecting frequent auto-rebalances
 - Example alert for unfixable goal violations that persist beyond a threshold
 - Example alert for rebalance failures
@@ -1176,7 +1168,6 @@ This scenario tests that in case the operator crashes during auto-rebalance, the
 6. Verify that auto-rebalance state is still `RebalanceOnImbalance`
 7. Make sure that the rebalance correctly moves to `Ready` state.
 
-
 ### Manual Testing
 
 Since the testing for this feature is resource heavy and the test can take longer duration as well, we wouldn't be able to cover every scenario with a dedicated system test. It can also be hard to replicate some things that can further lead the test to be flaky. Therefore, we should also do some manual testing along with the system test.
@@ -1186,6 +1177,12 @@ Some of the scenarios that can be interesting to test manually are:
 1. Testing intra-broker disk rebalancing for JBOD storage - In this scenario, we can try to generate an intra-broker imbalance and see if the auto-rebalance on imbalance is getting triggered correctly or not.
 2. Testing rebalance failure - We can test that in case of a rebalance failure, Cruise control is able to detect the rebalance again and the operator triggers another rebalance for the same.
 3. Testing that scaling operations are prioritized over auto-rebalance - We can test that whenever a scaling operation happens, the auto-rebalance is stopped in case it is running and the scaling operation finishes first 
+
+### Documentation
+
+This feature will initially be documented as an  _early access_ feature.
+The documentation will cover the existing limitations (such as how to deal with a persistent violations i.e., detecting them and fixing them) and their workarounds (urunning manual rebalance and detecting them by setting up alerts). 
+It will also cover scenarios and examples on what steps to follow if we have both fixable and unfixable anomalies and how we can avoid the auto-rebalance to be blocked due to that.
 
 ## Affected/not affected projects
 
