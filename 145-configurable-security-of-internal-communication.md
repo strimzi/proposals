@@ -423,8 +423,8 @@ Until it is merged and released, Kafka Exporter might be unavailable with Servic
 ### Timeline
 
 This feature will be initially released as _early access_ to collect some early feedback from Strimzi users.
-Unless major issues are reported, the _early access_ label will be removed after 2 Strimzi minor releases (e.g. if it is added in Strimzi 1.2.0 as early access, the label would be removed in the 1.4.0 release).
 The _early access_ state of this feature will be communicated as part of the documentation and release notes (`CHANGELOG.md`).
+The _early access_ label will be removed once the final `Kafka` custom resource API is available to the Strimzi users.
 
 ### Future Work
 
