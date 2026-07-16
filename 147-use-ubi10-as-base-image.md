@@ -47,7 +47,7 @@ This is done using `microdnf --installroot` which installs packages into a chroo
 
 #### Base image + operators
 
-**base/Dockerfile — before (ubi9-minimal):**
+**Current base/Dockerfile (ubi9-minimal):**
 ```dockerfile
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS downloader
 # ... download Tini ...
@@ -61,7 +61,7 @@ RUN microdnf install -y java-21-openjdk-headless openssl shadow-utils && \
 COPY --from=downloader /usr/bin/tini /usr/bin/tini
 ```
 
-**base/Dockerfile — after (ubi10-micro):**
+**Proposed base/Dockerfile (ubi10-micro):**
 ```dockerfile
 # Install runtime dependencies into a chroot and download prerequisites
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
@@ -104,7 +104,7 @@ COPY --from=builder /usr/bin/tini /usr/bin/tini
 #### Kafka images
 Images that extend the base image (e.g., kafka) need an additional builder stage for their specific tools:
 
-**kafka/Dockerfile — additional builder stage:**
+**Proposed kafka/Dockerfile — additional builder stage:**
 ```dockerfile
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS kafka-tools
 
@@ -147,7 +147,7 @@ For `maven-builder` we use `registry.access.redhat.com/ubi9/openjdk-21:latest` a
 `openjdk-21:latest` has similar CVE surface as `ubi9-minimal` so we will adopt there similar approach as for other images.
 We will use `ubi10-micro` as a base and install `java-21-openjdk-headless` and other needed packages:
 
-
+**Proposed maven-builder/Dockerfile**
 ```dockerfile
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
 
