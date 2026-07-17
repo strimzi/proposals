@@ -769,122 +769,9 @@ If users need immediate rebalancing despite configured maintenance windows (e.g.
 
 Scale-up and scale-down auto-rebalance operations will continue to **ignore** maintenance windows (executed immediately), while imbalance auto-rebalance respects them.
 
-### Handling Intra-Broker Disk Imbalances (JBOD Storage)
+### Operator Crash Recovery
 
-For Kafka clusters using **JBOD storage with multiple disks**, the `imbalance` mode automatically handles both **inter-broker** (replicas distributed across brokers) and **intra-broker disk imbalances** (disk usage between disks on the same broker).
-
-**Storage Detection and Goal Configuration:**
-
-The operator detects JBOD storage on startup and automatically extends Cruise Control's anomaly detection goals:
-
-- **Non-JBOD storage**: Only inter-broker goals configured (default behavior)
-- **JBOD storage**: Automatically adds `IntraBrokerDiskCapacityGoal` and `IntraBrokerDiskUsageDistributionGoal` to anomaly detection
-
-This is **transparent to users** - no additional configuration needed.
-
-**Mutual Exclusivity Constraint:**
-
-Inter-broker and intra-broker rebalancing **cannot run simultaneously** (Cruise Control enforces this).
-The operator handles violations through separate anomaly detection cycles rather than sequential phases within a single cycle.
-
-**Priority order:**
-1. Scale operations (highest)
-2. Inter-broker rebalancing 
-3. Intra-broker disk rebalancing (lowest)
-
-**Execution Flow:**
-
-When anomalies are detected, the operator categorizes violations by examining the `fixableViolatedGoals` list from Cruise Control's state endpoint:
-
-- **Inter-broker goals**: Any goal except `IntraBrokerDiskCapacityGoal` and `IntraBrokerDiskUsageDistributionGoal`
-- **Intra-broker goals**: `IntraBrokerDiskCapacityGoal` or `IntraBrokerDiskUsageDistributionGoal`
-
-Based on this categorization:
-
-1. **Both types detected**: 
-   - Create `KafkaRebalance` with `rebalanceDisk=false` for inter-broker violations only
-   - After completion: Update ConfigMap with completion timestamp and transition to `Idle`
-   - Wait for next anomaly detection cycle (default: 5 minutes, configurable via `anomaly.detection.interval.ms`)
-   - If intra-broker violations still persist, Cruise Control detects them as a new anomaly
-   - New anomaly timestamp > last completion timestamp → triggers new rebalance with `rebalanceDisk=true`
-   - Inter-broker rebalancing moves partitions between brokers, which redistributes data across disks and may naturally resolve intra-broker imbalances without requiring a separate disk rebalance. Waiting for the next detection cycle avoids unnecessary intra-broker rebalancing.
-
-2. **Only intra-broker violations**:
-   - Create `KafkaRebalance` with `rebalanceDisk=true`
-   - Goals automatically set by Cruise Control (template goals ignored)
-
-3. **Only inter-broker violations**:
-   - Create `KafkaRebalance` with `rebalanceDisk=false` (or field omitted, defaults to `false`)
-   - Uses goals from template if configured, otherwise defaults
-
-**State Machine Handling:**
-
-Each rebalance type is handled in its own anomaly detection cycle:
-
-- When both violations are detected, only inter-broker rebalancing is triggered
-- After inter-broker completes: transitions to `Idle` and updates ConfigMap
-- If intra-broker violations persist: Cruise Control detects them in the next cycle as a fresh anomaly
-- The fresh anomaly triggers a new `RebalanceOnImbalance` transition with `rebalanceDisk=true`
-- Each rebalance completes independently without queuing the next phase
-
-**Generated `KafkaRebalance` Resources:**
-
-Inter-broker:
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaRebalance
-metadata:
-  name: my-cluster-auto-rebalancing-imbalance
-spec:
-  mode: full
-  rebalanceDisk: false
-  goals: [from template or defaults]
-```
-
-Intra-broker:
-```yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaRebalance
-metadata:
-  name: my-cluster-auto-rebalancing-imbalance
-spec:
-  mode: full
-  rebalanceDisk: true
-  concurrentIntraBrokerPartitionMovements: 2
-  # No goals - automatically set by Cruise Control
-```
-
-**Template Handling:**
-- Inter-broker: Uses goals from template
-- Intra-broker: Ignores goals from template (auto-set), but uses `concurrentIntraBrokerPartitionMovements` if specified
-
-**Operator Crash Recovery:**
-
-When the operator crashes and restarts during `RebalanceOnImbalance`:
-
-1. Read the FSM state from `Kafka.status.autoRebalance.state` (finds `RebalanceOnImbalance`)
-2. Check if the `KafkaRebalance` resource `<cluster-name>-auto-rebalancing-imbalance` exists:
-   - **If exists**: Continue monitoring it from its current state (`ProposalReady`, `Rebalancing`, `Ready`, etc.)
-     - The `rebalanceDisk` field in the `KafkaRebalance` spec indicates whether this is inter-broker (`false`) or intra-broker (`true`) rebalancing
-     - Process the rebalance normally based on its current state
-   - **If missing**: The rebalance was either completed, failed, stopped, or manually deleted during the crash
-     - Transition auto-rebalance state to `Idle`
-     - Trust Cruise Control's anomaly detection to re-detect any remaining imbalances (runs every 5 minutes by default)
-     - Next reconciliation will query Cruise Control and create a new `KafkaRebalance` if violations still exist
-
-**Why This Works:**
-
-This simplified recovery approach works because Cruise Control's anomaly detection acts as the persistent source of truth about cluster state.
-The operator doesn't need to remember "what phase were we in" because Cruise Control will tell us what violations currently exist.
-
-For JBOD clusters where inter-broker rebalancing may have left intra-broker violations:
-- **Crash during inter-broker rebalance**: `KafkaRebalance` exists with `rebalanceDisk=false` → continue monitoring it from its current state
-- **Crash after inter-broker completion**: 
-  - Inter-broker `KafkaRebalance` was already deleted (transitioned to `Ready` and cleaned up)
-  - Auto-rebalance state is `Idle`
-  - If intra-broker violations persist: Cruise Control detects them in the next anomaly detection cycle
-  - New anomaly with timestamp > ConfigMap's `lastRebalanceCompletionTime` → triggers new rebalance with `rebalanceDisk=true`
-- **Crash during intra-broker rebalance**: `KafkaRebalance` exists with `rebalanceDisk=true` → continue monitoring it from its current state
+On restart during `RebalanceOnImbalance`: If `KafkaRebalance` exists, resume monitoring from current state. If missing, transition to `Idle` and rely on Cruise Control's next anomaly detection cycle (5 min default) to re-trigger if violations persist.
 
 ### Metrics for tracking the rebalance requests
 
@@ -929,7 +816,7 @@ Currently, the auto-rebalancing mechanism runs through a Finite State Machine (F
 * **RebalanceOnScaleUp**: a rebalancing related to a scale up operation is running.
 
 With the new `imbalance` mode, we will be introducing a new state to the FSM:
-* **RebalanceOnImbalance**: Rebalancing triggered by goal violations is running. For JBOD clusters with both inter-broker and intra-broker violations, only the inter-broker rebalance is executed in this state. After completion, the operator transitions to `Idle` and waits for the next anomaly detection cycle to determine if intra-broker violations persist. This approach avoids unnecessary intra-broker rebalancing when inter-broker movements have already resolved disk imbalances.
+* **RebalanceOnImbalance**: Rebalancing triggered by goal violations is running.
 
 With the new `imbalance` mode, the FSM state transitions will look like this:
 
@@ -938,7 +825,7 @@ With the new `imbalance` mode, the FSM state transitions will look like this:
 * from **Idle** to:
   * **RebalanceOnScaleDown**: if a scale down operation was requested. This transition happens even if a scale up was requested at the same time but the rebalancing on scaling down has the precedence. The rebalancing on scale up is queued. They will run sequentially.
   * **RebalanceOnScaleUp**: if only a scale up operation was requested. There was no scale down operation requested.
-  * **RebalanceOnImbalance**: if goal violations are detected (inter-broker, intra-broker, or both), and the `fixableViolatedGoals` list is not empty while the `unfixableViolatedGoals` list is empty. If there are queued scale up or scale down operations, then they will run first. For JBOD clusters with both violation types, only inter-broker rebalancing is triggered in this transition; intra-broker violations are addressed in a subsequent detection cycle if they persist.
+  * **RebalanceOnImbalance**: if goal violations are detected and the `fixableViolatedGoals` list is not empty while the `unfixableViolatedGoals` list is empty. If there are queued scale up or scale down operations, then they will run first.
 
 * from **RebalanceOnScaleDown** to:
   * **RebalanceOnScaleDown**: if a rebalancing on scale down is still running.
@@ -954,7 +841,7 @@ With the new `imbalance` mode, the FSM state transitions will look like this:
   * **RebalanceOnImbalance**: if a rebalancing on imbalance is still running.
   * **RebalanceOnScaleUp**: if a rebalancing on scale up is in queue, then the rebalance on imbalance will be stopped and the scale up will happen first. If there is a rebalancing scale down in queue too, then it will be executed before both scale up and rebalance on imbalance.
   * **RebalanceOnScaleDown**: if a scale down operation was requested, then the rebalance on imbalance will be stopped and the scale down will be allowed to finish first and after that rebalance on imbalance will be executed.
-  * **Idle**: if rebalancing was requested, it was executed and completed successfully or failed. The ConfigMap is updated with the completion timestamp. For JBOD clusters where intra-broker violations persist, Cruise Control will detect them in the next anomaly detection cycle and trigger a new rebalance.
+  * **Idle**: if rebalancing was requested, it was executed and completed successfully or failed. The ConfigMap is updated with the completion timestamp.
 
 On each reconciliation, the following process will be used:
 
@@ -962,7 +849,6 @@ On each reconciliation, the following process will be used:
 2. The auto-rebalance reconciliation logic checks for ongoing rebalances (see "Detecting Active Rebalances" section)
 3. If the state is `Idle` and no rebalance is running, query the `state` endpoint to get detected violations
 4. Apply the comparison logic from "Logic to trigger rebalance" section to determine if a new rebalance should be triggered
-5. For JBOD clusters, categorize violations and prioritize inter-broker over intra-broker as described in "Handling Intra-Broker Disk Imbalances" section. Each violation type is handled in its own anomaly detection cycle.
 
 The auto-rebalance reconciliation logic also loads the `Kafka.status.autoRebalance` content:
 
@@ -988,8 +874,6 @@ In this state, goal violation anomalies were detected when we sent a request to 
 A `KafkaRebalance` resource will now be applied to the cluster to fix the cluster imbalance.
 This `KafkaRebalance` will be based on the template provided by the user; if no template is provided, then the `KafkaRebalance` will be created with default configurations.
 
-For JBOD clusters with both inter-broker and intra-broker violations, only the inter-broker rebalance is triggered in this cycle. After completion, the operator waits for the next anomaly detection cycle to determine if intra-broker violations persist (see "Handling Intra-Broker Disk Imbalances" section for details)
-
 ```mermaid
 flowchart TB
   A[KafkaRebalanceState] --> B{if state}
@@ -1011,7 +895,6 @@ Checking the current `KafkaRebalance` status:
   * if there is a queued rebalancing scale down (`Kafka.status.autoRebalance.modes[remove-brokers]` exists), start the rebalancing scale down and transition to **RebalanceOnScaleDown**.
   * if there is a queued rebalancing scale up (`Kafka.status.autoRebalance.modes[add-brokers]` exists), start the rebalancing scale up and transition to **RebalanceOnScaleUp**.
   * If no queued operations, transition to **Idle**, update ConfigMap with completion timestamp, clean `Kafka.status.autoRebalance.modes`, delete the generated `KafkaRebalance` custom resource.
-  * **For JBOD clusters**: If intra-broker violations persist after this rebalance, Cruise Control will detect them in the next anomaly detection cycle and trigger a new rebalance.
 * if `PendingProposal`, `ProposalReady` or `Rebalancing`, the rebalancing is still running.
   * No further actions required.
 * if `NotReady`
@@ -1174,9 +1057,8 @@ Since the testing for this feature is resource heavy and the test can take longe
 
 Some of the scenarios that can be interesting to test manually are:
 
-1. Testing intra-broker disk rebalancing for JBOD storage - In this scenario, we can try to generate an intra-broker imbalance and see if the auto-rebalance on imbalance is getting triggered correctly or not.
-2. Testing rebalance failure - We can test that in case of a rebalance failure, Cruise control is able to detect the rebalance again and the operator triggers another rebalance for the same.
-3. Testing that scaling operations are prioritized over auto-rebalance - We can test that whenever a scaling operation happens, the auto-rebalance is stopped in case it is running and the scaling operation finishes first 
+1. Testing rebalance failure - We can test that in case of a rebalance failure, Cruise control is able to detect the rebalance again and the operator triggers another rebalance for the same.
+2. Testing that scaling operations are prioritized over auto-rebalance - We can test that whenever a scaling operation happens, the auto-rebalance is stopped in case it is running and the scaling operation finishes first 
 
 ### Documentation
 
@@ -1192,7 +1074,7 @@ This change will affect the Strimzi cluster operator.
 
 The following changes need to be made to support this feature:
 
-**Add `imbalance` mode**: Support automatic rebalancing on goal violations (handles both inter-broker and intra-broker for JBOD) in the `Kafka.spec.cruiseControl.autoRebalance` configuration.
+**Add `imbalance` mode**: Support automatic rebalancing on goal violations in the `Kafka.spec.cruiseControl.autoRebalance` configuration.
 
 These API changes are required for the auto-rebalance on imbalance feature to function correctly.
 
