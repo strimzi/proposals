@@ -1133,6 +1133,8 @@ Cons:
 
 In the future, we plan to introduce auto-rebalance for topic-related and metric-related imbalances.
 Topic-related issues will require coordination with the Topic Operator, while metric-related issues will require coordination with the Kafka Admin API.
+Intra-broker disk rebalancing for JBOD storage is not currently supported because Cruise Control does not provide anomaly detection for intra-broker disk imbalances.
+This could be addressed in a follow-up, ideally after [PR #2288](https://github.com/linkedin/cruise-control/pull/2288) is merged upstream, or alternatively by using an operator-side detection mechanism such as periodically calling the Cruise Control `/proposals?rebalance_disk=true` endpoint to check whether intra-broker proposals would be generated.
 We can also enhance the operator to automatically proceed with rebalancing fixable goals even when unfixable hard goals are present, by adding the `skipHardGoalCheck` field in the template:
 
 ```yaml
