@@ -40,7 +40,7 @@ This makes it Red Hat's [distroless](https://www.redhat.com/en/blog/introduction
 
 More details can be found in the following sources: [RHEL 10 — Types of container images](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/building_running_and_managing_containers/types-of-container-images), [Introduction to UBI Micro](https://www.redhat.com/en/blog/introduction-ubi-micro), [UBI 10 Micro catalog](https://catalog.redhat.com/en/software/containers/ubi10-micro/66f2abd91123095c735db44f)
 
-### Changes in Dockerfiles
+### Changes in Dockerfiles for `strimzi-kafka-operator`
 
 Because `micro` does not contain `microdnf` we need to handle the package installation in a builder stage and then copy the installed packages to the runtime image.
 This is done using `microdnf --installroot` which installs packages into a chroot directory, and then the chroot contents are copied into the `ubi-micro` runtime stage.
@@ -207,6 +207,18 @@ USER 1001
 For `buildah` and `kaniko` we do not build new images based on our base image, but we just retag existing upstream images.
 Any changes planned as part of this proposal does not affect `buildah` or `kaniko` images that we use.
 
+#### Images in other projects (drain-cleaner, bridge, etc.)
+
+Images in the other projects can use the same way how to migrate from their current base images to `ubi10-micro`.
+The mechanism will consist from multi-stage build, and it could look like the following:
+- use `ubi10-minimal` as a base and name it as `builder`
+- download tini (if used)
+- install all required packages with `--installroot /mnt/rootfs` option
+- use `ubi10-micro` as a base for final image
+- copy all dependencies from `/mnt/rootfs`
+- copy built Java artifacts
+- create strimzi user and set proper rights
+
 ### Removing `shadow-utils`
 
 The current images install `shadow-utils` to get the `useradd` command for creating non-root users during the build.
@@ -248,7 +260,10 @@ As a minimal set of testing I would consider the following:
 
 ## Affected projects
 
-All projects that produce images are affected:
+This proposal covering strimzi-kafka-operator repository with examples and testing strategy.
+All other projects that produce container images can use the same strategy to migrate from current base images to ubi10-micro.
+
+The projects within Strimzi that produce images are:
 - `strimzi-kafka-operator`
 - `strimzi-kafka-bridge`
 - `drain-cleaner`
@@ -257,6 +272,8 @@ All projects that produce images are affected:
 - `client-examples`
 - `kafka-access-operator`
 - `mqtt-bridge`
+
+However, it should be evaluated if it makes sense to use `ubi10-micro` in testing projects like `test-clients`, `test-container`, or in `client-examples`.
 
 ## Backwards compatibility
 
