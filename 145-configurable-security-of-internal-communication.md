@@ -292,6 +292,7 @@ metadata:
 At the start of the reconciliation, the Cluster Operator will validate the settings:
 * Ensure the configuration is valid JSON with a valid layout
 * Ensure the configuration makes sense (e.g. no mTLS authentication with disabled encryption)
+* If the validation fails, the whole reconciliation will fail with an error
 
 #### Moving to the Final `Kafka` Custom Resource API
 
