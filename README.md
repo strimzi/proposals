@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 148 | [Auto-Rebalance on Imbalanced Clusters](./148-auto-rebalance-on-imbalanced-clusters.md) |
 | 147 | [Templating Additional Volumes for Pods with Stable Identities](./147-templating-additional-volumes.md) |
 | 146 | [Add KIP-714 support to metrics-reporter](./146-metrics-reporter-kip-714.md) |
 | 145 | [Alerting for stuck reconciliations](./145-stuck-reconciliation-alerting.md) |
