@@ -15,7 +15,7 @@ Automating this process would reduce operational overhead and benefit all users 
 
 In order to understand how we plan to automatically fix unbalanced Kafka clusters, the sections below will go over how Cruise Control's anomaly detection and self-healing features work to detect the anomalies in the cluster and fix them.
 
-![self-healing flow diagram](images/136-self-healing-flow.png)
+![self-healing flow diagram](images/148-self-healing-flow.png)
 
 The above flow diagram depicts the self-healing process in Cruise Control.
 The anomaly detector manager detects an anomaly (using the detector classes) and forwards it to the notifier.
@@ -312,7 +312,7 @@ For more information, refer to the [state endpoint documentation](https://github
 
 The following diagram depicts the complete auto-rebalance on imbalance process, showing how the operator queries the Cruise Control state endpoint, detects goal violations, and triggers rebalance operations:
 
-![flow-diagram-auto-rebalance-on-imbalance](images/136-auto-rebalance-imbalance.png)
+![flow-diagram-auto-rebalance-on-imbalance](images/148-auto-rebalance-imbalance.png)
 
 ### Reconciliation logic using the state endpoint
 
@@ -820,7 +820,7 @@ With the new `imbalance` mode, we will be introducing a new state to the FSM:
 
 With the new `imbalance` mode, the FSM state transitions will look like this:
 
-![auto-rebalance state machine flow diagram](images/136-finite-state-machine.png)
+![auto-rebalance state machine flow diagram](images/148-finite-state-machine.png)
 
 * from **Idle** to:
   * **RebalanceOnScaleDown**: if a scale down operation was requested. This transition happens even if a scale up was requested at the same time but the rebalancing on scaling down has the precedence. The rebalancing on scale up is queued. They will run sequentially.
