@@ -186,7 +186,7 @@ Our MQTT Bridge is not a full MQTT broker and it's stateless, meaning that we do
 
 I will submit a separate proposal to implement the authorization.
 This will make this proposal more focused and easier to review.
-I need a clear understanding ot the authorization mechanism alternatives before I can propose a specific implementation for the authorization support in the MQTT Bridge.If it's okay to the Strimzi maintainers, I will submit the authorization proposal after we have implemented the authentication support in this proposal.
+I need a clear understanding of the authorization mechanism alternatives before I can propose a specific implementation for the authorization support in the MQTT Bridge. If it's okay to the Strimzi maintainers, I will submit the authorization proposal after we have implemented the authentication support in this proposal.
 
 ## Testing
 
