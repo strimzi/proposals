@@ -59,8 +59,8 @@ mqtt.server.ssl.trusted.certificates=--BEGIN CERTIFICATE--\n...\n--END CERTIFICA
 Optionally, we can also support the configuration for specifying the protocols and cipher suites:
 
 ```application.properties
-mqtt.server.ssl.protocols=TLSv1.2,TLSv1.3
-mqtt.server.ssl.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
+mqtt.server.ssl.enabled.protocols=TLSv1.2,TLSv1.3
+mqtt.server.ssl.enabled.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
 ```
 
 > If these options are not specified, the MQTT Bridge will use the default SSL/TLS configurations provided by the Java runtime.
