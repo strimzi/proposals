@@ -37,7 +37,7 @@ It will look something like this:
 
 ```application.properties
 mqtt.server.tls.port=8883
-mqtt.server.ssl.enabled=true
+mqtt.server.ssl.enable=true
 mqtt.server.ssl.certificate.location=path/to/server-cert.pem
 mqtt.server.ssl.key.location=path/to/server-key.pem
 mqtt.server.ssl.certificate=--BEGIN CERTIFICATE--\n...\n--END CERTIFICATE--
