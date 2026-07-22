@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 150 | [Configurable Security for Internal Kafka Cluster Communication](./150-configurable-security-of-internal-communication.md) |
 | 149 | [Maven mirror support for Kafka Connect builds](./149-connect-build-maven-mirror.md) |
 | 148 | [Auto-Rebalance on Imbalanced Clusters](./148-auto-rebalance-on-imbalanced-clusters.md) |
 | 147 | [Templating Additional Volumes for Pods with Stable Identities](./147-templating-additional-volumes.md) |
