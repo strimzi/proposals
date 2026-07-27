@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 151 | [Support broker cordoning in auto-rebalancing on scale-down](./151-broker-cordoning-scale-down.md) |
 | 150 | [Configurable Security for Internal Kafka Cluster Communication](./150-configurable-security-of-internal-communication.md) |
 | 149 | [Maven mirror support for Kafka Connect builds](./149-connect-build-maven-mirror.md) |
 | 148 | [Auto-Rebalance on Imbalanced Clusters](./148-auto-rebalance-on-imbalanced-clusters.md) |
