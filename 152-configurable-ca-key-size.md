@@ -93,6 +93,9 @@ This follows the same pattern as `validityDays` which also applies to all certif
 
 * **Minimum value:** `2048` since smaller RSA keys do not meet any current security standard and therefore should not be supported.
 
+* **Recommended key sizes:** Common RSA key sizes and their security strengths are documented in [NIST SP 800-57 Part 1 Rev. 5, Table 2](https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-57pt1r5.pdf).
+  A table with the common key sizes will be added to the Strimzi documentation as a guideline for users selecting a key size.
+
 #### Interaction with `generateCertificateAuthority: false`
 
 When `generateCertificateAuthority` is set to `false` and the user provides their own CA certificate and key.
