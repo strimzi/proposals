@@ -113,8 +113,14 @@ Consolidate auxiliary configuration fields into a new `spec.config` map, keeping
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
 
   These primitive fields are the primary source of API sprawl.
-Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
-This removes the translation layer between Strimzi field names and Cruise Control parameters, allowing users to consult Cruise Control documentation directly and new Cruise Control parameters to be supported without changes to the Strimzi API.
+  Instead of maintaining Strimzi-specific field names, `config` entries use the keys and values defined by the [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) directly.
+  This removes the translation layer between Strimzi field names and Cruise Control parameters, allowing users to consult Cruise Control documentation directly and new Cruise Control parameters to be supported without changes to the Strimzi API.
+
+#### Type Safety Tradeoff
+Moving parameters from typed primitive fields to a `Map<String, String>` means CRD-level type validation is no longer enforced at the schema level.
+This is the same tradeoff that other Strimzi components have made — `Kafka.spec.kafka.config` and `Kafka.spec.cruiseControl.config` both use string-valued config maps to gain full extensibility.
+In practice, the loss is limited: CRD validation for the existing fields only checks basic type constraints (non-negative integers, non-null strings) and cannot validate semantic correctness (e.g., whether a goal name is valid or an excluded topic regex matches any topics).
+Invalid values passed through `spec.config` will be caught by Cruise Control at request time and the operator will surface the error by transitioning the `KafkaRebalance` resource to `NotReady` with a descriptive status condition.
 
 #### Proposed API Structure
 
@@ -175,13 +181,15 @@ The following config keys will replace the primitive fields that are currently u
 
      If forbidden fields are used, the KafkaRebalanceOperator will ignore them and log a warning which is consistent with existing Strimzi behavior for `spec.cruiseControl.config` in the Kafka resource.
 
-2. **Add validation** that warns about using old and new API structures.
-   - Update the KafkaRebalanceAssemblyOperator to ignore the legacy fields when they conflict with the new fields, use the new fields, and log warnings indicating that the legacy fields have been ignored.
-   - Update the KafkaRebalanceAssemblyOperator to log deprecation warnings whenever legacy fields are used.
+2. **Add validation** that rejects mixing old and new API structures.
+   - Update the KafkaRebalanceAssemblyOperator so that if both `spec.config` and any legacy primitive field are set on the same resource, the resource transitions to `NotReady` with a status condition explaining that the two styles cannot be combined.
+    This avoids ambiguity from merge or override logic and ensures users explicitly choose one style.
+   - Update the KafkaRebalanceAssemblyOperator to log deprecation warnings whenever legacy fields are used without `spec.config`.
 
 3. **Deprecate old fields and plan removal**
    - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies` and `moveReplicasOffVolumes`
-   - These fields will be removed in a future API version.
+   - These fields will be removed in the next major API version, Strimzi 2.0.
+     A conversion webhook or migration tool will be provided to automatically convert existing `KafkaRebalance` resources from the legacy fields to the new `spec.config` and `volumes` structure, following the same approach used for the 1.0 migration.
 
 4. **Update examples** to encourage use of new API structure
    - Ensure the packaged `KafkaRebalance` resource examples are updated to use new API structure.
@@ -193,16 +201,22 @@ The following config keys will replace the primitive fields that are currently u
 
 ### Validation Improvements
 
-With the new structure, validation is split across two layers:
+With the new structure, validation is split across three layers:
 
-1. **Mode-specific operand validation**:
+1. **API style validation**:
+   - If `spec.config` is set alongside any deprecated primitive field (`goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`), the `KafkaRebalance` resource transitions to `NotReady` with a status condition explaining that the two API styles cannot be combined.
+    This applies regardless of whether the old and new fields refer to the same or different parameters, the check is simply whether any legacy primitive field is set to a non-default
+    value while `spec.config` is also present.
+    Users must migrate all tuning configuration into `spec.config` or continue using the legacy fields exclusively until they are ready to migrate.
+
+2. **Mode-specific operand validation**:
    - `brokers` is required and non-empty for `add-brokers` and `remove-brokers` modes
    - `volumes` is required and non-empty for `remove-disks` mode.
    - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `brokers` or `volumes` are provided but irrelevant to the selected mode.
 
-2. **Parameter field validation**:
+3. **Parameter field validation**:
    - Strimzi will filter config parameters that conflict with operator-managed functionality (e.g., `dryrun`, `json`, or `verbose`, check the [Filtered Parameters](#filtered-parameters) section below for an exhaustive list) in the same fashion it filters config options with "FORBIDDEN_PREFIXES" in other Strimzi CRDs, the parameter will be ignored and a warning will be logged.
-Supported config parameters will be passed as-is to the Cruise Control REST API.
+     Supported config parameters will be passed as-is to the Cruise Control REST API.
    - If Cruise Control returns an error for a config parameter whether due to an invalid value or an unknown key, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and surface the error in a warning condition on the resource's status.
 
 #### Filtered Parameters
@@ -260,7 +274,7 @@ spec:
     replication_throttle: "20971520"
 ```
 
-#### Example of an `remove-brokers` rebalance
+#### Example of a `remove-brokers` rebalance
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -294,13 +308,15 @@ spec:
 
 ### Future Extensibility
 
-This structure enables cleaner additions for future modes. 
+#### Add Broker Demotion Support
+
+This structure enables cleaner additions for future modes.
 The top-level operand fields (`brokers`, `volumes`) provide a stable, reusable targeting mechanism and allow supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API.
 One example of this would be to add [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907) support.
 
 With the proposed API, such a feature could look like this:
 
-#### Example of `demote-brokers` rebalance, demoting brokers
+##### Example of `demote-brokers` rebalance, demoting brokers
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -315,7 +331,7 @@ spec:
     exclude_recently_demoted_brokers: "true"
 ```
 
-#### Example of `demote-brokers` rebalance, demoting disks of brokers
+##### Example of `demote-brokers` rebalance, demoting disks of brokers
 ```yaml
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaRebalance
@@ -332,6 +348,13 @@ spec:
     exclude_recently_demoted_brokers: "true"
 ```
 
+#### Cruise Control Parameter Schema Validation
+
+If Cruise Control were to expose a parameter schema per endpoint, the operator could cache it and validate `spec.config` entries locally before making API calls.
+This would provide a faster feedback loop without coupling the Strimzi API to specific Cruise Control parameters.
+However, this is not possible with the current state of Cruise Control and is outside the scope of this proposal.
+
+
 ## Affected/not affected projects
 
 This proposal affects only the Strimzi Cluster Operator.
@@ -340,12 +363,13 @@ This proposal affects only the Strimzi Cluster Operator.
 
 ### Backward Compatibility Strategy
 
-The proposal maintains strict backward compatibility. 
-Both old and new structures are supported:
-- Old top-level primitive fields read as before, with deprecation warnings
-- `moveReplicasOffVolumes` is mapped internally to `volumes`
+The proposal maintains strict backward compatibility.
+Both old and new structures are supported, but not simultaneously:
+- Old top-level primitive fields read as before, with deprecation warnings.
+- `moveReplicasOffVolumes` is mapped internally to `volumes`.
 - The new `config` map and `volumes` field are used when present.
-- The `config` field takes precedence over deprecated top-level fields if both are present.
+- If both `spec.config` and any deprecated primitive field are set on the same resource, the resource transitions to `NotReady` with a status condition explaining the conflict.
+This prevents ambiguity from merge or override logic and ensures users do not accidentally perform a rebalance with configuration different from what they expect.
 
 ### Migration Examples
 
