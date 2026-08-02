@@ -69,11 +69,11 @@ metadata:
   name: my-cluster
 spec:
   clusterCa:
-    keySize: 4096
+    keySize: 3072
     validityDays: 365
     renewalDays: 30
   clientsCa:
-    keySize: 4096
+    keySize: 3072
     validityDays: 365
     renewalDays: 30
   # ...
@@ -85,13 +85,11 @@ This follows the same pattern as `validityDays` which also applies to all certif
 
 #### Defaults and validation
 
-* **Default value:** `4096`, the current root certificate key size, preserving backward compatibility for root certificate keys.
-  This will change the effective key size for leaf certificates from 2048 bits, OpenSSL's implicit default, to 4096 bits.
+* **Default value:** `3072`, which meets all current and upcoming regulatory requirements (≥3000-bit RSA keys).
+  This changes the effective key size for root keys from `4096` (Strimzi's current hardcoded value) to `3072`.
+  This will change the effective key size for leaf certificates from `2048` bits, OpenSSL's implicit default, to `3072` bits.
   This is a deliberate change: relying on an implicit OpenSSL default is fragile and aligning leaf certificate keys with the root certificate key size is a safer baseline.
   For users who need the previous 2048-bit leaf key size, they can set `keySize: 2048` explicitly.
-
-* **Allowed values:** `2048`, `3072`, `4096`, `8192` which are standard RSA key sizes that are well-supported by OpenSSL and Java's `java.security` libraries.
-  These values will be enforced by CRD schema validation using an `enum` constraint.
 
 * **Minimum value:** `2048` since smaller RSA keys do not meet any current security standard and therefore should not be supported.
 
@@ -116,20 +114,15 @@ Following the existing pattern established by `validityDays` we would add a `key
 ```java
 public class CertificateAuthority implements UnknownPropertyPreserving {
     //... existing fields
-    public static final int DEFAULT_KEY_SIZE = 4096;
+    public static final int DEFAULT_KEY_SIZE = 3072;
 
     // ... existing fields 
     private int keySize;
 
     @Description("The RSA key size in bits for CA and end-entity certificate keys. " +
-            "Allowed values are 2048, 3072, 4096, and 8192. " +
-            "Default is 4096.")
-    @CelValidation(rules = {
-      @CelValidation.CelValidationRule(
-          rule = "self in [2048, 3072, 4096, 8192]",
-          message = "keySize must be one of: 2048, 3072, 4096, 8192"
-      )
-    })
+            "Must be at least 2048." +
+            "Default is 3072.")
+    @Minimum(2048)
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     public int getKeySize() {
         return keySize;
@@ -141,8 +134,6 @@ public class CertificateAuthority implements UnknownPropertyPreserving {
     // ... existing methods 
 }
 ```
-
-As shown in the example above, CEL validation would be used to restrict the input to allowed key sizes at the CRD level.
 
 #### User Operator considerations
 
@@ -161,6 +152,10 @@ When a user changes the `keySize` on an existing cluster, the behavior depends o
   1. Set the desired `keySize` in the `Kafka` resource.
   2. Trigger a root key replacement using the `strimzi.io/force-replace` annotation on the root key Secret.
   This will generate a new root key with the configured size and trigger re-issuance of all leaf certificates followed by rolling restarts.
+* **Upgrade behavior.** This same behavior applies when upgrading to a Strimzi version that introduces the `keySize` property.
+The new default key size does not trigger immediate regeneration of existing keys, it only takes effect when keys are next generated during renewal, replacement, or new certificate issuance.
+* **Downgrade behavior.** When downgrading to a Strimzi version without the `keySize` property, existing keys of any size remain in the Secrets and continue to function.
+On renewal or replacement, the older version generates new keys at its hardcoded sizes (4096-bit for root keys, 2048-bit for leaf keys).
 
 ### Trade-offs
 
@@ -181,10 +176,12 @@ Exposing keySize as a configurable field lets users choose the right balance for
 
 This change is **backward compatible**:
 
-* The `keySize` property defaults to `4096` when not set, matching the current root key size.
-* For leaf keys, the effective default changes from 2048 (OpenSSL implicit) to 4096 (Strimzi explicit).
-  This is a behavioral change, but it is in the direction of stronger security and only affects newly generated leaf keys, the existing certificates are not regenerated.
+* The `keySize` property defaults to `3072` when not set.
+* For root keys, the effective default changes from `4096` (Strimzi hardcoded) to `3072` (Strimzi configurable default).
+  Users who need to preserve 4096-bit root keys can set `keySize: 4096` explicitly.
+* For leaf keys, the effective default changes from `2048` (OpenSSL implicit) to `3072` (Strimzi explicit).
   Users who need to preserve 2048-bit leaf keys can set `keySize: 2048` explicitly.
+  These are behavioral changes, but they are in the direction of stronger security for leaf keys and only affect newly generated keys, existing certificates are not regenerated.
 * No existing `Kafka` custom resources need to be modified.
 * No rolling restarts are triggered by the introduction of this feature alone.
 
