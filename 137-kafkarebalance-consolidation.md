@@ -78,7 +78,7 @@ Consolidate auxiliary configuration fields into a new `spec.config` field, keepi
   Replaces the current `moveReplicasOffVolumes` field with a generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
   When this operand is used for modes where it is not relevant (e.g. full, add-brokers, or remove-brokers), an error is written in the status of the KafkaRebalance resource and a warning is logged.
   This field will remain a top-level field because it is simpler for users to work with and easier to validate.
-- `config`: a Map<String, String> replacing the existing primitive fields with their upstream [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) key-value equivalents:
+- `config`: a field of type `Map<String, String>` replacing the existing primitive fields with their upstream [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) key-value equivalents:
   - `skipHardGoalCheck` (new config key: `skip_hard_goal_check`, e.g. `"true"`):
     Boolean value whether to skip hard goal checks.
     Accepted in 3 out of 4 of the current rebalancing modes.
@@ -141,15 +141,67 @@ Consolidate auxiliary configuration fields into a new `spec.config` field, keepi
 
 #### Type Safety Tradeoff
 
-Moving parameters from typed primitive fields to a `Map<String, String>` means CRD-level type validation is no longer enforced at the schema level.
-This is the same tradeoff that other Strimzi components have made — `Kafka.spec.kafka.config` and `Kafka.spec.cruiseControl.config` both use Map<String, String> configuration fields to gain full extensibility.
+Moving parameters from typed primitive fields to a `Map<String, String>` field means CRD-level type validation is no longer enforced at the schema level.
+This is the same tradeoff that other Strimzi components have made — `Kafka.spec.kafka.config` and `Kafka.spec.cruiseControl.config` both use `Map<String, String>` configuration fields to gain full extensibility.
 In practice, the loss is limited: CRD validation for the existing fields only checks basic type constraints (non-negative integers, non-null strings) and cannot validate semantic correctness (e.g., whether a goal name is valid or an excluded topic regex matches any topics).
 Invalid values passed through `spec.config` will be caught by Cruise Control at request time and the operator will surface the error by transitioning the `KafkaRebalance` resource to `NotReady` with a descriptive status condition.
 
 #### Proposed API Structure
 
-**Tuning parameters move into `config` using upstream Cruise Control keys:**
+The selected fields mentioned in the [API Structure Redesign](#api-structure-redesign) move into `.spec.config` field using upstream Cruise Control keys.
 
+**Example of a `full` inter-broker rebalance with all the fields moved to `.spec.config`:**
+```yaml
+# Before (deprecated but supported)
+spec:
+  mode: full
+  goals:
+    - RackAwareGoal
+  skipHardGoalCheck: true
+  excludedTopics: "internal-.*"
+  concurrentPartitionMovementsPerBroker: 10
+  concurrentLeaderMovements: 500
+  replicationThrottle: 10485760
+  replicaMovementStrategies:
+     - com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy
+
+# After
+spec:
+  mode: full
+  config:
+    goals: "RackAwareGoal"
+    skip_hard_goal_check: "true"
+    excluded_topics: "internal-.*"
+    concurrent_partition_movements_per_broker: "10"
+    concurrent_leader_movements: "500"
+    replication_throttle: "10485760"
+    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
+```
+
+**Example of a `full` intra-broker rebalance with all the fields moved to `.spec.config`:**
+```yaml
+# Before (deprecated but supported)
+spec:
+  mode: full
+  rebalanceDisk: "true"
+  skipHardGoalCheck: true
+  excludedTopics: "internal-.*"
+  concurrentIntraBrokerPartitionMovements: 5
+  replicaMovementStrategies:
+     - com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy
+
+# After
+spec:
+  mode: full
+  config:
+    rebalance_disk: "true"
+    skip_hard_goal_check: "true"
+    excluded_topics: "internal-.*"
+    concurrent_intra_broker_partition_movements: "5"
+    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
+```
+
+**Example of an `add-brokers` rebalance with all the fields moved to `.spec.config`:**
 ```yaml
 # Before (deprecated but supported)
 spec:
@@ -157,20 +209,29 @@ spec:
   brokers: [3, 4]
   goals:
     - RackAwareGoal
+  skipHardGoalCheck: true
+  excludedTopics: "internal-.*"
   concurrentPartitionMovementsPerBroker: 10
+  concurrentLeaderMovements: 500
+  replicationThrottle: 10485760
+  replicaMovementStrategies:
+     - com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy
 
 # After
 spec:
   mode: add-brokers
   brokers: [3, 4]
-
-  # All auxiliary configurations consolidated under config
   config:
     goals: "RackAwareGoal"
+    skip_hard_goal_check: "true"
+    excluded_topics: "internal-.*"
     concurrent_partition_movements_per_broker: "10"
+    concurrent_leader_movements: "500"
+    replication_throttle: "10485760"
+    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
 ```
 
-**Volume targeting uses the new field name:**
+**Example of a `remove-disks` rebalance with `moveReplicasOffVolumes` field to `volumes` field:**
 ```yaml
 # Before (deprecated but supported)
 spec:
@@ -185,44 +246,6 @@ spec:
   volumes:
     - brokerId: 0
       volumeIds: [1, 2]
-
-  # All auxiliary configurations consolidated under config
-  config:
-    stop_ongoing_execution: "false"
-    reason: "Decommissioning disks on brokers 0 for storage migration"
-```
-
-**Full example with all tuning parameters moved to config:**
-```yaml
-# Before (deprecated but supported)
-spec:
-  mode: add-brokers
-  brokers: [3, 4]
-  goals:
-    - RackAwareGoal
-  skipHardGoalCheck: true
-  excludedTopics: "internal-.*"
-  concurrentPartitionMovementsPerBroker: 10
-  concurrentIntraBrokerPartitionMovements: 5
-  concurrentLeaderMovements: 500
-  replicationThrottle: 10485760
-  replicaMovementStrategies:
-     - com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy
-
-# After
-spec:
-  mode: add-brokers  # full, add-brokers, remove-brokers, remove-disks
-  brokers: [3, 4]
-  config:
-    goals: "RackAwareGoal"
-    skip_hard_goal_check: "true"
-    excluded_topics: "internal-.*"
-    concurrent_partition_movements_per_broker: "10"
-    concurrent_intra_broker_partition_movements: "5"
-    concurrent_leader_movements: "500"
-    replication_throttle: "10485760"
-    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
-    reason: "Adding brokers 3 and 4 to the cluster"
 ```
 
 ### Implementation Strategy
