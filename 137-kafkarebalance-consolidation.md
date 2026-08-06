@@ -2,8 +2,8 @@
 
  This proposal addresses the increasing complexity and limited extensibility of the `KafkaRebalance` custom resource API. 
  It introduces a `spec.config` Map<String, String> that replaces mode-specific primitive fields with their upstream Cruise Control key-value equivalents, allowing users to consult Cruise Control documentation directly and enabling support for new parameters without Strimzi API changes.
- It also replaces the action-specific `moveReplicasOffVolumes` field with a generic `volumes` field reusable by any mode that targets specific volumes on specific brokers. 
- These changes establish a clear separation between rebalance mode selection and tuning configuration, preventing API sprawl as new modes are introduced.
+ It also replaces the separate `brokers` and `moveReplicasOffVolumes` fields with a unified `nodes` field that identifies target brokers and, optionally, specific volumes on those brokers, reusable by any mode.
+ These changes establish a clear separation between rebalance mode selection, targeting, and tuning configuration, preventing API sprawl as new modes are introduced.
 
 ## Current situation
 
@@ -44,7 +44,7 @@ This information is only enforced at runtime in `KafkaRebalanceAssemblyOperator`
 
 4. **Future Mode Constraints**: Adding new modes becomes increasingly difficult as the top-level namespace becomes crowded with mode-specific fields.
 
-5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name, making it unsuitable for reuse by future modes that target volumes for different purposes (e.g., [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)). 
+5. **Action-Specific Naming**: The `moveReplicasOffVolumes` field encodes a specific action ("move replicas off") in its name, making it unsuitable for reuse by future modes that target volumes for different purposes (e.g. [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)).
 This forces each new volume-related mode to introduce its own field.
 
 ## Motivation
@@ -53,30 +53,27 @@ The motivation for this proposal stems from several factors:
 
 1. **Prevent API Debt**: As discussed in planning for future modes (like [broker demotion support](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)), we should not continue adding primitive fields to the top-level spec for every new mode.
 
-2. **Improve User Experience**: Users should be able to distinguish at a glance what an operation targets (`mode`, `brokers`, `volumes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
+2. **Improve User Experience**: Users should be able to distinguish at a glance what an operation targets (`mode`, `nodes`) and refer to upstream [Cruise Control documentation](https://github.com/linkedin/cruise-control/wiki/REST-APIs) on how different endpoints are tuned.
 
 3. **Maintain Long-term API Sustainability**: The current trajectory will lead to a bloated and confusing API that becomes increasingly difficult to maintain and extend.
 
-4. **Prepare for Volume-Targeting Modes**: Future modes like [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907) will need to target specific volumes on specific brokers. 
-A generic `volumes` field allows these modes to reuse the existing targeting mechanism.
+4. **Eliminate Operand Ambiguity**: With separate `brokers` and `volumes` fields, modes that can target either level of granularity (e.g. [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907)) force users to choose between two fields for the same mode.
+A unified `nodes` field with optional `volumeIds` resolves this by providing a single targeting mechanism that works at both broker and volume granularity.
 
 ## Proposal
 
 ### API Structure Redesign
 
-Consolidate auxiliary configuration fields into a new `spec.config` field, keeping `mode`, `brokers`, and adding a new `volumes` field at the top level of `spec`:
+Consolidate auxiliary configuration fields into a new `spec.config` field, replace the separate `brokers` and `moveReplicasOffVolumes` fields with a unified `nodes` field, and keep `mode` at the top level of `spec`:
 
 - `mode`: A string representing the rebalancing operation (e.g. `full`, `add-brokers`, `remove-brokers`, `remove-disks`)
-- `brokers`: A list of integers identifying the brokers the operation targets.
-  Accepted in 2 out of 4 of the current rebalancing modes.
-  When this operand is used for modes where it is not relevant (e.g. `full` or `remove-disks`), an error is written in the status of the `KafkaRebalance` resource and a warning is logged.
-  When this operand is used with the `remove-disks` mode, where a brokers list could be relevant, the operator will note to use `volumes` instead in the error and log message.
-  This distinction will be documented as well.
-  This field will remain a top-level field because it is simpler for users to work with and easier to validate.
-- `volumes`: A list of objects, each containing a `brokerId` (integer) and `volumeIds` (list of integers), identifying the volumes the operation targets. 
-  Accepted in 1 out of 4 of the current rebalancing modes.
-  Replaces the current `moveReplicasOffVolumes` field with a generic name that can be reused by any mode that needs to target specific volumes on specific brokers (e.g., `remove-disks` today, `demote-brokers` in the future).
-  When this operand is used for modes where it is not relevant (e.g. full, add-brokers, or remove-brokers), an error is written in the status of the KafkaRebalance resource and a warning is logged.
+- `nodes`: A list of `BrokerAndVolumeIds` objects, each containing a `brokerId` (integer) and an optional `volumeIds` (list of integers), identifying the brokers and optionally the specific volumes the operation targets.
+  This field replaces the separate `brokers` and `moveReplicasOffVolumes` fields with a single targeting mechanism.
+  Accepted in 3 out of 4 of the current rebalancing modes.
+  For broker-targeting modes (`add-brokers`, `remove-brokers`), only `brokerId` is specified and `volumeIds` must not be present.
+  For volume-targeting modes (`remove-disks`), both `brokerId` and `volumeIds` are required.
+  Future modes (e.g. `demote-brokers`) can use `nodes` with or without `volumeIds` to target either whole brokers or specific volumes, without ambiguity about which field to use.
+  When `nodes` is provided for modes where it is not relevant (e.g. `full`), an error is written in the status of the `KafkaRebalance` resource and a warning is logged.
   This field will remain a top-level field because it is simpler for users to work with and easier to validate.
 - `config`: a field of type `Map<String, String>` replacing the existing primitive fields with their upstream [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) key-value equivalents:
   - `skipHardGoalCheck` (new config key: `skip_hard_goal_check`, e.g. `"true"`):
@@ -143,7 +140,7 @@ Consolidate auxiliary configuration fields into a new `spec.config` field, keepi
 
 Moving parameters from typed primitive fields to a `Map<String, String>` field means CRD-level type validation is no longer enforced at the schema level.
 This is the same tradeoff that other Strimzi components have made — `Kafka.spec.kafka.config` and `Kafka.spec.cruiseControl.config` both use `Map<String, String>` configuration fields to gain full extensibility.
-In practice, the loss is limited: CRD validation for the existing fields only checks basic type constraints (non-negative integers, non-null strings) and cannot validate semantic correctness (e.g., whether a goal name is valid or an excluded topic regex matches any topics).
+In practice, the loss is limited: CRD validation for the existing fields only checks basic type constraints (non-negative integers, non-null strings) and cannot validate semantic correctness (e.g. whether a goal name is valid or an excluded topic regex matches any topics).
 Invalid values passed through `spec.config` will be caught by Cruise Control at request time and the operator will surface the error by transitioning the `KafkaRebalance` resource to `NotReady` with a descriptive status condition.
 
 #### Proposed API Structure
@@ -201,7 +198,7 @@ spec:
     replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
 ```
 
-**Example of an `add-brokers` rebalance with all the fields moved to `.spec.config`:**
+**Example of an `add-brokers` rebalance with all the fields moved to `.spec.config` and `brokers` to `nodes`:**
 ```yaml
 # Before (deprecated but supported)
 spec:
@@ -220,7 +217,9 @@ spec:
 # After
 spec:
   mode: add-brokers
-  brokers: [3, 4]
+  nodes:
+    - brokerId: 3
+    - brokerId: 4
   config:
     goals: "RackAwareGoal"
     skip_hard_goal_check: "true"
@@ -231,7 +230,7 @@ spec:
     replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
 ```
 
-**Example of a `remove-disks` rebalance with `moveReplicasOffVolumes` field to `volumes` field:**
+**Example of a `remove-disks` rebalance with `moveReplicasOffVolumes` moved to `nodes`:**
 ```yaml
 # Before (deprecated but supported)
 spec:
@@ -243,52 +242,60 @@ spec:
 # After
 spec:
   mode: remove-disks
-  volumes:
+  nodes:
     - brokerId: 0
       volumeIds: [1, 2]
 ```
 
 ### Implementation Strategy
 
-1. **Introduce the new `config` and `volumes` field** while maintaining backward compatibility:
-   - Add a `config` field of type Map<String, String> and a `volumes` field of type List<BrokerAndVolumeIds> to the `KafkaRebalanceSpec` alongside the existing fields.
-   No existing fields are removed so the legacy fields (for example, `moveReplicasOffVolumes` and `goals`) will continue to be supported when specified in the `KafkaRebalance` resource.
-   - Ensure both the legacy fields and the new `config` and `volumes` fields use the same implementation underneath.
+1. **Introduce the new `config` and `nodes` field** while maintaining backward compatibility:
+   - Add a `config` field of type Map<String, String> and a `nodes` field of type List<BrokerAndVolumeIds> to the `KafkaRebalanceSpec` alongside the existing fields.
+   The `nodes` field reuses the existing `BrokerAndVolumeIds` type with two modifications:
+     - Remove the `@MinimumItems(1)` annotation from `volumeIds` so that it can be omitted for broker-only targeting modes.
+      This is a loosening of CRD-level validation but all previously valid resources remain valid.
+      The only effect on the deprecated `moveReplicasOffVolumes` field is that the CRD will no longer reject `volumeIds: []` at admission time but the operator already validates this at runtime: [`KafkaRebalanceAssemblyOperator`](https://github.com/strimzi/strimzi-kafka-operator/blob/1.1.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaRebalanceAssemblyOperator.java#L283-L291) checks that the list is non-null and non-empty for `remove-disks` mode.
+       The field is being removed in Strimzi 2.0, so this minor loosening is short-lived.
+     - Update `@Description` annotations to be mode-neutral (e.g. "ID of the broker to target" instead of "ID of the broker that contains the disk from which you want to move the partition replicas").
+   No existing fields are removed so the legacy fields (for example, `brokers`, `moveReplicasOffVolumes`, and `goals`) will continue to be supported when specified in the `KafkaRebalance` resource.
+   - Ensure both the legacy fields and the new `config` and `nodes` fields use the same implementation underneath.
    - Following the same pattern used for [`kafka.config`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/api/src/main/java/io/strimzi/api/kafka/model/kafka/KafkaClusterSpec.java#L56-L72) and [`cruiseControl.config`](https://github.com/strimzi/strimzi-kafka-operator/blob/main/api/src/main/java/io/strimzi/api/kafka/model/kafka/cruisecontrol/CruiseControlSpec.java#L46-L50) sections of the `Kafka` resource
   configuration, we will maintain `FORBIDDEN_PREFIXES` and `FORBIDDEN_PREFIX_EXCEPTIONS` constants in the
   KafkaRebalanceSpec.
      These constants will help filter keys in `spec.config` that conflict with operator-managed behavior or top-level fields, for example:
       - `dryrun`: managed by the operator as part of the rebalance proposal lifecycle.
       - `json`, `verbose`: response format parameters managed internally by the operator.
-      - `brokerid`: broker targeting is handled by the top-level brokers field.
-      - `brokerid_and_logdirs`: volume targeting is handled by the top-level volumes field.
+      - `brokerid`: broker targeting is handled by the top-level `nodes` field.
+      - `brokerid_and_logdirs`: volume targeting is handled by the top-level `nodes` field (via `volumeIds`).
 
      If any forbidden key is present in `spec.config`, the KafkaRebalance resource will transition to `NotReady` with a status condition identifying the forbidden key and explaining why it is not allowed. 
      This differs from the silent-drop behavior used by `spec.cruiseControl.config` in the Kafka resource, but is more appropriate here because silently ignoring a key like `dryrun` could lead to unintended rebalance execution.
 
 2. **Add validation** that rejects mixing old and new API structures and enforces mode-specific constraints.
    - **API style validation**:
-     - If `spec.config` is set alongside any deprecated primitive field (`goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`), the `KafkaRebalance` resource transitions to `NotReady` with a status  condition explaining that the two API styles cannot be combined.
+     - If `spec.config` is set alongside any deprecated primitive field (`goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`), the `KafkaRebalance` resource transitions to `NotReady` with a status condition explaining that the two API styles cannot be combined.
        This applies regardless of whether the old and new fields refer to the same or different parameters, the check is simply whether any legacy primitive field is set to a non-default value while `spec.config` is also present.
        Users must migrate all tuning configuration into `spec.config` or continue using the legacy fields exclusively until they are ready to migrate.
+     - If `spec.nodes` is set alongside the deprecated `brokers` or `moveReplicasOffVolumes` field, the `KafkaRebalance` resource transitions to `NotReady` with a status condition explaining that `nodes` cannot be combined with the legacy operand fields.
 
    - **Mode-specific operand validation**:
-     - `brokers` is required and non-empty for `add-brokers` and `remove-brokers` modes
-     - `volumes` is required and non-empty for `remove-disks` mode.
-     - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `brokers` or `volumes` are provided but irrelevant to the selected mode.
+     - `nodes` is required and non-empty for `add-brokers`, `remove-brokers`, and `remove-disks` modes.
+     - For `add-brokers` and `remove-brokers` modes, `volumeIds` must not be present on any entry in `nodes`. If present, the resource transitions to `NotReady` with a message explaining that volume targeting is not supported for the selected mode.
+     - For `remove-disks` mode, `volumeIds` is required and non-empty on every entry in `nodes`.
+     - Strimzi will log a warning and write an error in the `KafkaRebalance` status when `nodes` is provided but irrelevant to the selected mode (e.g. `full`).
 
    - **Parameter field validation**:
-     - If `spec.config` contains any key that conflicts with operator-managed functionality (e.g., `dryrun`, `json`, or `verbose`, check the [Filtered Parameters](#filtered-parameters) section below for an exhaustive list) the `KafkaRebalance` resource will transition to `NotReady` state with a status condition identifying the forbidden key.
+     - If `spec.config` contains any key that conflicts with operator-managed functionality (e.g. `dryrun`, `json`, or `verbose`, check the [Filtered Parameters](#filtered-parameters) section below for an exhaustive list) the `KafkaRebalance` resource will transition to `NotReady` state with a status condition identifying the forbidden key.
      Supported config parameters will be passed as-is to the Cruise Control REST API.
      - If Cruise Control returns an error for a config parameter whether due to an invalid value or an unknown key, Strimzi will transition the `KafkaRebalance` resource to the `NotReady` state and surface the error in a warning condition on the resource's status.
 
 3. **Deprecate old fields and plan removal**
-   - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies` and `moveReplicasOffVolumes`
+   - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `brokers`, `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`, and `moveReplicasOffVolumes`
    - These fields will be removed in the next major API version, Strimzi 2.0.
-     A conversion webhook or migration tool will be provided to automatically convert existing `KafkaRebalance` resources from the legacy fields to the new `spec.config` and `volumes` structure, following the same approach used for the 1.0 migration.
+     A conversion webhook or migration tool will be provided to automatically convert existing `KafkaRebalance` resources from the legacy fields to the new `spec.config` and `spec.nodes` structure, following the same approach used for the 1.0 migration.
 
 4. **Update examples** to encourage use of new API structure
-   - Ensure the packaged `KafkaRebalance` resource examples are updated to use new API structure.
+   - Ensure the packaged `KafkaRebalance` resource examples are updated to use the new API structure (replacing `brokers` and `moveReplicasOffVolumes` with `nodes`).
 
 5. **Update documentation** to promote the new structure while documenting the old structure as deprecated and point to the upstream [Cruise Control REST API Wiki](https://github.com/linkedin/cruise-control/wiki/REST-APIs) where needed.
    - Add a table to the documentation mapping new fields to the corresponding legacy fields that they are replacing.
@@ -303,8 +310,8 @@ spec:
 | `json`                  | Hardcoded to `true` by Strimzi. Changing this would break response parsing.                                                                     |
 | `verbose`               | Changing verbosity could break status reporting.                                                                                                |
 | `super_verbose`         | Same as `verbose`                                                                                                                               |
-| `brokerid`              | Managed via `spec.brokers` top-level field.                                                                                                     |
-| `brokerid_and_logdirs`  | Managed via `spec.volumes` top-level field.                                                                                                     |
+| `brokerid`              | Managed via `spec.nodes` top-level field (`brokerId`).                                                                                          |
+| `brokerid_and_logdirs`  | Managed via `spec.nodes` top-level field (`brokerId` + `volumeIds`).                                                                            |
 
 #### Error Examples
 
@@ -332,8 +339,14 @@ spec:
     - **Cruise Control log**: Full error / stack trace
 
   5. **Wrong operand for mode (Strimzi validates)**:
-    - **KafkaRebalance status**: NotReady with message: "The `brokers` field is not supported in `remove-disks` mode. 
-      Use the `volumes` field to specify broker and volume ID mappings."
+    - **KafkaRebalance status**: NotReady with message: "The `nodes` field is not supported in `full` mode.
+      Remove the `nodes` field to proceed."
+    - **Cluster Operator log**: WARN with same message
+    - **Cruise Control log**: N/A
+
+  6. **`volumeIds` present on wrong mode (Strimzi validates)**:
+    - **KafkaRebalance status**: NotReady with message: "The `volumeIds` field in `nodes` entries is not supported in `add-brokers` mode.
+      Remove `volumeIds` from all `nodes` entries to proceed."
     - **Cluster Operator log**: WARN with same message
     - **Cruise Control log**: N/A
 
@@ -378,7 +391,9 @@ metadata:
   name: add-brokers-rebalance
 spec:
   mode: add-brokers
-  brokers: [3, 4]
+  nodes:
+    - brokerId: 3
+    - brokerId: 4
   config:
     goals: "RackAwareGoal, ReplicaCapacityGoal"
     concurrent_partition_movements_per_broker: "10"
@@ -394,7 +409,9 @@ metadata:
   name: remove-brokers-rebalance
 spec:
   mode: remove-brokers
-  brokers: [3, 4]
+  nodes:
+    - brokerId: 3
+    - brokerId: 4
   config:
     goals: "RackAwareGoal, ReplicaCapacityGoal"
     concurrent_partition_movements_per_broker: "10"
@@ -410,7 +427,7 @@ metadata:
   name: remove-disks-rebalance
 spec:
   mode: remove-disks
-  volumes:
+  nodes:
     - brokerId: 0
       volumeIds: [1, 2]
     - brokerId: 2
@@ -424,7 +441,7 @@ spec:
 #### Add Broker Demotion Support
 
 This structure enables cleaner additions for future modes.
-The top-level operand fields (`brokers`, `volumes`) provide a stable, reusable targeting mechanism and allow supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API.
+The unified `nodes` field provides a stable, reusable targeting mechanism that works at both broker and volume granularity, and `spec.config` allows supporting new optimization parameters without the need to update the Strimzi `KafkaRebalance` API.
 One example of this would be to add [broker demotion](https://github.com/strimzi/strimzi-kafka-operator/issues/11907) support.
 
 With the proposed API, such a feature could look like this:
@@ -438,9 +455,9 @@ metadata:
   name: demote-brokers-example-1
 spec:
   mode: demote-brokers
-  brokers:
-    - 3
-    - 4
+  nodes:
+    - brokerId: 3
+    - brokerId: 4
   config:
     exclude_recently_demoted_brokers: "true"
 ```
@@ -454,7 +471,7 @@ metadata:
   name: demote-brokers-example-2
 spec:
   mode: demote-brokers
-  volumes:
+  nodes:
     - brokerId: 3
       volumeIds: [1, 2]
     - brokerId: 4
@@ -462,6 +479,8 @@ spec:
   config:
     exclude_recently_demoted_brokers: "true"
 ```
+
+Note how `demote-brokers` uses the same `nodes` field regardless of whether it targets whole brokers or specific volumes.
 
 #### Cruise Control Parameter Schema Validation
 
@@ -480,9 +499,11 @@ This proposal affects only the Strimzi Cluster Operator.
 The proposal maintains strict backward compatibility.
 Both old and new structures are supported, but not simultaneously:
 - Old top-level primitive fields read as before, with deprecation warnings.
-- `moveReplicasOffVolumes` is mapped internally to `volumes`.
-- The new `config` field and `volumes` field are used when present.
-- If both `spec.config` and any deprecated primitive field are set on the same resource, the resource transitions to `NotReady` with a status condition explaining the conflict.
+- `brokers` is mapped internally to `nodes` (each broker ID becomes a `BrokerAndVolumeIds` with no `volumeIds`).
+- `moveReplicasOffVolumes` is mapped internally to `nodes` (each entry is already a `BrokerAndVolumeIds` and is used directly).
+- The new `config` field and `nodes` field are used when present.
+- If `spec.nodes` is set alongside the deprecated `brokers` or `moveReplicasOffVolumes` field, the resource transitions to `NotReady` with a status condition explaining the conflict.
+- If `spec.config` is set alongside any deprecated primitive field, the resource transitions to `NotReady` with a status condition explaining the conflict.
 This prevents ambiguity from merge or override logic and ensures users do not accidentally perform a rebalance with configuration different from what they expect.
 
 ## Rejected alternatives
@@ -493,3 +514,13 @@ This prevents ambiguity from merge or override logic and ensures users do not ac
 - Continues the problematic pattern
 - Makes the API increasingly difficult to understand and maintain
 - Does not scale well as more modes are added
+
+### Alternative 2: Separate `brokers` and `volumes` Operand Fields
+
+Instead of a unified `nodes` field, use two separate top-level operand fields: `brokers` of type `List<Integer>` for broker-targeting modes and `volumes` of type `BrokerAndVolumeIds` for volume-targeting modes.
+
+**Rejected because**:
+- Creates ambiguity for modes that can target either brokers or volumes (e.g. `demote-brokers`).
+- Users must decide which of two fields to use for the same mode depending on whether they are targeting whole brokers or specific volumes.
+- Does not clearly signal whether future modes like broker-level demotion should use `brokers` or `volumes`, leading to a confusing user experience.
+- The unified `nodes` field with optional `volumeIds` naturally expresses both levels of granularity in a single, consistent structure.
