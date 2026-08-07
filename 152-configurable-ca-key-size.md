@@ -85,11 +85,9 @@ This follows the same pattern as `validityDays` which also applies to all certif
 
 #### Defaults and validation
 
-* **Default value:** `4096`, the current root certificate key size, preserving backward compatibility for root certificate keys.
+* **Default value:** `4096`, matching the current root certificate key size.
   This will change the effective key size for leaf certificates from `2048` bits, OpenSSL's implicit default, to `4096` bits.
   This is a deliberate change: relying on an implicit OpenSSL default is fragile and aligning leaf certificate keys with the root certificate key size is a safer baseline. For users who need the previous 2048-bit leaf key size, they can set keySize: `2048` explicitly.
-
-* **Minimum value:** `2048` since smaller RSA keys do not meet any current security standard and therefore should not be supported.
 
 * **Recommended key sizes:** Common RSA key sizes and their security strengths are documented in [NIST SP 800-57 Part 1 Rev. 5, Table 2](https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-57pt1r5.pdf).
   A table with the common key sizes will be added to the Strimzi documentation as a guideline for users selecting a key size.
@@ -114,16 +112,12 @@ Following the existing pattern established by `validityDays` we would add a `key
 
 ```java
 public class CertificateAuthority implements UnknownPropertyPreserving {
-    //... existing fields
-    public static final int DEFAULT_KEY_SIZE = 4096;
 
     // ... existing fields 
     private int keySize;
 
     @Description("The RSA key size in bits for CA and end-entity certificate keys. " +
-            "Must be at least 2048." +
             "Default is 4096.")
-    @Minimum(2048)
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     public int getKeySize() {
         return keySize;
@@ -143,16 +137,16 @@ This will be done by adding a new environment variable `STRIMZI_CLIENTS_CA_KEY_S
 
 ### Behavior on key size change
 
-When a user changes the `keySize` on an existing cluster`:
+When a user changes the `keySize` on an existing cluster:
 
 * **No immediate key regeneration.** Changing `keySize` alone does not trigger an immediate root key replacement or leaf certificate regeneration.
   The new key size takes effect the next time a key is generated during root key replacement (triggered by `certificateExpirationPolicy: replace-key` at renewal time or a manual force-replace annotation) or when new leaf certificates are issued (e.g. scaling up, adding a new `KafkaUser`).
 * **Existing certificates remain valid.** Certificates generated with the previous key size continue to function until they are naturally renewed or replaced.
   This avoids unnecessary rolling restarts.
-* **Gradual rollout.** To immediately apply a new key size to all certificates, the user should:
+* **Immediate rollout.** To immediately apply a new key size to all certificates, the user should:
   1. Set the desired `keySize` in the `Kafka` resource.
-  2. Trigger a root key replacement using the `strimzi.io/force-replace` annotation on the root key Secret.
-  This will generate a new root key with the configured size and trigger re-issuance of all leaf certificates followed by rolling restarts.
+  2. Trigger a CA private key replacement using the `strimzi.io/force-replace` annotation on the `<cluster-name>-cluster-ca` Secret.
+  This will generate and rollout a new CA private key with the configured size and trigger re-issuance of all leaf certificates followed by rolling restarts.
 * **Upgrade behavior.** This same behavior applies when upgrading to a Strimzi version that introduces the `keySize` property.
 The new default key size does not trigger immediate regeneration of existing keys, it only takes effect when keys are next generated during renewal, replacement, or new certificate issuance.
 * **Downgrade behavior.** When downgrading to a Strimzi version without the `keySize` property, existing keys of any size remain in the Secrets and continue to function.
