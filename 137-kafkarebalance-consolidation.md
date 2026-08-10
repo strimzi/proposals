@@ -319,7 +319,7 @@ spec:
 | `brokerid`              | Managed via `spec.nodes` top-level field (`brokerId`).                                                                                          |
 | `brokerid_and_logdirs`  | Managed via `spec.nodes` top-level field (`brokerId` + `volumeIds`).                                                                            |
 
-#### Error Examples
+#### Validation Examples
 
   1. **Mixing old and new fields (Strimzi converts with warnings)**:
     - **KafkaRebalance status**: The resource proceeds normally.
@@ -507,7 +507,7 @@ This proposal affects only the Strimzi Cluster Operator.
 ### Backward Compatibility Strategy
 
 The proposal maintains strict backward compatibility.
-Both old and new fields are supported simultaneously and users can mix them freely during incremental migration.
+Both old and new fields are supported simultaneously.
 At the beginning of each reconciliation, the operator converts deprecated fields to their new equivalents one by one.
 If the deprecated field is set and the new field is empty, the value is copied to the new field.
 If both are set, the new field takes priority and a warning is issued.
