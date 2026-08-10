@@ -89,6 +89,10 @@ This follows the same pattern as `validityDays` which also applies to all certif
   This will change the effective key size for leaf certificates from `2048` bits, OpenSSL's implicit default, to `4096` bits.
   This is a deliberate change: relying on an implicit OpenSSL default is fragile and aligning leaf certificate keys with the root certificate key size is a safer baseline. For users who need the previous 2048-bit leaf key size, they can set keySize: `2048` explicitly.
 
+* **Minimum value:** `512`, OpenSSL does not support generating RSA keys smaller than `512` bits and will fail with a "key size too small" error.
+  Aligning the minimum with OpenSSL's lower bound avoids exposing users to cryptic OpenSSL errors.
+  The Strimzi documentation will reference the minimum supported key sizes for both OpenSSL and cert-manager, with links to their respective documentation, as a guide for users configuring `keySize`.
+
 * **Recommended key sizes:** Common RSA key sizes and their security strengths are documented in [NIST SP 800-57 Part 1 Rev. 5, Table 2](https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-57pt1r5.pdf).
   A table with the common key sizes will be added to the Strimzi documentation as a guideline for users selecting a key size.
 
@@ -117,7 +121,9 @@ public class CertificateAuthority implements UnknownPropertyPreserving {
     private int keySize;
 
     @Description("The RSA key size in bits for CA and end-entity certificate keys. " +
+            "Must be at least 512." +
             "Default is 4096.")
+    @Minimum(512)
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     public int getKeySize() {
         return keySize;
