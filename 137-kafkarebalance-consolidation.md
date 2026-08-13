@@ -69,7 +69,6 @@ Consolidate auxiliary configuration fields into a new `spec.config` field, repla
 - `mode`: A string representing the rebalancing operation (e.g. `full`, `add-brokers`, `remove-brokers`, `remove-disks`)
 - `nodes`: A list of `BrokerAndVolumeIds` objects, each containing a `brokerId` (integer) and an optional `volumeIds` (list of integers), identifying the brokers and optionally the specific volumes the operation targets.
   This field replaces the separate `brokers` and `moveReplicasOffVolumes` fields with a single targeting mechanism.
-  Accepted in 3 out of 4 of the current rebalancing modes.
   For broker-targeting modes (`add-brokers`, `remove-brokers`), only `brokerId` is specified and `volumeIds` must not be present.
   For volume-targeting modes (`remove-disks`), both `brokerId` and `volumeIds` are required.
   Future modes (e.g. `demote-brokers`) can use `nodes` with or without `volumeIds` to target either whole brokers or specific volumes, without ambiguity about which field to use.
@@ -77,56 +76,47 @@ Consolidate auxiliary configuration fields into a new `spec.config` field, repla
 - `config`: a field of type `Map<String, String>` replacing the existing primitive fields with their upstream [Cruise Control REST API](https://github.com/linkedin/cruise-control/wiki/REST-APIs) key-value equivalents:
   - `skipHardGoalCheck` (new config key: `skip_hard_goal_check`, e.g. `"true"`):
     Boolean value whether to skip hard goal checks.
-    Accepted in 3 out of 4 of the current rebalancing modes.
     Although a top-level primitive boolean offers convenient CRD validation, placing it under `.spec.config` alongside the other configuration options is more consistent, intuitive, and scalable.
     The field is also expected to be used infrequently so the convenience tradeoff affects few users in practice.
   - `rebalanceDisk` (new config key: `rebalance_disk`, e.g. `"true"`):
     Enable intra-broker disk rebalancing.
-    Accepted in 1 out of 4 of the current rebalancing modes and expected to be used frequently.
     However, when enabled, fields such as `replicationThrottle`, `goals`, and `concurrentPartitionMovementsPerBroker` are ignored. 
     A top-level field that invalidates other top-level fields creates a confusing user experience.
     This is a composability issue in the upstream Cruise Control API.
     Placing the field under `.spec.config` keeps the problem in the Cruise Control API's domain while providing flexibility if the Cruise Control API evolves to fix it.
   - `excludedTopics` (new config key: `excluded_topics`, e.g. `"__consumer_offsets|__transaction_state"`):
     Regex pattern for topics to exclude.
-    Accepted in 3 out of 4 of the current rebalancing modes and is expected to see moderate to frequent use.
     However, CRD validation can only verify the value is a string, not whether the referenced topics exist, so a top-level field provides little practical benefit over `.spec.config`. 
     Moving it to `.spec.config` alongside other configuration options keeps the API surface consistent.
   - `concurrentPartitionMovementsPerBroker` (new config key: `concurrent_partition_movements_per_broker`, e.g. `"10"`):
     Concurrent inter-broker movements.
-    Accepted in 3 out of 4 of the current rebalancing modes.
     We expect moderate usage of this field, but representing it as a primitive provides limited benefit.
     While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
   - `concurrentIntraBrokerPartitionMovements` (new config key: `concurrent_intra_broker_partition_movements`, e.g. `"2"`):
     Concurrent intra-broker movements per broker.
-    Accepted in 1 out of 4 of the current rebalancing modes and expected to be used infrequently.
     Like the `rebalanceDisk` field, it cannot be combined with other rebalancing options in the current Cruise Control REST API. 
     It is only applicable when `rebalanceDisk` is set to `true`.
     This is a composability issue in the upstream Cruise Control API.
     Placing the field under `.spec.config` keeps the problem in the upstream Cruise Control API's domain while providing flexibility if the upstream Cruise Control API evolves to fix it.
   - `concurrentLeaderMovements` (new config key: `concurrent_leader_movements`, e.g. `"500"`):
     Concurrent leader movements.
-    Accepted in 3 out of 4 of the current rebalancing modes.
     We expect low to moderate usage of this field, but representing it as a primitive provides limited benefit.
     While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
   - `replicationThrottle` (new config key: `replication_throttle`, e.g. `"20971520"`):
     Replication bandwidth throttle in bytes/sec.
-    Accepted in 3 out of 4 of the current rebalancing modes.
     We expect moderate usage of this field but representing it as a primitive provides limited benefit.
     While CRD validation can ensure the value is non-negative, this alone does not justify maintaining it as a top-level field. 
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
   - `goals` (new config key: `goals`, e.g. `"RackAwareGoal,ReplicaCapacityGoal"`):
     Optimization goals (comma-separated string).
-    Accepted in 3 out of 4 of the current rebalancing modes.
     We expect high usage of this field but representing it as a List<String> provides limited benefit other than formatting.
     The CRD validation can verify the value is a List<String> but cannot check whether the referenced goals are valid.
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent user experience and its frequent use does not depend on top-level visibility.
     However, users who currently specify a YAML list will need to join them into a single comma-separated string value.
   - `replicaMovementStrategies` (new config key: `replica_movement_strategies`, e.g. `"PrioritizeSmallReplicaMovementStrategy"`):
     Replica movement strategies (comma-separated string).
-    Accepted in 3 out of 4 of the current rebalancing modes.
     We expect infrequent usage of this field and representing it as a primitive provides limited benefit.
     While CRD validation can verify that the value is a string, it does not check whether the referenced movement strategies are valid so this alone does not justify maintaining it as a top-level field.
     Moving this field under `.spec.config` alongside the other configuration options provides a more consistent and intuitive user experience.
@@ -156,6 +146,11 @@ spec:
   mode: full
   goals:
     - RackAwareGoal
+    - RackAwareDistributionGoal
+    - ReplicaCapacityGoal
+    - DiskCapacityGoal
+    - DiskUsageDistributionGoal
+    - LeaderReplicaDistributionGoal
   skipHardGoalCheck: true
   excludedTopics: "internal-.*"
   concurrentPartitionMovementsPerBroker: 10
@@ -174,7 +169,7 @@ spec:
     concurrent_partition_movements_per_broker: "10"
     concurrent_leader_movements: "500"
     replication_throttle: "10485760"
-    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
+    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy, com.linkedin.kafka.cruisecontrol.analyzer.goals.RackAwareDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskUsageDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal"
 ```
 
 **Example of a `full` intra-broker rebalance with all the fields moved to `.spec.config`:**
@@ -240,6 +235,10 @@ spec:
   moveReplicasOffVolumes:
     - brokerId: 0
       volumeIds: [1, 2]
+    - brokerId: 1
+      volumeIds: [0]
+    - brokerId: 2
+      volumeIds: [0, 2]
 
 # After
 spec:
@@ -247,6 +246,10 @@ spec:
   nodes:
     - brokerId: 0
       volumeIds: [1, 2]
+    - brokerId: 1
+      volumeIds: [0]
+    - brokerId: 2
+      volumeIds: [0, 2]
 ```
 
 ### Implementation Strategy
@@ -256,7 +259,7 @@ spec:
      The `nodes` field reuses the existing `BrokerAndVolumeIds` type with one modification:
      - Update `@Description` annotations to be mode-neutral (e.g. "ID of the broker to target" instead of "ID of the broker that contains the disk from which you want to move the partition replicas").
    - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `brokers`, `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`, and `moveReplicasOffVolumes`
-   - These fields will be removed in the next major API version, Strimzi 2.0.
+   - These fields will be removed in the next major API version, Strimzi CRD API v2.
      A conversion webhook or migration tool will be provided to automatically convert existing `KafkaRebalance` resources from the legacy fields to the new `spec.config` and `spec.nodes` structure, following the same approach used for the 1.0 migration.
 
    No existing fields are removed so the legacy fields (for example, `brokers`, `moveReplicasOffVolumes`, and `goals`) will continue to be supported when specified in the `KafkaRebalance` resource.
@@ -357,90 +360,6 @@ spec:
 The following examples use the new API structure.
 Note that `spec.config` accepts any key supported by and passed to the Cruise Control REST API provided it is not in the Strimzi forbidden parameter list (see [Filtered Parameters](#filtered-parameters)).
 Keys like `max_partition_movements_in_cluster` and `stop_ongoing_execution` shown below are not migrated from existing fields but are newly accessible without any Strimzi API changes.
-
-#### Example of a `full` inter-broker rebalance
-
-```yaml
-apiVersion: kafka.strimzi.io/v1
-kind: KafkaRebalance
-metadata:
-  name: full-rebalance
-spec:
-  mode: full
-  config:
-    goals: "CpuCapacityGoal, NetworkInboundCapacityGoal, DiskCapacityGoal"
-    max_partition_movements_in_cluster: "100"
-    concurrent_partition_movements_per_broker: "10"
-```
-
-#### Example of a `full` intra-broker (Disk) rebalance
-
-```yaml
-apiVersion: kafka.strimzi.io/v1
-kind: KafkaRebalance
-metadata:
-  name: full-rebalance
-spec:
-  mode: full
-  config:
-    rebalance_disk: "true"
-    goals: "IntraBrokerDiskCapacityGoal, IntraBrokerDiskUsageDistributionGoal"
-    concurrent_intra_broker_partition_movements: "2"
-```
-
-#### Example of an `add-brokers` rebalance
-
-```yaml
-apiVersion: kafka.strimzi.io/v1
-kind: KafkaRebalance
-metadata:
-  name: add-brokers-rebalance
-spec:
-  mode: add-brokers
-  nodes:
-    - brokerId: 3
-    - brokerId: 4
-  config:
-    goals: "RackAwareGoal, ReplicaCapacityGoal"
-    concurrent_partition_movements_per_broker: "10"
-    replication_throttle: "20971520"
-```
-
-#### Example of a `remove-brokers` rebalance
-
-```yaml
-apiVersion: kafka.strimzi.io/v1
-kind: KafkaRebalance
-metadata:
-  name: remove-brokers-rebalance
-spec:
-  mode: remove-brokers
-  nodes:
-    - brokerId: 3
-    - brokerId: 4
-  config:
-    goals: "RackAwareGoal, ReplicaCapacityGoal"
-    concurrent_partition_movements_per_broker: "10"
-    replication_throttle: "20971520"
-```
-
-#### Example of a `remove-disks` rebalance
-
-```yaml
-apiVersion: kafka.strimzi.io/v1
-kind: KafkaRebalance
-metadata:
-  name: remove-disks-rebalance
-spec:
-  mode: remove-disks
-  nodes:
-    - brokerId: 0
-      volumeIds: [1, 2]
-    - brokerId: 2
-      volumeIds: [1]
-  config:
-    stop_ongoing_execution: "false"
-```
 
 ### Future Extensibility
 
