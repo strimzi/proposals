@@ -157,6 +157,11 @@ When a user changes the `keySize` on an existing cluster:
 The new default key size does not trigger immediate regeneration of existing keys, it only takes effect when keys are next generated during renewal, replacement, or new certificate issuance.
 * **Downgrade behavior.** When downgrading to a Strimzi version without the `keySize` property, existing keys of any size remain in the Secrets and continue to function.
 On renewal or replacement, the older version generates new keys at its hardcoded sizes (4096-bit for root keys, 2048-bit for leaf keys).
+* **Cert-Manager behavior.** When using Cert-Manager, changing `keySize` causes Strimzi to immediately
+  update the `spec.privateKey.size` field in the `Certificate` resource.
+  Cert-Manager detects this change and immediately re-issues the certificate with the new key size.
+  This behavior is different from that of the Strimzi-managed CA where regeneration is deferred until the next renewal or replacement.
+  This difference in behavior will be noted in the Strimzi documentation.
 
 ### Trade-offs
 
