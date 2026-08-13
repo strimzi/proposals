@@ -253,11 +253,7 @@ spec:
 
 1. **Introduce the new `config` and `nodes` field** while maintaining backward compatibility:
    - Add a `config` field of type Map<String, String> and a `nodes` field of type `List<BrokerAndVolumeIds>` to the `KafkaRebalanceSpec` alongside the existing fields.
-   The `nodes` field reuses the existing `BrokerAndVolumeIds` type with two modifications:
-     - Remove the `@MinimumItems(1)` annotation from `volumeIds` so that it can be omitted for broker-only targeting modes.
-      This is a loosening of CRD-level validation but all previously valid resources remain valid.
-      The only effect on the deprecated `moveReplicasOffVolumes` field is that the CRD will no longer reject `volumeIds: []` at admission time but the operator already validates this at runtime: [`KafkaRebalanceAssemblyOperator`](https://github.com/strimzi/strimzi-kafka-operator/blob/1.1.0/cluster-operator/src/main/java/io/strimzi/operator/cluster/operator/assembly/KafkaRebalanceAssemblyOperator.java#L283-L291) checks that the list is non-null and non-empty for `remove-disks` mode.
-       The field is being removed in Strimzi 2.0, so this minor loosening is short-lived.
+     The `nodes` field reuses the existing `BrokerAndVolumeIds` type with one modification:
      - Update `@Description` annotations to be mode-neutral (e.g. "ID of the broker to target" instead of "ID of the broker that contains the disk from which you want to move the partition replicas").
    - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `brokers`, `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`, and `moveReplicasOffVolumes`
    - These fields will be removed in the next major API version, Strimzi 2.0.
