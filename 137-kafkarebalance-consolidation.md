@@ -163,13 +163,13 @@ spec:
 spec:
   mode: full
   config:
-    goals: "RackAwareGoal"
+    goals: "com.linkedin.kafka.cruisecontrol.analyzer.goals.RackAwareGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.RackAwareDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskUsageDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal"
     skip_hard_goal_check: "true"
     excluded_topics: "internal-.*"
     concurrent_partition_movements_per_broker: "10"
     concurrent_leader_movements: "500"
     replication_throttle: "10485760"
-    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy, com.linkedin.kafka.cruisecontrol.analyzer.goals.RackAwareDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskCapacityGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.DiskUsageDistributionGoal, com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal"
+    replica_movement_strategies: "com.linkedin.kafka.cruisecontrol.executor.strategy.PrioritizeSmallReplicaMovementStrategy"
 ```
 
 **Example of a `full` intra-broker rebalance with all the fields moved to `.spec.config`:**
@@ -256,8 +256,9 @@ spec:
 
 1. **Introduce the new `config` and `nodes` field** while maintaining backward compatibility:
    - Add a `config` field of type Map<String, String> and a `nodes` field of type `List<BrokerAndVolumeIds>` to the `KafkaRebalanceSpec` alongside the existing fields.
-     The `nodes` field reuses the existing `BrokerAndVolumeIds` type with one modification:
+     The `nodes` field reuses the existing `BrokerAndVolumeIds` type with two modifications:
      - Update `@Description` annotations to be mode-neutral (e.g. "ID of the broker to target" instead of "ID of the broker that contains the disk from which you want to move the partition replicas").
+     - Refactor `BrokerAndVolumeIds` to `RebalanceNode` to make the class name more generic and provide greater flexibility for future extensibility if additional fields beyond `brokerId` and `volumeIds` are needed.
    - Mark the following legacy fields in the `KafkaRebalanceSpec` with the `@Deprecated` and `@DeprecatedProperty` annotations: `brokers`, `goals`, `skipHardGoalCheck`, `rebalanceDisk`, `excludedTopics`, `concurrentPartitionMovementsPerBroker`, `concurrentIntraBrokerPartitionMovements`, `concurrentLeaderMovements`, `replicationThrottle`, `replicaMovementStrategies`, and `moveReplicasOffVolumes`
    - These fields will be removed in the next major API version, Strimzi CRD API v2.
      A conversion webhook or migration tool will be provided to automatically convert existing `KafkaRebalance` resources from the legacy fields to the new `spec.config` and `spec.nodes` structure, following the same approach used for the 1.0 migration.
