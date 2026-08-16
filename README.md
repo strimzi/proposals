@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 153 | [Gateway API-based `type: tcproute` listener](./153-tcp-route-listener.md) |
 | 152 | [Use ubi10-micro as a base image](./152-use-ubi10-as-base-image.md) |
 | 151 | [Support broker cordoning in auto-rebalancing on scale-down](./151-broker-cordoning-scale-down.md) |
 | 150 | [Configurable Security for Internal Kafka Cluster Communication](./150-configurable-security-of-internal-communication.md) |
