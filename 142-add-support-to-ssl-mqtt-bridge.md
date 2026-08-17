@@ -1,7 +1,7 @@
 # Add SSL/TLS encryption support to MQTT Bridge
 
 This proposal is to add support for SSL/TLS to the MQTT Bridge component of Strimzi.
-This would allow MQTT clients to connect to the MQTT Bridge over an encrypted MQTT over TLS connection.
+This would allow MQTT clients to connect to the MQTT Bridge over an TLS encrypted connection.
 
 ## Current situation
 
@@ -49,7 +49,7 @@ These options will be optional for the users and when not set, the Netty / JRE d
 
 ```application.properties
 mqtt.server.ssl.enabled.protocols=TLSv1.2,TLSv1.3
-mqtt.server.ssl.enabled.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
+mqtt.server.ssl.enabled.cipher.suites=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
 
 > If these options are not specified, the MQTT Bridge will use the default SSL/TLS configurations provided by the Java runtime.
 
@@ -169,7 +169,7 @@ Integration tests should verify that MQTT clients can connect successfully over 
 
 ## Affected/not affected projects
 
-This proposal will primarily affect the MQTT Bridge component of Strimzi.
+This proposal will affect only the MQTT Bridge component of Strimzi.
 
 ## Compatibility
 
