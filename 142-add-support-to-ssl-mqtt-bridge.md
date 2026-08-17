@@ -56,7 +56,7 @@ mqtt.server.ssl.enabled.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
 A new class named `MqttSslConfig` will be used as a new configuration wrapper class to load and manage these new config options.
 This class will then be part of the existing `MqttConfig`.
 The SSL/TLS state will be derived from the configured MQTT server port rather than from a separate enable flag; for example, `MqttSslConfig.isEnabled()` can return true when the configured port is 8883.
-It would look something like this:
+It would look like this:
 
 ```java
 public class MqttConfig extends AbstractConfig {
