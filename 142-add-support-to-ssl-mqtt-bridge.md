@@ -44,12 +44,12 @@ mqtt.server.ssl.key=--BEGIN PRIVATE KEY--\n...\n--END PRIVATE KEY--
 > Note: All configuration options that support both inline and file-based values are mutually exclusive. 
 Inline values take precedence over file-based values.
 
-Optionally, we can also support the configuration for specifying the protocols and cipher suites:
+We will also support the configuration for specifying the enabled protocols and cipher suites.
+These options will be optional for the users and when not set, the Netty / JRE default values will be used.
 
 ```application.properties
 mqtt.server.ssl.enabled.protocols=TLSv1.2,TLSv1.3
 mqtt.server.ssl.enabled.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
-```
 
 > If these options are not specified, the MQTT Bridge will use the default SSL/TLS configurations provided by the Java runtime.
 
