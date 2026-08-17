@@ -53,7 +53,7 @@ mqtt.server.ssl.enabled.ciphers=TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384
 
 > If these options are not specified, the MQTT Bridge will use the default SSL/TLS configurations provided by the Java runtime.
 
-After this, we are going to create a new configuration wrapper class to load and manage these new config options, say `MqttSslConfig`.
+A new class named `MqttSslConfig` will be used as a new configuration wrapper class to load and manage these new config options.
 This class will then be part of the existing `MqttConfig`.
 The SSL/TLS state will be derived from the configured MQTT server port rather than from a separate enable flag; for example, `MqttSslConfig.isEnabled()` can return true when the configured port is 8883.
 It would look something like this:
