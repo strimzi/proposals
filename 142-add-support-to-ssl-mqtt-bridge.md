@@ -1,4 +1,4 @@
-# Add SSL/TLS support to MQTT Bridge
+# Add SSL/TLS encryption support to MQTT Bridge
 
 This proposal is to add support for SSL/TLS to the MQTT Bridge component of Strimzi.
 This would allow MQTT clients to connect to the MQTT Bridge over an encrypted MQTT over TLS connection.
