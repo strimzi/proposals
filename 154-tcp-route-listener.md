@@ -7,18 +7,18 @@ It is an alternative to the `type: tlsroute` listener introduced in [SEP-136](ht
 
 Strimzi currently supports five types of external listeners:
 
-* Load balancers (`type: loadbalancer`)
-* Node ports (`type: nodeport`)
-* OpenShift Routes (OpenShift only) (`type: route`)
-* Ingress with TLS passthrough (`type: ingress`, deprecated)
-* Gateway API TLS routes (`type: tlsroute`)
+- Load balancers (`type: loadbalancer`)
+- Node ports (`type: nodeport`)
+- OpenShift Routes (OpenShift only) (`type: route`)
+- Ingress with TLS passthrough (`type: ingress`, deprecated)
+- Gateway API TLS routes (`type: tlsroute`)
 
 Because the Kafka protocol requires clients to connect to every broker individually, each of these listener types has to expose N+1 distinct addresses for a cluster with N brokers.
 They differ in _how_ the addresses are made distinct:
 
-* `type: loadbalancer` gives each broker its own load balancer, so each address is a different IP address or hostname.
-* `type: nodeport` gives each broker a different port on every Kubernetes node.
-* `type: route`, `type: ingress`, and `type: tlsroute` give each broker a different hostname on a shared address and use TLS-SNI or HTTP host headers to demultiplex the traffic.
+- `type: loadbalancer` gives each broker its own load balancer, so each address is a different IP address or hostname.
+- `type: nodeport` gives each broker a different port on every Kubernetes node.
+- `type: route`, `type: ingress`, and `type: tlsroute` give each broker a different hostname on a shared address and use TLS-SNI or HTTP host headers to demultiplex the traffic.
 
 The first option is expensive: a 10-broker cluster provisions 11 cloud load balancers.
 The second option requires exposing the Kubernetes nodes themselves.
@@ -40,10 +40,10 @@ A node pool can grow without new DNS records, without wildcard DNS, and without 
 
 The other properties follow from routing on port rather than on hostname:
 
-* The cluster uses one gateway, and therefore one cloud load balancer, instead of the N+1 load balancers of `type: loadbalancer`.
+- The cluster uses one gateway, and therefore one cloud load balancer, instead of the N+1 load balancers of `type: loadbalancer`.
   Gateway API implementations back a `Gateway` with a single load balancer that exposes one port per gateway listener.
   Scaling from 3 to 30 brokers adds 27 ports to an existing load balancer instead of provisioning 27 new ones.
-* TLS is orthogonal to the routing.
+- TLS is orthogonal to the routing.
   A gateway listener with `protocol: TCP` forwards the connection untouched, so `tls: true` still gives end-to-end TLS terminated at the broker, and mTLS is available.
   `tls: false` works as well, in the same way it already does for `type: loadbalancer` and `type: nodeport`, but it is not the reason to add the listener.
 
@@ -61,16 +61,16 @@ The `type: tcproute` and `type: tlsroute` listeners compete in the same way that
 A given client-facing listener uses one of them, not both in parallel for the same purpose.
 They make opposite trade-offs.
 
-|  | `type: tlsroute` | `type: tcproute` |
-|---|---|---|
-| Brokers distinguished by | Hostname (TLS-SNI) | Port |
-| Gateway listeners needed | One, shared by all brokers | One per broker plus one for the bootstrap |
-| DNS records | One per broker, or a wildcard | One, shared |
-| Certificate SANs | One per broker | One, shared |
-| Scale-up requires | New DNS names, or wildcard DNS | A gateway listener that already exists on the new port |
-| TLS | Required on the wire (SNI) | Orthogonal; `tls: true` is passthrough to the broker |
-| mTLS authentication | With TLS passthrough | With `tls: true` |
-| Practical cluster size | Unbounded | Bounded by the gateway and load balancer listener limits |
+|                          | `type: tlsroute`               | `type: tcproute`                                         |
+| ------------------------ | ------------------------------ | -------------------------------------------------------- |
+| Brokers distinguished by | Hostname (TLS-SNI)             | Port                                                     |
+| Gateway listeners needed | One, shared by all brokers     | One per broker plus one for the bootstrap                |
+| DNS records              | One per broker, or a wildcard  | One, shared                                              |
+| Certificate SANs         | One per broker                 | One, shared                                              |
+| Scale-up requires        | New DNS names, or wildcard DNS | A gateway listener that already exists on the new port   |
+| TLS                      | Required on the wire (SNI)     | Orthogonal; `tls: true` is passthrough to the broker     |
+| mTLS authentication      | With TLS passthrough           | With `tls: true`                                         |
+| Practical cluster size   | Unbounded                      | Bounded by the gateway and load balancer listener limits |
 
 Because a `TLSRoute` listener is shared, `type: tlsroute` scales to any number of brokers on a single gateway listener.
 Because `type: tcproute` consumes one listener per broker, it runs into the limits described below.
@@ -85,9 +85,9 @@ Strimzi will implement a new listener type `type: tcproute` based on `TCPRoute` 
 
 The listener follows the same architecture as the `type: tlsroute`, `type: ingress`, and `type: route` listeners:
 
-* One per-listener bootstrap `Service` pointing to all Kafka brokers
-* One `Service` per broker
-* One bootstrap `TCPRoute` and one `TCPRoute` per broker, each pointing to the corresponding service
+- One per-listener bootstrap `Service` pointing to all Kafka brokers
+- One `Service` per broker
+- One bootstrap `TCPRoute` and one `TCPRoute` per broker, each pointing to the corresponding service
 
 The important difference is how a route is bound to the gateway.
 A `TLSRoute` is matched by hostname, so all TLS routes can share one gateway listener.
@@ -128,9 +128,9 @@ This proposal does not have Strimzi create or manage `ListenerSet` resources.
 One `type: tcproute` listener maps to exactly one gateway, and therefore to one load balancer.
 A cluster with N brokers consumes N+1 listeners on that gateway, and both the Gateway API and the underlying infrastructure impose limits on how many listeners a gateway can have:
 
-* A `Gateway` resource is limited to 64 listeners.
+- A `Gateway` resource is limited to 64 listeners.
   Users who need more can contribute extra listeners through a `ListenerSet` they manage.
-* Cloud providers apply their own limits.
+- Cloud providers apply their own limits.
   An AWS NLB supports at most 50 listeners and that quota is not adjustable, so `1 + N <= 50` and a single gateway supports at most 49 brokers.
   Any listeners the parent `Gateway` already defines, if they have routes attached, count against the same budget.
 
@@ -151,8 +151,8 @@ Conflicts and exhausted capacity surface as routes that are never accepted, and 
 `TCPRoute` is an _Extended_ support feature, so support has to be verified per implementation.
 At the time of writing, the AWS Load Balancer Controller supports what this proposal needs:
 
-* Version 3.5.0 requires Gateway API 1.6 CRDs, serves `TCPRoute` at `gateway.networking.k8s.io/v1`, and passes Gateway API 1.6.0 conformance.
-* The `gateway.k8s.aws/nlb` GatewayClass provisions one NLB per `Gateway` and materialises one NLB listener for each gateway listener that has a route attached, which is exactly the model described above.
+- Version 3.5.0 requires Gateway API 1.6 CRDs, serves `TCPRoute` at `gateway.networking.k8s.io/v1`, and passes Gateway API 1.6.0 conformance.
+- The `gateway.k8s.aws/nlb` GatewayClass provisions one NLB per `Gateway` and materialises one NLB listener for each gateway listener that has a route attached, which is exactly the model described above.
 
 Two implementation-specific details are worth noting for users of that controller, and will be mentioned in the documentation rather than modelled in the Strimzi API.
 Mixing protocol layers on one `Gateway` is not supported, so a gateway carrying Kafka traffic cannot also carry `HTTPRoute` resources.
@@ -247,16 +247,16 @@ Configuring more than one parent reference is allowed for consistency with `type
 Those fields configure the hostname in the generated route, and there is no such hostname here.
 Kafka still needs an advertised address, and the broker certificates still need SANs, which is why the existing advertised-address fields are the right ones:
 
-* `.configuration.bootstrap.host` is required and sets the bootstrap address published to clients, stored in the `Kafka` CR status, and added to the broker certificates.
-* `.configuration.advertisedHostTemplate` and `.configuration.brokers[].advertisedHost` set the per-broker advertised hosts.
+- `.configuration.bootstrap.host` is required and sets the bootstrap address published to clients, stored in the `Kafka` CR status, and added to the broker certificates.
+- `.configuration.advertisedHostTemplate` and `.configuration.brokers[].advertisedHost` set the per-broker advertised hosts.
   When neither is configured, the brokers use the bootstrap host, since with `TCPRoute` all brokers are reached through the same gateway address.
-* The bootstrap advertised port is the listener `port`.
+- The bootstrap advertised port is the listener `port`.
   Strimzi also uses it as the gateway port on the bootstrap `TCPRoute` parent reference.
   This is the same default as for `type: loadbalancer`.
-* `.configuration.advertisedPortTemplate` and `.configuration.brokers[].advertisedPort` set the per-broker advertised ports, using the same template syntax as [SEP-135](https://github.com/strimzi/proposals/blob/main/135-templating-advertised-port-fields.md).
+- `.configuration.advertisedPortTemplate` and `.configuration.brokers[].advertisedPort` set the per-broker advertised ports, using the same template syntax as [SEP-135](https://github.com/strimzi/proposals/blob/main/135-templating-advertised-port-fields.md).
   Either the template or a per-broker `advertisedPort` for every broker must be configured.
   Strimzi also uses these values as the gateway ports on the per-broker `TCPRoute` parent references.
-* `.configuration.bootstrap.alternativeNames` keeps its usual meaning and can be used to add further names to the bootstrap certificate.
+- `.configuration.bootstrap.alternativeNames` keeps its usual meaning and can be used to add further names to the bootstrap certificate.
 
 The advertised port and the gateway port are the same value.
 That means this listener cannot advertise a different port than the gateway listens on, which would only matter with port translation in front of the load balancer.
@@ -269,8 +269,8 @@ A gateway listener with `protocol: TCP` forwards the connection unchanged, so th
 
 `type: tcproute` listeners will therefore be supported both with and without TLS encryption:
 
-* With `tls: true`, the TLS session is established directly between the client and the Kafka broker, using the broker certificate, and mTLS authentication is available.
-* With `tls: false`, the connection is unencrypted, in the same way as an unencrypted `type: loadbalancer` or `type: nodeport` listener today.
+- With `tls: true`, the TLS session is established directly between the client and the Kafka broker, using the broker certificate, and mTLS authentication is available.
+- With `tls: false`, the connection is unencrypted, in the same way as an unencrypted `type: loadbalancer` or `type: nodeport` listener today.
 
 All authentication types supported by other external listeners remain available, with mTLS authentication allowed only when TLS encryption is enabled.
 
@@ -368,11 +368,11 @@ If a gateway listener is missing, if a port is already used by another listener,
 
 The listener validation will be extended to check that:
 
-* `parentRefs` is configured
-* `.configuration.bootstrap.host` is configured
-* Either `advertisedPortTemplate` is configured, or every broker has an `advertisedPort`
-* All advertised ports within one listener are unique, within the valid port range, and distinct from the listener `port` used for bootstrap
-* `host` and `hostTemplate` are not configured, because they do not apply to `TCPRoute` resources
+- `parentRefs` is configured
+- `.configuration.bootstrap.host` is configured
+- Either `advertisedPortTemplate` is configured, or every broker has an `advertisedPort`
+- All advertised ports within one listener are unique, within the valid port range, and distinct from the listener `port` used for bootstrap
+- `host` and `hostTemplate` are not configured, because they do not apply to `TCPRoute` resources
 
 Strimzi cannot validate that the configured ports are free on the gateway, or that the gateway has capacity for them, because the gateway may be shared with other applications and other Kafka clusters.
 Conflicts and exhausted capacity surface as routes that are never accepted, and therefore as a failed reconciliation after the reconciliation timeout.
@@ -381,8 +381,8 @@ Conflicts and exhausted capacity surface as routes that are never accepted, and 
 
 Using the listener requires:
 
-* Gateway API 1.6.0 or newer, for the `v1` version of the `TCPRoute` API, and an implementation that supports `TCPRoute`
-* A `Gateway` or user-managed `ListenerSet` with a TCP listener for every advertised port, each allowing `TCPRoute` attachment from the Kafka namespace
+- Gateway API 1.6.0 or newer, for the `v1` version of the `TCPRoute` API, and an implementation that supports `TCPRoute`
+- A `Gateway` or user-managed `ListenerSet` with a TCP listener for every advertised port, each allowing `TCPRoute` attachment from the Kafka namespace
 
 The `TCPRoute` resources and the services they point to all live in the Kafka namespace, so no `ReferenceGrant` is needed.
 Attachment to a `Gateway` in another namespace is governed by `.spec.listeners[].allowedRoutes` on that gateway.
