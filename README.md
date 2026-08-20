@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 154 | [Gateway API-based `type: tcproute` listener](./154-tcp-route-listener.md) |
 | 153 | [Strimzi-native Configurable Certificate Key Strength](./153-configurable-ca-key-size.md) |
 | 152 | [Use ubi10-micro as a base image](./152-use-ubi10-as-base-image.md) |
 | 151 | [Support broker cordoning in auto-rebalancing on scale-down](./151-broker-cordoning-scale-down.md) |
