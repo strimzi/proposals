@@ -173,6 +173,15 @@ It cannot be used to get a token for another Service Account.
 Therefore, this feature would allow Strimzi users with permission to manage Strimzi custom resources to mount tokens with different audiences for the Pod's Service Account.
 However, it would not allow them to access tokens for other Service Accounts.
 
+### Documentation
+
+Documentation will be updated to cover the new additional volume type as well as how to use it for authentication.
+
+### Tests
+
+The new additional volume will be covered by unit tests.
+In addition to that, a new system test will be added for the service-account based authentication which is the main motivation for this proposal.
+
 ## Affected Projects
 
 This proposal affects only the Strimzi Cluster Operator.
