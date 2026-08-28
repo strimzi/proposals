@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 156 | [Allow Configuring REST Extensions in Kafka Connect and MirrorMaker 2](./156-allow-configuring-connect-rest-extensions.md) |
 | 155 | [Projected Service Account Tokens in Additional Volumes](./155-projected-service-account-tokens-in-additional-volumes.md) |
 | 154 | [Consolidating the `KafkaRebalance` API for extensibility](./154-kafkarebalance-custom-resource-consolidation.md) |
 | 153 | [Strimzi-native Configurable Certificate Key Strength](./153-configurable-ca-key-size.md) |
