@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 155 | [Projected Service Account Tokens in Additional Volumes](./155-projected-service-account-tokens-in-additional-volumes.md) |
 | 154 | [Consolidating the `KafkaRebalance` API for extensibility](./154-kafkarebalance-custom-resource-consolidation.md) |
 | 153 | [Strimzi-native Configurable Certificate Key Strength](./153-configurable-ca-key-size.md) |
 | 152 | [Use ubi10-micro as a base image](./152-use-ubi10-as-base-image.md) |
