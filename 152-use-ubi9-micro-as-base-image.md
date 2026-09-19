@@ -1,6 +1,6 @@
-# Use ubi10-micro as a base image
+# Use ubi9-micro as a base image with RPM-database-preserving multi-stage build
 
-This proposal suggests changing our base image from `ubi9-minimal` to `ubi10-micro`.
+This proposal suggests changing our base image from `ubi9-minimal` to `ubi9-micro`, using a three-stage build pattern that preserves the RPM database in the final image.
 
 ## Current situation
 
@@ -17,15 +17,14 @@ Our existing security scans also show a lot of base CVEs that are not directly i
 
 ## Proposal
 
-To follow security standards and harden our images, Strimzi should migrate to `ubi10-micro`.
-This change contains two steps:
-- Bump UBI version from 9 to 10. [RHEL 10 was released on May 20, 2025](https://www.redhat.com/en/technologies/linux-platforms/enterprise-linux-10) (announced at Red Hat Summit) and it contains the latest improvements on the OS side.
-- Switch from `minimal` image to `micro`. The micro image does not contain a package manager and the security surface is much smaller than UBI's minimal version.
+To follow security standards and harden our images, Strimzi should migrate to `ubi9-micro`.
+The key goal is switching from the `minimal` image to the `micro` variant.
+The `micro` image does not contain a package manager and the security surface is much smaller than UBI's minimal version.
 
 ### Minimal vs Micro
 
 The key difference is that `ubi-micro` excludes the package manager (`microdnf`) and all of its dependencies.
-This makes it Red Hat's [distroless](https://www.redhat.com/en/blog/introduction-ubi-micro) container image - built from the same RHEL packages but without the packaging tools.
+This makes it Red Hat's [distroless](https://www.redhat.com/en/blog/introduction-ubi-micro) container image — built from the same RHEL packages but without the packaging tools.
 
 | Feature                      |        `ubi-minimal`         |              `ubi-micro`               |
 |------------------------------|:----------------------------:|:--------------------------------------:|
@@ -38,23 +37,28 @@ This makes it Red Hat's [distroless](https://www.redhat.com/en/blog/introduction
 | Architecture support         | amd64, arm64, ppc64le, s390x |      amd64, arm64, ppc64le, s390x      |
 | FIPS support                 |     Inherited from host      |          Inherited from host           |
 
-More details can be found in the following sources: [RHEL 10 — Types of container images](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/building_running_and_managing_containers/types-of-container-images), [Introduction to UBI Micro](https://www.redhat.com/en/blog/introduction-ubi-micro), [UBI 10 Micro catalog](https://catalog.redhat.com/en/software/containers/ubi10-micro/66f2abd91123095c735db44f)
+More details can be found in the following sources: [RHEL 9 — Types of container images](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/building_running_and_managing_containers/types-of-container-images), [Introduction to UBI Micro](https://www.redhat.com/en/blog/introduction-ubi-micro), [UBI 9 Micro catalog](https://catalog.redhat.com/en/software/containers/ubi9-micro/61832888ef29c53a494d2771)
 
 ### General migration approach
 
-General approach how to migrate from current base images to `ubi10-micro` is the same for every project within Strimzi org.
+General approach to migrating from current base images to `ubi9-micro` is the same for every project within the Strimzi org.
 
 Because `micro` does not contain `microdnf` we need to handle the package installation in a builder stage and then copy the installed packages to the runtime image.
-This is done using `microdnf --installroot` which installs packages into a chroot directory, and then the chroot contents are copied into the `ubi-micro` runtime stage.
+The critical detail is that the RPM database must be preserved in the final image so that vulnerability scanners (e.g. Quay, Clair, Trivy) can correctly attribute packages to their CVE records.
+This is achieved by a three-stage build:
 
-The mechanism will then consist from multi-stage build, and it could look like the following:
-- use `ubi10-minimal` as a base and name it as `builder`
-- download tini (if used)
-- install all required packages with `--installroot /mnt/rootfs` option
-- use `ubi10-micro` as a base for final image
-- copy all dependencies from `/mnt/rootfs`
-- copy built Java artifacts
-- create strimzi user and set proper rights
+1. Start with `ubi9-micro` and copy its entire rootfs (including its RPM database) as the `--installroot` for the builder stage.
+2. Use `ubi9-minimal` as the builder: run `microdnf --installroot /mnt/rootfs` to install packages into that copy of the `ubi9-micro` rootfs.
+   Because the RPM database was already present in the rootfs before installation, every installed package is recorded in it correctly.
+3. Use a fresh `ubi9-micro` as the final stage and copy `/mnt/rootfs` into it.
+   The final image has no package manager but retains a fully accurate RPM database for scanner queries.
+
+The mechanism will then consist of a multi-stage build, structured as follows:
+
+- use `ubi9-micro` as a named stage (`base`) — this establishes the clean rootfs with RPM database
+- use `ubi9-minimal` as a builder stage — copy the `base` rootfs to `/mnt/rootfs`, then install all required packages with `--installroot /mnt/rootfs --releasever 9`
+- download tini (if used) directly into `/mnt/rootfs/usr/bin` in the builder stage
+- use `ubi9-micro` again as the final image — copy `/mnt/rootfs` in
 
 The approach may vary based on specific requirements of each project, but the core approach will remain the same.
 
@@ -76,15 +80,26 @@ RUN microdnf install -y java-21-openjdk-headless openssl shadow-utils && \
 COPY --from=downloader /usr/bin/tini /usr/bin/tini
 ```
 
-**Proposed base/Dockerfile (ubi10-micro):**
+**Proposed base/Dockerfile (ubi9-micro, 3-stage):**
 ```dockerfile
-# Install runtime dependencies into a chroot and download prerequisites
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
+#####
+# Stage 1: Establish clean ubi9-micro rootfs with its own RPM database
+#####
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest AS base
+
+#####
+# Stage 2: Install runtime dependencies into the ubi9-micro rootfs using dnf --installroot
+#####
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS builder
 
 ARG JAVA_VERSION=21
+ARG TARGETOS
+ARG TARGETARCH
 
-RUN mkdir -p /mnt/rootfs && \
-    microdnf install \
+# Copy the ubi9-micro rootfs (including its RPM database) as the install root
+COPY --from=base / /mnt/rootfs/
+
+RUN microdnf install \
         --installroot /mnt/rootfs \
         --noplugins \
         --config /etc/dnf/dnf.conf \
@@ -93,7 +108,7 @@ RUN mkdir -p /mnt/rootfs && \
         --setopt=varsdir=/etc/dnf \
         --setopt=install_weak_deps=0 \
         --setopt=tsflags=nodocs \
-        --releasever 10 \
+        --releasever 9 \
         -y \
         java-${JAVA_VERSION}-openjdk-headless \
         openssl \
@@ -108,23 +123,39 @@ RUN mkdir -p /mnt/rootfs && \
         --setopt=varsdir=/etc/dnf \
         clean all
 
-# ... download Tini (unchanged) ...
+# Download Tini directly into the rootfs
+RUN curl -s -L https://github.com/krallin/tini/releases/download/... -o /mnt/rootfs/usr/bin/tini && \
+    chmod +x /mnt/rootfs/usr/bin/tini
 
-# Distroless runtime
-FROM registry.access.redhat.com/ubi10/ubi-micro:latest
+#####
+# Stage 3: Build the final container image on ubi9-micro base
+#####
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest
+
 COPY --from=builder /mnt/rootfs /
-COPY --from=builder /usr/bin/tini /usr/bin/tini
 ```
 
 #### Kafka images
-Images that extend the base image (e.g., kafka) need an additional builder stage for their specific tools:
+
+Images that extend the base image (e.g., kafka) need an additional builder stage for their specific tools.
+The same three-stage pattern is applied — a dedicated `ubi9-micro` stage seeds the RPM database, and a `ubi9-minimal` installer stage runs `--installroot`:
 
 **Proposed kafka/Dockerfile — additional builder stage:**
 ```dockerfile
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS kafka-tools
+#####
+# Stage 1: Establish clean ubi9-micro rootfs with its own RPM database
+#####
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest AS kafka-base
 
-RUN mkdir -p /mnt/rootfs && \
-    microdnf install \
+#####
+# Install Kafka-specific runtime tools into the ubi9-micro rootfs using dnf --installroot
+#####
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS kafka-tools
+
+# Copy the ubi9-micro rootfs (including its RPM database) as the install root
+COPY --from=kafka-base / /mnt/rootfs/
+
+RUN microdnf install \
         --installroot /mnt/rootfs \
         --noplugins \
         --config /etc/dnf/dnf.conf \
@@ -133,7 +164,7 @@ RUN mkdir -p /mnt/rootfs && \
         --setopt=varsdir=/etc/dnf \
         --setopt=install_weak_deps=0 \
         --setopt=tsflags=nodocs \
-        --releasever 10 \
+        --releasever 9 \
         -y \
         net-tools \
         hostname \
@@ -160,16 +191,25 @@ COPY --from=kafka-tools /mnt/rootfs /
 
 For `maven-builder` we use `registry.access.redhat.com/ubi9/openjdk-21:latest` as its base image.
 `openjdk-21:latest` has similar CVE surface as `ubi9-minimal` so we will adopt there similar approach as for other images.
-We will use `ubi10-micro` as a base and install `java-21-openjdk-headless` and other needed packages:
+We will use `ubi9-micro` as a base and install `java-21-openjdk-headless` and other needed packages using the same three-stage pattern:
 
 **Proposed maven-builder/Dockerfile**
 ```dockerfile
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest AS builder
+#####
+# Stage 1: Establish clean ubi9-micro rootfs with its own RPM database
+#####
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest AS base
+
+#####
+# Stage 2: Install runtime dependencies into the ubi9-micro rootfs using dnf --installroot
+#####
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS builder
 
 ARG JAVA_VERSION=21
 
-RUN mkdir -p /mnt/rootfs && \
-    microdnf install \
+COPY --from=base / /mnt/rootfs/
+
+RUN microdnf install \
         --installroot /mnt/rootfs \
         --noplugins \
         --config /etc/dnf/dnf.conf \
@@ -178,7 +218,7 @@ RUN mkdir -p /mnt/rootfs && \
         --setopt=varsdir=/etc/dnf \
         --setopt=install_weak_deps=0 \
         --setopt=tsflags=nodocs \
-        --releasever 10 \
+        --releasever 9 \
         -y \
         java-${JAVA_VERSION}-openjdk-headless \
         maven \
@@ -194,7 +234,10 @@ RUN mkdir -p /mnt/rootfs && \
         --setopt=varsdir=/etc/dnf \
         clean all
 
-FROM registry.access.redhat.com/ubi10/ubi-micro:latest
+#####
+# Stage 3: Build the final container image on ubi9-micro base
+#####
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest
 
 LABEL org.opencontainers.image.source='https://github.com/strimzi/strimzi-kafka-operator'
 
@@ -220,13 +263,13 @@ USER 1001
 #### Buildah + Kaniko
 
 For `buildah` and `kaniko` we do not build new images based on our base image, but we just retag existing upstream images.
-Any changes planned as part of this proposal does not affect `buildah` or `kaniko` images that we use.
+Any changes planned as part of this proposal do not affect `buildah` or `kaniko` images that we use.
 
 ### Removing `shadow-utils`
 
 The current images install `shadow-utils` to get the `useradd` command for creating non-root users during the build.
 However, `shadow-utils` pulls in several dependencies and is never needed at runtime.
-With `ubi10-micro` we can drop it entirely by writing user entries directly to `/etc/passwd`:
+With `ubi9-micro` we can drop it entirely by writing user entries directly to `/etc/passwd`:
 
 ```dockerfile
 # Before (with shadow-utils)
@@ -241,15 +284,15 @@ For images that need a home directory (e.g., `maven-builder`), the directory is 
 
 ### Quay scan differences
 
-We can compare scans from Quay.io for `1.1.0` images and the ones based on ubi10-micro (built on 4th July 2026).
+We can compare scans from Quay.io for `1.1.0` images and the ones based on ubi9-micro (built on 4th July 2026).
 
-- [1.1.0 images](https://quay.io/repository/strimzi/operator/manifest/sha256:92931ea0fad3380ea45a9b13ec61f717292e34967345566107e540432127f966?tab=vulnerabilities&fixable=true) - 247 vulnerabilities (15 fixable)
-- [ubi10-micro based](https://quay.io/repository/jstejska/operator/manifest/sha256:e2069af869c8821cdc2eacd8df87aea3fd141d189539f0b3f0b8d1acf84759c7?tab=vulnerabilities&fixable=true) - 16 vulnerabilities (1 fixable)
+- [1.2.0 images](https://quay.io/repository/strimzi/operator/manifest/sha256:6df3bf9f92d3d1907aca08ade8c6df6cdacd2e235756afad419ad582ce6a2c4e?tab=vulnerabilities) - 312 vulnerabilities (39 fixable)
+- [ubi9-micro based](https://quay.io/repository/jstejska/operator/manifest/sha256:ad614488cc0643b66c081c806081d9a254382e40c02585742400f1da52197270?tab=vulnerabilities) - 166 vulnerabilities (1 fixable)
 
 ### FIPS compliance
 
-`ubi10-micro` inherits FIPS configuration from the host.
-Containers share the host kernel, and on RHEL 9/10 with FIPS mode enabled, the container runtime (`podman`, `cri-o`) [automatically enables FIPS mode](https://access.redhat.com/solutions/3149581) for containers.
+`ubi9-micro` inherits FIPS configuration from the host.
+Containers share the host kernel, and on RHEL 9 with FIPS mode enabled, the container runtime (`podman`, `cri-o`) [automatically enables FIPS mode](https://access.redhat.com/solutions/3149581) for containers.
 This works the same for all UBI variants (micro, minimal, standard) — we do not need to do any special configuration on our side.
 
 ### Testing
@@ -263,8 +306,8 @@ As a minimal set of testing I would consider the following:
 
 ## Affected projects
 
-This proposal covering mostly `strimzi-kafka-operator` repository with examples and testing strategy.
-All other projects that produce container images can use the same strategy to migrate from current base images to ubi10-micro.
+This proposal covers mostly the `strimzi-kafka-operator` repository with examples and testing strategy.
+All other projects that produce container images can use the same strategy to migrate from current base images to `ubi9-micro`.
 
 The projects within Strimzi that produce images are:
 - `strimzi-kafka-operator`
@@ -276,7 +319,7 @@ The projects within Strimzi that produce images are:
 - `kafka-access-operator`
 - `mqtt-bridge`
 
-However, it should be evaluated if it makes sense to use `ubi10-micro` in testing projects like `test-clients`, `test-container`, or in `client-examples`.
+However, it should be evaluated if it makes sense to use `ubi9-micro` in testing projects like `test-clients`, `test-container`, or in `client-examples`.
 
 ## Backwards compatibility
 
@@ -284,11 +327,25 @@ This proposal is fully backward compatible.
 
 ## Rejected alternatives
 
-### Use ubi9-micro
+### UBI10-micro
 
-We could use `ubi9-micro`, however, at some point we will anyway update to UBI 10 and there is no reason to not do it as part of this proposal.
+UBI10 was evaluated as the initial target for this migration.
+It was rejected because RHEL 10 raises the minimum hardware baseline on three of the four architectures we ship.
+RHEL 9 requires [x86-64-v2, ARMv8.0-A, POWER9 and z14](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/considerations_in_adopting_rhel_9/ref_architectures_considerations-in-adopting-rhel-9), while RHEL 10 requires [x86-64-v3, ARMv8.0-A, POWER10 and z15](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/considerations_in_adopting_rhel_10/architectures).
 
-### Project Hummingbird
+The baseline applies to the container image, not only to the host operating system.
+Red Hat's [container compatibility policy](https://access.redhat.com/support/policy/rhel-container-compatibility) states that the container host's hardware must meet the minimum hardware requirements of the image, using `RHEL 10 container images for x86_64 require x86-64-v3` as its own example, and classifies a RHEL 10 image on a RHEL 9 host as a "Workload Specific" configuration rather than a fully compatible one.
+
+OpenShift has not followed RHEL 10 yet.
+It still documents its minimum instruction set architectures as [x86-64-v2, ARMv8.0-A, Power 9 and z14](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/installing_on_any_platform/installing-platform-agnostic), and in [OpenShift 4.22](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/release_notes/ocp-4-22-release-notes) RHCOS is based on RHEL 9.8 packages, with RHCOS 10.2 offered only as a Technology Preview.
+Moving to UBI10 would make Strimzi unusable on clusters that OpenShift itself still fully supports.
+
+The failure is not a graceful degradation.
+A UBI10 image on a CPU below the baseline aborts during glibc initialisation with `Fatal glibc error: CPU does not support x86-64-v3` and ends up in `CrashLoopBackOff`.
+We cannot avoid this by static linking, because all our images run a JVM dynamically linked against glibc.
+The [Percona MongoDB operator](https://github.com/percona/percona-server-mongodb-operator/issues/2495) already hit this after the same migration, and the only workaround offered to affected users was to build a custom UBI9-based image.
+
+### Project Hummingbird and RedHat Hardened Images
 
 [Project Hummingbird](https://hummingbird-project.io/) is a Red Hat project that produces [hardened container images](https://www.redhat.com/en/blog/red-hat-hardened-images) aiming for [near-zero CVEs](https://www.redhat.com/en/blog/chasing-holy-grail-why-red-hats-hummingbird-project-aims-near-zero-cves).
 We could use their OpenJDK base image and add additional tools we require like `bash`.
@@ -299,6 +356,7 @@ These variants [enforce FIPS-approved algorithms even on non-FIPS hosts](https:/
 Full FIPS validation still [requires the host kernel to be in FIPS mode](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/switching-rhel-to-fips-mode_security-hardening) — same as with UBI.
 
 However, images from Project Hummingbird are [supported only on `amd64` and `arm64`](https://hummingbird-project.io/docs/using/overview/) architectures which is not suitable for us as we also support `ppc64le` and `s390x` architectures.
+RedHat variant of Hummingbird images - Hardened Images (`hi`) does not support `ppc64le` and `s390x` architectures as well.
 
 This option can be revisited in the future once there will be more architectures in the support matrix.
 
