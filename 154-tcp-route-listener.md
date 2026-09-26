@@ -67,7 +67,7 @@ They make opposite trade-offs.
 | Brokers distinguished by | Hostname (TLS-SNI)             | Port                                                     |
 | Gateway listeners needed | One, shared by all brokers     | One per broker plus one for the bootstrap                |
 | DNS records              | One per broker, or a wildcard  | One, shared                                              |
-| Certificate SANs         | One per broker                 | One, shared                                              |
+| Certificate SANs         | One per broker, or a wildcard                 | One, shared                                              |
 | Scale-up requires        | New DNS names, or wildcard DNS | A gateway listener that already exists on the new port   |
 | TLS                      | Required on the wire (SNI)     | Orthogonal; `tls: true` is passthrough to the broker     |
 | mTLS authentication      | With TLS passthrough           | With `tls: true`                                         |
