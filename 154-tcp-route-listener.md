@@ -106,15 +106,15 @@ Gateways are usually owned by an infrastructure team, live in a different namesp
 Strimzi cannot know which ports are free on a shared gateway, or how much listener capacity is left.
 Users may also prefer to define the listeners on the `Gateway` itself, or to contribute them through a `ListenerSet` they manage, and the operator should not pick that for them.
 
-The user is therefore responsible for making sure the parent gateway has a TCP listener on every advertised port, allowing `TCPRoute` attachment from the Kafka namespace.
+The user is therefore responsible for making sure the parent gateway has a TCP listener on every port the routes attach to, allowing `TCPRoute` attachment from the Kafka namespace.
 Strimzi creates only the `TCPRoute` resources and the advertised addresses.
-When a broker is added whose advertised port has no gateway listener yet, that broker is not reachable until the listener exists, which is the same class of race as in the original issue.
+When a broker is added whose port has no gateway listener yet, that broker is not reachable until the listener exists, which is the same class of race as in the original issue.
 
 The following example pre-provisions a range of gateway listeners with headroom, and lets Strimzi attach and detach routes as brokers come and go:
 
-1. Choose the listener port, which is also the bootstrap port on the gateway, and a per-broker port formula that covers the node IDs the cluster will use, for example listener port `9094` and `9200 + {nodeId}` for node IDs `0` through `49`.
+1. Choose a bootstrap port and a per-broker port formula that covers the node IDs the cluster will use, for example `9199` for the bootstrap and `9200 + {nodeId}` for node IDs `0` through `49`.
 2. Create those TCP listeners on the `Gateway`, or on a `ListenerSet` that attaches to it, including spare ports for the next scale-up.
-3. Configure `advertisedPortTemplate` to match the per-broker range.
+3. Configure `.configuration.bootstrap.networkPort` and `networkPortTemplate` to match those ports.
 4. Scale brokers within the pre-provisioned range.
    Strimzi creates and deletes `TCPRoute` resources; the gateway listeners stay in place.
 5. To grow beyond the range, add the new gateway listeners first, then scale.
@@ -156,8 +156,8 @@ Strimzi will not model implementation-specific policy resources.
 
 ### Strimzi API
 
-The `type: tcproute` listener reuses fields that already exist.
-No new configuration fields are added.
+The `type: tcproute` listener reuses the `parentRefs` and advertised-address fields that already exist.
+It adds a `networkPort` field, at bootstrap and per broker, together with a `networkPortTemplate`, and `advertisedHost` and `advertisedPort` fields on the bootstrap configuration.
 
 The following YAML shows an example of the `type: tcproute` listener configuration in a `Kafka` CR:
 
@@ -174,8 +174,10 @@ listeners:
         - name: kafka-gateway
           namespace: infra
       bootstrap:
-        host: kafka.example.com
-      advertisedPortTemplate: "9200 + {nodeId}"
+        networkPort: 9199
+        advertisedHost: kafka.example.com
+      networkPortTemplate: "9200 + {nodeId}"
+      advertisedHostTemplate: kafka.example.com
 ```
 
 The matching gateway listeners are user-managed.
@@ -192,7 +194,7 @@ spec:
   listeners:
     - name: kafka-bootstrap
       protocol: TCP
-      port: 9094
+      port: 9199
       allowedRoutes:
         kinds:
           - kind: TCPRoute
@@ -230,33 +232,43 @@ spec:
 
 The `parentRefs` field is the same field, with the same schema, as the one used by `type: tlsroute` listeners.
 The references are copied into the `.spec.parentRefs` of every generated `TCPRoute`.
-Strimzi sets the `port` field of each reference to the advertised port of that route, so the route attaches to the matching TCP listener and not to every TCP listener on the gateway.
+Strimzi sets the `port` field of each reference to the network port of that route, so the route attaches to the matching TCP listener and not to every TCP listener on the gateway.
 Any `port` value in the configured parent references is overwritten.
 `sectionName` should be omitted, because a single section name cannot select N+1 different listeners.
 
 Configuring more than one parent reference is allowed for consistency with `type: tlsroute`, but as explained above it creates additional paths to the same brokers rather than distributing them.
 
+#### Network ports
+
+A `TCPRoute` attaches to a gateway listener by port, so every route needs a port to attach to.
+That port is a property of the gateway, not of the address a broker publishes to its clients, so it gets its own fields:
+
+- `.configuration.bootstrap.networkPort` is required and sets the port of the gateway listener the bootstrap `TCPRoute` attaches to.
+- `.configuration.networkPortTemplate` and `.configuration.brokers[].networkPort` set the same thing per broker, using the template syntax of [SEP-135](https://github.com/strimzi/proposals/blob/main/135-templating-advertised-port-fields.md).
+  Either the template, or a `networkPort` for every broker, must be configured.
+
+Strimzi copies these values into the `port` field of the parent references of the corresponding route.
+They are unrelated to the listener `port` in `.spec.kafka.listeners`, which stays what it is for every other listener type: the port the brokers listen on, and therefore the port in the `backendRefs` of the generated routes.
+
+The name is deliberately generic.
+`gatewayListenerPort` would tie the field to the Gateway API, in the same way `nodePort` is tied to node ports and cannot be reused by any other listener type.
+
 #### Addresses
 
 `TCPRoute` resources contain no hostname, so the `host` and `hostTemplate` fields used by `type: route`, `type: ingress`, and `type: tlsroute` are not used.
 Those fields configure the hostname in the generated route, and there is no such hostname here.
-Kafka still needs an advertised address, and the broker certificates still need SANs, which is why the existing advertised-address fields are the right ones:
+The address a client uses is the gateway's own address, which Strimzi does not know, so it has to be configured:
 
-- `.configuration.bootstrap.host` is required and sets the bootstrap address published to clients, stored in the `Kafka` CR status, and added to the broker certificates.
-- `.configuration.advertisedHostTemplate` and `.configuration.brokers[].advertisedHost` set the per-broker advertised hosts.
-  When neither is configured, the brokers use the bootstrap host, since with `TCPRoute` all brokers are reached through the same gateway address.
-- The bootstrap advertised port is the listener `port`.
-  Strimzi also uses it as the gateway port on the bootstrap `TCPRoute` parent reference.
-  This is the same default as for `type: loadbalancer`.
-- `.configuration.advertisedPortTemplate` and `.configuration.brokers[].advertisedPort` set the per-broker advertised ports, using the same template syntax as [SEP-135](https://github.com/strimzi/proposals/blob/main/135-templating-advertised-port-fields.md).
-  Either the template or a per-broker `advertisedPort` for every broker must be configured.
-  Strimzi also uses these values as the gateway ports on the per-broker `TCPRoute` parent references.
-- `.configuration.bootstrap.alternativeNames` keeps its usual meaning and can be used to add further names to the bootstrap certificate.
+- `.configuration.bootstrap.advertisedHost` is required and sets the host of the bootstrap address, which is reported in the `Kafka` CR status and added to the broker certificates.
+  This is a new field on the bootstrap configuration, named after the existing `.configuration.brokers[].advertisedHost`, and `.configuration.bootstrap.advertisedPort` is added next to it for the same reason.
+- `.configuration.advertisedHostTemplate` and `.configuration.brokers[].advertisedHost` are required as well, either as the template or as a per-broker value for every broker.
+  They are not defaulted from the bootstrap configuration, because the two addresses answer different questions and one should not silently stand in for the other.
+  They will usually be set to the same host, since all brokers are reached through the same gateway.
+- `.configuration.advertisedPortTemplate` and `.configuration.brokers[].advertisedPort` default to the network port of that broker, and `.configuration.bootstrap.advertisedPort` defaults to `.configuration.bootstrap.networkPort`.
+  Configuring them explicitly is only useful when something in front of the load balancer translates ports.
+- `.configuration.bootstrap.alternativeNames` adds any further names to the bootstrap certificate, as it does for the other listener types.
 
-The advertised port and the gateway port are the same value.
-That means this listener cannot advertise a different port than the gateway listens on, which would only matter with port translation in front of the load balancer.
-
-Unlike `type: tlsroute`, the per-broker advertised ports have no default such as 443, because they have to be distinct from the bootstrap and from each other.
+Certificates carry names, not ports, so a cluster whose brokers share a host needs that one name in the SANs however many brokers it has.
 
 #### TLS and authentication
 
@@ -305,7 +317,7 @@ spec:
       kind: Gateway
       name: kafka-gateway
       namespace: infra
-      port: 9094
+      port: 9199
   rules:
     - backendRefs:
         - name: my-cluster-kafka-external-bootstrap
@@ -348,7 +360,8 @@ spec:
 
 The naming of all generated resources follows the same rules as for the existing route and ingress based listeners.
 
-With this configuration, the brokers advertise `kafka.example.com:9200`, `kafka.example.com:9201`, and `kafka.example.com:9202`, and the `Kafka` CR status reports the bootstrap address `kafka.example.com:9094`.
+With this configuration, the brokers advertise `kafka.example.com:9200`, `kafka.example.com:9201`, and `kafka.example.com:9202`, and the `Kafka` CR status reports the bootstrap address `kafka.example.com:9199`.
+The advertised ports are not configured in the example, so they follow the network ports.
 
 ### Readiness
 
@@ -364,9 +377,10 @@ If a gateway listener is missing, if a port is already used by another listener,
 The listener validation will be extended to check that:
 
 - `parentRefs` is configured
-- `.configuration.bootstrap.host` is configured
-- Either `advertisedPortTemplate` is configured, or every broker has an `advertisedPort`
-- All advertised ports within one listener are unique, within the valid port range, and distinct from the listener `port` used for bootstrap
+- `.configuration.bootstrap.networkPort` and `.configuration.bootstrap.advertisedHost` are configured
+- Either `networkPortTemplate` is configured, or every broker has a `networkPort`
+- Either `advertisedHostTemplate` is configured, or every broker has an `advertisedHost`
+- All network ports within one listener are unique, including the bootstrap port, and within the valid port range
 - `host` and `hostTemplate` are not configured, because they do not apply to `TCPRoute` resources
 
 Strimzi cannot validate that the configured ports are free on the gateway, or that the gateway has capacity for them, because the gateway may be shared with other applications and other Kafka clusters.
@@ -377,7 +391,7 @@ Conflicts and exhausted capacity surface as routes that are never accepted, and 
 Using the listener requires:
 
 - Gateway API 1.6.0 or newer, for the `v1` version of the `TCPRoute` API, and an implementation that supports `TCPRoute`
-- A `Gateway` or user-managed `ListenerSet` with a TCP listener for every advertised port, each allowing `TCPRoute` attachment from the Kafka namespace
+- A `Gateway` or user-managed `ListenerSet` with a TCP listener for every network port, each allowing `TCPRoute` attachment from the Kafka namespace
 
 The `TCPRoute` resources and the services they point to all live in the Kafka namespace, so no `ReferenceGrant` is needed.
 Attachment to a `Gateway` in another namespace is governed by `.spec.listeners[].allowedRoutes` on that gateway.
@@ -462,20 +476,18 @@ Separate listener types is also the established pattern in Strimzi and keeps the
 Strimzi could patch the listener list of the `Gateway` itself.
 This was rejected because it would mean writing to a resource that is usually owned by a different team in a different namespace, it would make the operator a co-owner of a shared resource it does not otherwise manage, and it would risk fighting with whatever else manages that gateway.
 
-### Separate `gatewayPort` and `gatewayPortTemplate` fields
+### Reusing the advertised ports as the gateway ports
 
-The gateway port and the advertised port are almost always the same value, so separate fields were considered for what the gateway listens on.
-This was rejected because it adds API surface this listener does not need.
-The listener `port` is the bootstrap advertised port, and `advertisedPort` / `advertisedPortTemplate` are the per-broker advertised ports.
-Those values are also the ports the `TCPRoute` resources attach to.
-The cost is that this listener cannot advertise a different port than the gateway listens on.
+The gateway port and the advertised port are almost always the same value, so the advertised-port fields could have carried both meanings, with the listener `port` acting as the bootstrap gateway port.
+This was rejected because the two are different things: one selects a gateway listener, the other is what a broker tells its clients.
+Overloading the advertised ports would rule out any port translation in front of the load balancer, and it would give the listener `port` a second meaning it does not have for any other listener type.
+Separate `networkPort` fields cost API surface but keep each field with one job, and the advertised ports default to them, so the common case configures the ports once.
 
-### A `bootstrap.advertisedPort` field
+### Naming the new field `gatewayListenerPort`
 
-A new advertised-port field on the bootstrap configuration would let the bootstrap gateway port differ from the listener `port`.
-This was rejected because the listener `port` is already the advertised bootstrap port for `type: loadbalancer`, and a `type: tcproute` listener can use the same default.
-Users who want bootstrap on a different external port can set the listener `port` to that value.
-The cost is that Kafka's listen port and the bootstrap gateway port cannot be decoupled without changing the listener `port`.
+The field could be named after the thing it selects, a listener on a `Gateway`.
+This was rejected because it would tie a generic concept to one implementation, which is the same mistake as `nodePort`: that field cannot be reused by any listener type that is not based on node ports, even though the underlying idea is the same.
+`networkPort` describes the role without naming the mechanism.
 
 ### Using `host` and `hostTemplate` for the advertised address
 
@@ -483,9 +495,21 @@ The other route-based listeners use `host` and `hostTemplate` for the hostname t
 `TCPRoute` has no hostname, so reusing `host` would give that field a different meaning than everywhere else.
 The advertised-address fields are the ones that match the job: Kafka needs a name to advertise and a SAN on the certificate, and the Gateway API does not.
 
+### Defaulting the broker addresses to the bootstrap address
+
+With `TCPRoute` all brokers are reached through the same gateway, so the per-broker advertised host could default to the bootstrap host.
+This was rejected because it makes one required field silently supply another, and a misconfigured bootstrap address would then produce brokers that advertise the wrong host instead of a validation error.
+Both are required and validated.
+
+### Constructing the bootstrap address from the broker addresses
+
+Kafka clients accept a list of brokers as their bootstrap servers, so the `Kafka` CR status could report the broker addresses instead of a separate bootstrap address, and the listener would need no bootstrap host and no bootstrap route.
+This was rejected because it changes what the status means for this one listener type, and it removes the single stable address that clients are configured with: every client configuration would have to be revisited whenever the set of brokers changes.
+A bootstrap `TCPRoute` on its own gateway listener costs one port and keeps the listener consistent with every other type.
+
 ### Discovering the advertised address from the `Gateway` status
 
-When `bootstrap.host` was omitted, Strimzi could read the first address from the parent `Gateway`'s `.status.addresses`.
+When `bootstrap.advertisedHost` was omitted, Strimzi could read the first address from the parent `Gateway`'s `.status.addresses`.
 This was rejected because Strimzi does not otherwise touch `Gateway` resources, it would require read permission on them in the Cluster Operator `ClusterRole`, and reading gateway status is a common source of compatibility issues across implementations.
 The advertised hostname is always taken from the listener configuration.
 
@@ -503,7 +527,7 @@ Neither an index-based nor a capacity-based mapping stays both stable and balanc
 
 ### Per-broker ports without a template
 
-Ports could be configured only through `.configuration.brokers[].advertisedPort`.
+Ports could be configured only through `.configuration.brokers[].networkPort`.
 This was rejected as the only option because it is verbose and, more importantly, it breaks on scale-out: a broker added without a matching entry would have no port.
 The template makes the port a pure function of the node ID, so new brokers are handled automatically as long as the matching gateway listener already exists.
 Explicit per-broker ports are still supported for users who need a specific mapping.
