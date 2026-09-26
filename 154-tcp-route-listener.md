@@ -18,7 +18,7 @@ They differ in _how_ the addresses are made distinct:
 
 - `type: loadbalancer` gives each broker its own load balancer, so each address is a different IP address or hostname.
 - `type: nodeport` gives each broker a different port on every Kubernetes node.
-- `type: route`, `type: ingress`, and `type: tlsroute` give each broker a different hostname on a shared address and use TLS-SNI or HTTP host headers to demultiplex the traffic.
+- `type: route`, `type: ingress`, and `type: tlsroute` give each broker a different hostname on a shared address and use TLS-SNI to demultiplex the traffic.
 
 The first option is expensive: a 10-broker cluster provisions 11 cloud load balancers.
 The second option requires exposing the Kubernetes nodes themselves.
@@ -67,7 +67,7 @@ They make opposite trade-offs.
 | Brokers distinguished by | Hostname (TLS-SNI)             | Port                                                     |
 | Gateway listeners needed | One, shared by all brokers     | One per broker plus one for the bootstrap                |
 | DNS records              | One per broker, or a wildcard  | One, shared                                              |
-| Certificate SANs         | One per broker, or a wildcard                 | One, shared                                              |
+| Certificate SANs         | One per broker, or a wildcard  | One, shared                                              |
 | Scale-up requires        | New DNS names, or wildcard DNS | A gateway listener that already exists on the new port   |
 | TLS                      | Required on the wire (SNI)     | Orthogonal; `tls: true` is passthrough to the broker     |
 | mTLS authentication      | With TLS passthrough           | With `tls: true`                                         |
@@ -96,6 +96,8 @@ A `TCPRoute` has nothing to match on, so each route needs its own gateway listen
 The Gateway API specification is explicit about this: if several `TCPRoute` resources attach to the same listener, all of them are `Accepted` but only the oldest one receives traffic.
 If a `TCPRoute` sets neither `sectionName` nor `port` on its parent reference, it attaches to every TCP listener on the gateway.
 Every route Strimzi creates must therefore attach to a distinct TCP listener by port, and each of those listeners occupies a distinct port on the gateway.
+If no TCP listener on the Gateway or ListenerSet uses that port, the route is not accepted.
+Reconciliation then fails after the Cluster Operator reconciliation timeout.
 
 ### User-managed gateway listeners
 
@@ -387,12 +389,7 @@ The Cluster Operator `ClusterRole` will be extended with the `tcproutes` resourc
 The operator does not read or write `Gateway` or `ListenerSet` resources.
 
 The implementation also needs a Java model for the `v1` version of the `TCPRoute` API.
-Fabric8 generates its Gateway API model per kind and per API version from a specific Gateway API release, so the `v1` `TLSRoute` support added in Fabric8 7.7.0 does not carry over.
-Fabric8 7.8.0 was released one day before Gateway API 1.6.0, and still pins `sigs.k8s.io/gateway-api` at 1.5.1, where `TCPRoute` exists only as the now-deprecated `v1alpha2`.
-This is being addressed upstream in [fabric8io/kubernetes-client#8032](https://github.com/fabric8io/kubernetes-client/issues/8032) and [fabric8io/kubernetes-client#8033](https://github.com/fabric8io/kubernetes-client/pull/8033), which bump the pin to 1.6.1 and regenerate the model, adding `v1.TCPRoute` and `v1.UDPRoute` while keeping the `v1alpha2` types.
-Once that is released, the implementation needs only a Fabric8 version bump, in the same way the `type: tlsroute` implementation followed the bump to 7.7.0.
-Building on `v1alpha2` instead is rejected, because that version was deprecated in Gateway API 1.6 and will be removed.
-If the Fabric8 release lags, the fallback is for Strimzi to carry the four `TCPRoute` model classes itself, reusing the existing Fabric8 `v1.ParentReference` and `v1.BackendRef` types, since the `v1alpha2` and `v1` schemas are identical.
+Fabric8 7.9.0, which Strimzi main already uses, bundles Gateway API 1.6.1 and includes `v1.TCPRoute`.
 
 ### Testing strategy
 
@@ -421,6 +418,7 @@ The natural unit for such sharding in Strimzi would be the node pool, with diffe
 Kafka does not require the bootstrap and the brokers to share an address, so this would work from a protocol point of view.
 It would, however, mean moving part of the listener configuration into the `KafkaNodePool` CR, which is a larger API change than this proposal wants to make, and it should be evaluated on its own merits in a future proposal.
 Until then, clusters that outgrow a single gateway should use a `type: tlsroute` listener.
+Users can still spread brokers across gateways themselves, with a `type: cluster-ip` listener and their own `TCPRoute` resources.
 
 ### `UDPRoute` and east-west traffic
 
