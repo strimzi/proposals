@@ -367,12 +367,16 @@ The advertised ports are not configured in the example, so they follow the netwo
 
 ### Readiness
 
-After creating the resources, Strimzi will wait for the `.status` section of every generated `TCPRoute` to contain at least one parent reference, exactly as it does for `TLSRoute` resources.
-This indicates that the route was accepted.
-Strimzi will not evaluate individual conditions and will not try to detect warnings, errors, or failures, because implementations report them differently.
-If a route has no parent references after the Cluster Operator _reconciliation timeout_, the reconciliation fails with a corresponding error.
+After creating the resources, Strimzi will wait for the `.status` section of every generated `TCPRoute` to contain a parent reference whose `Accepted` condition is `True`.
+Strimzi will not evaluate any other condition and will not try to detect warnings, errors, or failures, because implementations report those differently.
+If no route has an accepted parent after the Cluster Operator _reconciliation timeout_, the reconciliation fails with a corresponding error.
 
-If a gateway listener is missing, if a port is already used by another listener, or if the gateway has run out of listener capacity, the routes attached to that port will not be accepted either.
+This is stricter than the `type: tlsroute` listener, which waits only for a parent reference to appear.
+A `TLSRoute` parent reference usually sets neither `port` nor `sectionName` and attaches to the gateway as a whole, so a parent reference that appears at all is normally an accepted one.
+Every `TCPRoute` here pins a port instead, and a port with no matching gateway listener is reported as a parent reference carrying `Accepted: False` with the reason `NoMatchingParent`.
+The presence of the parent reference therefore says nothing about whether the broker is reachable, which is why the condition has to be read.
+
+If a gateway listener is missing, if a port is already used by another listener, or if the gateway has run out of listener capacity, the routes attached to that port are not accepted, and the reconciliation fails in the same way.
 
 ### Validation
 
