@@ -42,12 +42,14 @@ The other properties follow from routing on port rather than on hostname:
 
 - The cluster uses one gateway, and therefore one cloud load balancer, instead of the N+1 load balancers of `type: loadbalancer`.
   Gateway API implementations back a `Gateway` with a single load balancer that exposes one port per gateway listener.
-  Scaling from 3 to 30 brokers adds 27 ports to an existing load balancer instead of provisioning 27 new ones.
+  Scaling from 3 to 30 brokers adds 27 ports to an existing load balancer instead of provisioning 27 new load balancers, once the gateway has listeners on those ports.
+  Those listeners are created by whoever owns the gateway, as described below.
 - TLS is orthogonal to the routing.
   A gateway listener with `protocol: TCP` forwards the connection untouched, so `tls: true` still gives end-to-end TLS terminated at the broker, and mTLS is available.
   `tls: false` works as well, in the same way it already does for `type: loadbalancer` and `type: nodeport`, but it is not the reason to add the listener.
 
-Users can already achieve this manually with a `type: cluster-ip` listener, self-managed `TCPRoute` resources, and hand-maintained `advertisedHost` and `advertisedPort` overrides. However, the routing resources have to be kept in sync with the node IDs that Strimzi assigns, and brokers that come up before their routes exist break producers and consumers.
+Users can already achieve this manually with a `type: cluster-ip` listener, self-managed `TCPRoute` resources, and hand-maintained `advertisedHost` and `advertisedPort` overrides.
+However, the routing resources have to be kept in sync with the node IDs that Strimzi assigns, and brokers that come up before their routes exist break producers and consumers.
 
 This proposal automates the N+1 `TCPRoute` resources and the advertised addresses.
 It does not provision the ports on the gateway.
