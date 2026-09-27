@@ -9,9 +9,13 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
-| 154 | [Gateway API-based `type: tcproute` listener](./154-tcp-route-listener.md) |
+| 158 | [Gateway API-based `type: tcproute` listener](./158-tcp-route-listener.md) |
+| 157 | [Add SSL/TLS encryption support to MQTT Bridge](./157-add-support-to-ssl-mqtt-bridge.md) |
+| 156 | [Allow Configuring REST Extensions in Kafka Connect and MirrorMaker 2](./156-allow-configuring-connect-rest-extensions.md) |
+| 155 | [Projected Service Account Tokens in Additional Volumes](./155-projected-service-account-tokens-in-additional-volumes.md) |
+| 154 | [Consolidating the `KafkaRebalance` API for extensibility](./154-kafkarebalance-custom-resource-consolidation.md) |
 | 153 | [Strimzi-native Configurable Certificate Key Strength](./153-configurable-ca-key-size.md) |
-| 152 | [Use ubi10-micro as a base image](./152-use-ubi10-as-base-image.md) |
+| 152 | [Use ubi9-micro as a base image](./152-use-ubi9-micro-as-base-image.md) |
 | 151 | [Support broker cordoning in auto-rebalancing on scale-down](./151-broker-cordoning-scale-down.md) |
 | 150 | [Configurable Security for Internal Kafka Cluster Communication](./150-configurable-security-of-internal-communication.md) |
 | 149 | [Maven mirror support for Kafka Connect builds](./149-connect-build-maven-mirror.md) |
