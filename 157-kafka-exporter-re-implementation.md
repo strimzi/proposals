@@ -20,7 +20,7 @@ Additionally, the upstream project relies on a third-party Go Kafka client rathe
 
 To mitigate security problems and allow us to better maintain the tool and provide new features, we should re-implement Kafka Exporter tool.
 
-We will create new repository under Strimzi organization that will host source code of toll `Sova` - `strimzi/sova`.
+We will create new repository under Strimzi organization that will host source code of tool `Sova` - `strimzi/sova` (Czech word for owl).
 
 ### Implementation
 
@@ -32,8 +32,9 @@ All the metrics that the tool will export will follow the same naming as the exi
 
 To keep the minimal dependency tree we will use the following:
 - `kafka-clients` for `Admin`
-- `prometheus-metrics-core` and `prometheus-metrics-exposition-formats` for Prometheus endpoint
-- JDK built-in HTTP server for the `/metrics` and health check endpoints
+- `prometheus-metrics-core` for the metric registry
+- `prometheus-metrics-exporter-httpserver` for the official Prometheus `/metrics` request handler
+- JDK built-in HTTP server for the `/metrics` and management endpoint
 
 #### Collection Model
 
@@ -48,13 +49,15 @@ This avoids the `up == 0` failure mode seen in the upstream `kafka_exporter`, wh
 
 #### HTTP Server
 
-The tool exposes two HTTP listeners on separate ports, following the same pattern used by the Kafka Bridge:
+The tool exposes two HTTP listeners on separate ports, following the same pattern used by the Kafka Bridge.
+Both listeners are plain `com.sun.net.httpserver.HttpServer` instances created and owned by the tool, each backed by a virtual-thread-per-task executor:
 
 - **Management port** (default: `8080`) — serves `/healthy` and `/ready` over plain HTTP.
 This port is never TLS-enabled and is used exclusively by the operator's liveness and readiness probes.
 Keeping health check endpoints on a dedicated plain-HTTP port means probe behaviour is stable regardless of the TLS configuration of the metrics endpoint.
 - **Metrics port** (default: `9404`) — serves `/metrics`.
 In the initial release this port also uses plain HTTP.
+The endpoint is served by `MetricsHandler` from `prometheus-metrics-exporter-httpserver`.
 
 There is community demand for having TLS enabled on metrics endpoint ([strimzi-kafka-operator#12556](https://github.com/strimzi/strimzi-kafka-operator/issues/12556)).
 The implementation and integration of TLS configuration into Strimzi Kafka Operator will require a new proposal as it will need API changes for the tool.
