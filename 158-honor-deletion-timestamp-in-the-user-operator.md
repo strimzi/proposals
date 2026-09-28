@@ -66,7 +66,10 @@ In this state, the operator will do the following:
 - It will not delete anything - neither the remaining `Secret` nor the user configuration in Kafka is removed.
 - It will set a condition in the `KafkaUser` status to make the state visible to the user.
 - It will count the reconciliation as successful in the `strimzi_reconciliations_successful_total` metric, in the same way as it does for a paused resource, because nothing failed.
-- It will log one `INFO` message per reconciliation, in the same way as it does for a paused resource.
+- It will log one `WARN` message per reconciliation, because a `KafkaUser` which stays in this state over several reconciliations is not an expected situation and should be visible in the logs.
+
+The `WARN` message is repeated on every reconciliation, which with the default `STRIMZI_FULL_RECONCILIATION_INTERVAL_MS` of 120000 means once every two minutes for every affected resource.
+This is intentional - a `KafkaUser` which stays in the deleting state is blocked by a finalizer and the logs should keep saying so.
 
 The deletion itself is not changed by this proposal.
 It is still triggered only when the `KafkaUser` is gone from the Kubernetes API, which is the existing `kafkaUser == null` branch in `KafkaUserOperator#reconcile`.
@@ -77,26 +80,29 @@ The periodic reconciliation will keep enqueuing a `KafkaUser` which is being del
 
 ### Status condition
 
-The status of a `KafkaUser` which is being deleted will contain a new condition with the type `Deleting`, following the way the `ReconciliationPaused` condition is used today:
+The status of a `KafkaUser` which is being deleted will use the existing `NotReady` condition with a new reason:
 
 ```yaml
 status:
   conditions:
-    - type: Deleting
+    - type: NotReady
       status: "True"
-      reason: DeletionTimestampSet
+      reason: Deleting
       message: The resource is being deleted and will not be reconciled.
       lastTransitionTime: "2026-09-08T10:12:34.123456789Z"
   observedGeneration: 3
-  username: CN=my-user
-  secret: my-user
 ```
 
-The `Deleting` condition replaces the `Ready`, `NotReady` and `ReconciliationPaused` conditions in the list.
-The `Ready` column of `kubectl get kafkauser` will therefore show no value for such a resource, which is the same behaviour as for a resource with a paused reconciliation.
-This is intentional - the operator should not claim that a user is ready while its `Secret` is gone and the resource is being deleted.
+This follows the way the User Operator already reports any other non-ready state, where `StatusUtils#setStatusConditionAndObservedGeneration` builds a `NotReady` condition with the status `True` and a reason.
+A resource which is being deleted is not ready, so it does not need a condition type of its own.
 
-The `observedGeneration`, `username` and `secret` fields are carried over from the previous status, because the operator did not reconcile the resource and has no new information to report.
+The condition replaces the `Ready` and `ReconciliationPaused` conditions in the list.
+The `Ready` column of `kubectl get kafkauser` selects the condition with the type `Ready`, so it shows no value for such a resource, which is the same behaviour as for a resource with a paused or a failed reconciliation.
+
+The rest of the status is built in the same way as the status of a resource with a paused reconciliation in `UserControllerUtils#pausedStatus`.
+The `observedGeneration` is carried over from the previous status, and the `username` and `secret` fields are left out, because the operator did not reconcile the resource and has no new information to report.
+Carrying the `observedGeneration` over also keeps it accurate, because the Kubernetes API server increments `metadata.generation` when it marks a resource with finalizers for deletion.
+The resulting status therefore reports a lower `observedGeneration` than the current generation of the resource, which correctly says that the current generation was not reconciled.
 
 The status of a resource which is being deleted can still be updated, because Kubernetes only restricts changes to the object itself and to its finalizers, not to its status subresource.
 The existing `StatusDiff` check in `UserControllerLoop#maybeUpdateStatus` makes sure that the status is written only when it actually changes, so a `KafkaUser` which waits on a finalizer for a long time is not updated on every reconciliation.
@@ -104,7 +110,7 @@ The existing `StatusDiff` check in `UserControllerLoop#maybeUpdateStatus` makes 
 ### Metrics
 
 This proposal does not add any new metric.
-The state is visible through the new condition, and the existing `strimzi_resources_paused` metric is deliberately not reused for it, because it tracks resources paused with the `strimzi.io/pause-reconciliation` annotation.
+The state is visible through the status condition, and the existing `strimzi_resources_paused` metric is deliberately not reused for it, because it tracks resources paused with the `strimzi.io/pause-reconciliation` annotation.
 
 ### Documentation
 
@@ -112,12 +118,12 @@ The new behaviour will be described in the documentation as part of the implemen
 
 ### Testing
 
-The implementation will be covered by unit tests in the User Operator, which verify that no `Secret` is created, that no ACLs, quotas or SCRAM credentials are reconciled, and that the `Deleting` condition is set.
-A system test will delete a `KafkaUser` which has a finalizer, and verify that its `Secret` is not recreated and that the resource and the user configuration in Kafka are removed once the finalizer is removed.
+The implementation will be covered by unit tests in the User Operator, which verify that no `Secret` is created, that no ACLs, quotas or SCRAM credentials are reconciled, and that the status condition is set.
+No system test is planned, because the only part which the unit tests do not cover is the behaviour of the Kubernetes garbage collector, which is not code owned by this project.
 
 ## Affected/not affected projects
 
-The only affected project is the `strimzi-kafka-operator` repository, and within it only the User Operator, its documentation and its system tests.
+The only affected project is the `strimzi-kafka-operator` repository, and within it only the User Operator and its documentation.
 
 No other project in the Strimzi organisation is affected.
 Applying the same pattern to other custom resources, such as `KafkaTopic` or the resources handled by the Cluster Operator, is out of the scope of this proposal.
@@ -125,7 +131,7 @@ Applying the same pattern to other custom resources, such as `KafkaTopic` or the
 ## Compatibility
 
 The proposal does not change the `KafkaUser` API.
-The `metadata.deletionTimestamp` field is a standard Kubernetes field, and the condition `type` in the `KafkaUser` status is a free-form string in the CRD, so a new condition type does not require a CRD change.
+The `metadata.deletionTimestamp` field is a standard Kubernetes field, and the status reuses the existing `NotReady` condition with a new reason, so no change of the CRD is needed.
 
 The behaviour changes only for a `KafkaUser` which has a `deletionTimestamp` and is still present in the Kubernetes API, which happens only when a finalizer delays its deletion.
 Deletions without a finalizer, which is the default, are not affected at all.
@@ -157,6 +163,12 @@ Adding finalizers would only add failure modes, such as resources which cannot b
 
 The original fix proposed in the issue only skipped the reconciliation and logged an `INFO` message.
 This was rejected because the `KafkaUser` would keep its last status, and would still report itself as ready while its `Secret` is missing, with no indication of why nothing is happening.
+
+### Adding a dedicated `Deleting` condition type
+
+The state could be reported with a new condition type, such as `Deleting`, instead of the existing `NotReady` condition.
+This was rejected because the User Operator reports every other non-ready state with the `NotReady` condition and a reason, and because the `Ready` column of `kubectl get kafkauser` shows no value in both cases.
+A new condition type would therefore add another type to the API without any benefit for the user.
 
 ### Reusing the `ReconciliationPaused` condition
 
