@@ -13,23 +13,41 @@ The `metadata.deletionTimestamp` field is not taken into account anywhere in thi
 A `KafkaUser` which is marked for deletion, but is still present in the Kubernetes API because it has a pending finalizer, is therefore reconciled as a regular resource.
 
 The `Secret` generated for a `KafkaUser` has an owner reference pointing to the `KafkaUser` with `blockOwnerDeletion: true`.
-Together with the missing `deletionTimestamp` check, this breaks the foreground cascading deletion of a `KafkaUser`:
+Together with the missing `deletionTimestamp` check, this can delay the foreground cascading deletion of a `KafkaUser`:
 
 1. The `KafkaUser` is deleted with foreground propagation - for example with `kubectl delete kafkauser my-user --cascade=foreground`, or by a GitOps tool such as Argo CD, which uses foreground deletion for the resources it manages.
 2. Kubernetes sets `metadata.deletionTimestamp` and adds the `foregroundDeletion` finalizer to the `KafkaUser`.
 3. The garbage collector deletes the dependent `Secret` and waits for all dependents which block the owner deletion to disappear before it removes the finalizer.
 4. The `Secret` informer receives the `DELETED` event, the operator reconciles the `KafkaUser`, which still exists, and recreates the `Secret`.
-5. The garbage collector deletes the new `Secret`, the operator recreates it again, and the deletion never completes.
+5. The garbage collector deletes the recreated `Secret` and removes the `foregroundDeletion` finalizer once no dependent blocks the deletion anymore.
 
-The reconciliation loop reported in the issue looks as follows:
+The fourth and the fifth step are a race between the garbage collector and the User Operator.
+In most cases the garbage collector removes the finalizer before the operator recreates the `Secret`, the `KafkaUser` is deleted, and the whole deletion completes without anyone noticing.
+This is why the flow described above usually cannot be reproduced on a cluster with a small number of `KafkaUser` resources, and it should not be understood as a set of steps which reproduce the problem on demand.
+
+When the operator wins the race, the recreated `Secret` becomes a new dependent which blocks the deletion of the `KafkaUser` and the garbage collector has to delete it again.
+Every such round delays the deletion of the `KafkaUser` and the last two steps can repeat several times.
+This has been observed on an Amazon EKS cluster where more than a hundred `KafkaUser` resources are deleted at the same time, which slows down both the operator and the Kubernetes API.
+It happens once or twice a month in that environment.
+The following log shows two rounds of the cycle, three seconds apart:
 
 ```
-2026-06-16 10:31:37 INFO  UserController:146 - Secret my-test-user in namespace kafka was DELETED
-2026-06-16 10:31:39 INFO  UserControllerLoop:102 - Reconciliation #145168(timer) KafkaUser(kafka/my-test-user): KafkaUser will be reconciled
-2026-06-16 10:31:39 INFO  UserController:146 - Secret my-test-user in namespace kafka was ADDED
+2026-09-22 22:00:02 INFO  UserController:146 - Secret my-test-user in namespace kafka was DELETED
+2026-09-22 22:00:02 INFO  UserControllerLoop:102 - Reconciliation #426810(watch) KafkaUser(kafka/my-test-user): KafkaUser will be reconciled
+2026-09-22 22:00:02 INFO  UserController:146 - Secret my-test-user in namespace kafka was ADDED
+2026-09-22 22:00:02 INFO  UserControllerLoop:123 - Reconciliation #426810(watch) KafkaUser(kafka/my-test-user): reconciled
+2026-09-22 22:00:02 INFO  UserControllerLoop:102 - Reconciliation #426824(watch) KafkaUser(kafka/my-test-user): KafkaUser will be reconciled
+2026-09-22 22:00:03 INFO  UserControllerLoop:123 - Reconciliation #426824(watch) KafkaUser(kafka/my-test-user): reconciled
+2026-09-22 22:00:05 INFO  UserController:146 - Secret my-test-user in namespace kafka was DELETED
+2026-09-22 22:00:05 INFO  UserControllerLoop:102 - Reconciliation #426971(watch) KafkaUser(kafka/my-test-user): KafkaUser will be reconciled
+2026-09-22 22:00:05 INFO  UserController:146 - Secret my-test-user in namespace kafka was ADDED
 ```
 
-The same loop happens with any other finalizer which delays the deletion of the `KafkaUser`, no matter whether it was added by a GitOps tool, by an admission webhook or by the user directly.
+How many rounds happen, and whether any happens at all, depends on the timing and on the load of the cluster.
+What happens every time, and what this proposal is about, is that the operator fully reconciles a `KafkaUser` which is already being deleted.
+
+The same reconciliation happens with any other finalizer which delays the deletion of the `KafkaUser`, no matter whether it was added by a GitOps tool, by an admission webhook or by the user directly.
+With such a finalizer, the `KafkaUser` stays in the deleting state until the finalizer is removed, and the operator recreates the `Secret` and keeps reconciling the resource for the whole time.
 With the default background propagation, the `KafkaUser` is removed from the Kubernetes API immediately, so the current behaviour is not affected by this problem.
 
 For a `KafkaUser` with `type: scram-sha-512` and a generated password, every recreation of the `Secret` also generates a new password and updates the SCRAM credentials in Kafka.
@@ -37,9 +55,8 @@ Clients which still use the old password stop working, even though the deletion 
 
 ## Motivation
 
-Foreground deletion is a standard Kubernetes deletion mode and is used by common tooling, but it cannot complete for a `KafkaUser`.
-The resource stays in the deleting state, the operator keeps reconciling it, and nothing in the resource explains why.
-Documentation does not describe `KafkaUser` as unsupported with foreground deletion either.
+Foreground deletion is a standard Kubernetes deletion mode and is used by common tooling, but for a `KafkaUser` it competes with the operator, which keeps recreating the `Secret` the garbage collector is waiting for.
+While the resource is in the deleting state, the operator keeps reconciling it, and nothing in the resource explains why.
 
 Reconciling a resource which the API server already accepted for deletion produces work which will be thrown away.
 In the case of a generated SCRAM-SHA-512 password, it is not only wasted work - it rotates the credentials of a user which is on its way out, and breaks the clients which still use them.
@@ -66,10 +83,7 @@ In this state, the operator will do the following:
 - It will not delete anything - neither the remaining `Secret` nor the user configuration in Kafka is removed.
 - It will set a condition in the `KafkaUser` status to make the state visible to the user.
 - It will count the reconciliation as successful in the `strimzi_reconciliations_successful_total` metric, in the same way as it does for a paused resource, because nothing failed.
-- It will log one `WARN` message per reconciliation, because a `KafkaUser` which stays in this state over several reconciliations is not an expected situation and should be visible in the logs.
-
-The `WARN` message is repeated on every reconciliation, which with the default `STRIMZI_FULL_RECONCILIATION_INTERVAL_MS` of 120000 means once every two minutes for every affected resource.
-This is intentional - a `KafkaUser` which stays in the deleting state is blocked by a finalizer and the logs should keep saying so.
+- It will log a `WARN` message on every reconciliation, because a `KafkaUser` which stays in this state over several reconciliations is not an expected situation and should be visible in the logs.
 
 The deletion itself is not changed by this proposal.
 It is still triggered only when the `KafkaUser` is gone from the Kubernetes API, which is the existing `kafkaUser == null` branch in `KafkaUserOperator#reconcile`.
@@ -99,10 +113,7 @@ A resource which is being deleted is not ready, so it does not need a condition 
 The condition replaces the `Ready` and `ReconciliationPaused` conditions in the list.
 The `Ready` column of `kubectl get kafkauser` selects the condition with the type `Ready`, so it shows no value for such a resource, which is the same behaviour as for a resource with a paused or a failed reconciliation.
 
-The rest of the status is built in the same way as the status of a resource with a paused reconciliation in `UserControllerUtils#pausedStatus`.
-The `observedGeneration` is carried over from the previous status, and the `username` and `secret` fields are left out, because the operator did not reconcile the resource and has no new information to report.
-Carrying the `observedGeneration` over also keeps it accurate, because the Kubernetes API server increments `metadata.generation` when it marks a resource with finalizers for deletion.
-The resulting status therefore reports a lower `observedGeneration` than the current generation of the resource, which correctly says that the current generation was not reconciled.
+The `username` and `secret` fields are left out of the status, because the operator did not reconcile the resource and has no new information to report.
 
 The status of a resource which is being deleted can still be updated, because Kubernetes only restricts changes to the object itself and to its finalizers, not to its status subresource.
 The existing `StatusDiff` check in `UserControllerLoop#maybeUpdateStatus` makes sure that the status is written only when it actually changes, so a `KafkaUser` which waits on a finalizer for a long time is not updated on every reconciliation.
@@ -183,4 +194,4 @@ This was rejected because the cleanup of such a `Secret` would have to be guaran
 ### Documenting foreground deletion as unsupported
 
 The current behaviour could be kept and the documentation could state that a `KafkaUser` does not support foreground deletion.
-This was rejected because the failure mode is silent and expensive - the reconciliation loop keeps running, the credentials of the user are rotated in the meantime, and the resource never disappears - while standard Kubernetes tooling and GitOps tools use foreground deletion by default in many setups.
+This was rejected because the failure mode is silent - the operator keeps reconciling a resource which is being deleted, the credentials of the user are rotated in the meantime, and the deletion can be delayed - while standard Kubernetes tooling and GitOps tools use foreground deletion by default in many setups.
