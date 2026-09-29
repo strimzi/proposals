@@ -21,14 +21,9 @@ Together with the missing `deletionTimestamp` check, this can delay the foregrou
 4. The `Secret` informer receives the `DELETED` event, the operator reconciles the `KafkaUser`, which still exists, and recreates the `Secret`.
 5. The garbage collector deletes the recreated `Secret` and removes the `foregroundDeletion` finalizer once no dependent blocks the deletion anymore.
 
-The fourth and the fifth step are a race between the garbage collector and the User Operator.
-In most cases the garbage collector removes the finalizer before the operator recreates the `Secret`, the `KafkaUser` is deleted, and the whole deletion completes without anyone noticing.
-This is why the flow described above usually cannot be reproduced on a cluster with a small number of `KafkaUser` resources, and it should not be understood as a set of steps which reproduce the problem on demand.
-
-When the operator wins the race, the recreated `Secret` becomes a new dependent which blocks the deletion of the `KafkaUser` and the garbage collector has to delete it again.
-Every such round delays the deletion of the `KafkaUser` and the last two steps can repeat several times.
-This has been observed on an Amazon EKS cluster where more than a hundred `KafkaUser` resources are deleted at the same time, which slows down both the operator and the Kubernetes API.
-It happens once or twice a month in that environment.
+The fourth and the fifth step are a race between the garbage collector and the User Operator, so this does not happen on every deletion and cannot be reproduced on demand.
+When the operator wins the race, the recreated `Secret` blocks the deletion of the `KafkaUser` again and the last two steps repeat.
+This has been observed once or twice a month on an Amazon EKS cluster where more than a hundred `KafkaUser` resources are deleted at the same time, which slows down both the operator and the Kubernetes API.
 The following log shows two rounds of the cycle, three seconds apart:
 
 ```
@@ -43,7 +38,6 @@ The following log shows two rounds of the cycle, three seconds apart:
 2026-09-22 22:00:05 INFO  UserController:146 - Secret my-test-user in namespace kafka was ADDED
 ```
 
-How many rounds happen, and whether any happens at all, depends on the timing and on the load of the cluster.
 What happens every time, and what this proposal is about, is that the operator fully reconciles a `KafkaUser` which is already being deleted.
 
 The same reconciliation happens with any other finalizer which delays the deletion of the `KafkaUser`, no matter whether it was added by a GitOps tool, by an admission webhook or by the user directly.
