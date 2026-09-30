@@ -40,7 +40,7 @@ The following log shows two rounds of the cycle, three seconds apart:
 
 What happens every time, and what this proposal is about, is that the operator fully reconciles a `KafkaUser` which is already being deleted.
 
-The same reconciliation happens when a `KafkaUser` which has any other finalizer is deleted, no matter whether the finalizer was added by a GitOps tool, by an admission webhook or by the user directly.
+The same reconciliation happens when a `KafkaUser` which has any other finalizer is deleted.
 Both parts are needed - a finalizer on its own changes nothing until the deletion is triggered.
 Once it is, Kubernetes sets the `deletionTimestamp` and the finalizer keeps the `KafkaUser` in the deleting state, where the operator recreates the `Secret` and keeps reconciling it until the finalizer is removed.
 With the default background propagation, the `KafkaUser` is removed from the Kubernetes API immediately, so the current behaviour is not affected by this problem.
