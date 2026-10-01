@@ -167,3 +167,16 @@ Waiting for that backport would delay PQHKE by at least a year while organizatio
 Waiting for the next LTS after Java 27, which will be Java 29 planned for September 2027, was also rejected.
 Java 25 LTS already receives JEP-527 via the October 2026 Critical Patch Update and is the supported LTS at the time of writing.
 Delaying until a Java LTS after Java 27 becomes the Strimzi baseline would unnecessarily block PQHKE for those same organizations with no technical justification.
+
+### Use BouncyCastle as a JCE provider
+
+Using BouncyCastle as a JCE security provider to get ML-KEM support ahead of JEP-527 was rejected.
+BouncyCastle provides its own TLS stack (`BCJSSE`) and JCE provider that support PQC algorithms including ML-KEM and ML-DSA, and could in principle be registered as a JVM security provider to enable PQHKE without upgrading the JDK.
+
+However, this approach introduces significant drawbacks:
+
+* Additional dependency: BouncyCastle would become a production runtime dependency for every Strimzi component, increasing the maintenance burden and the supply chain risk surface.
+* Separate TLS implementation: `BCJSSE` is a distinct TLS stack from the JDK's JSSE. Replacing or augmenting JSSE with a third-party TLS implementation requires careful compatibility validation across all TLS connections in Strimzi and introduces a separate security audit requirement.
+* Not really necessary: JEP-527 is available in Java 25 (October 2026 CPU) and provides ML-KEM natively in the JDK's JSSE with no external dependencies. The JDK-native path is available now and is the standard solution endorsed by the Java platform.
+
+BouncyCastle remains relevant for test certificate generation, which is already covered by the existing `SystemTestCertGenerator` dependency on BouncyCastle. This is a test-scoped concern and not a reason to introduce it as a production runtime provider.
