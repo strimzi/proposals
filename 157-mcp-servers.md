@@ -36,7 +36,7 @@ The repository is a Maven multi-module project.
 Currently, it contains the following parts:
 
 ```
-strimzi-mcp/                       # Repository root
+mcp-servers/                       # Repository root
 ├── pom.xml                        # Parent POM with shared dependencies
 ├── common/                        # Shared SPI interfaces and utilities
 ├── metrics-prometheus/            # Prometheus/Thanos/VictoriaMetrics metrics provider
@@ -124,14 +124,14 @@ The repository name changes from `streamshub-mcp` to `mcp-servers`.
 The Maven `groupId` changes from `io.streamshub` to `io.strimzi.mcp`.
 The artefact IDs change accordingly:
 
-| Module                     | Old `artifactId`                        | New `artifactId`                 |
-|----------------------------|-----------------------------------------|----------------------------------|
-| Parent POM                 | `streamshub-mcp`                        | `strimzi-mcp`                    |
-| Shared SPI                 | `streamshub-mcp-common`                 | `common`                         |
-| Prometheus metrics         | `streamshub-metrics-prometheus`         | `metrics-prometheus-provider`    |
-| Loki log provider          | `streamshub-loki-log-provider`          | `loki-log-provider`              |
-| Elasticsearch log provider | `streamshub-elasticsearch-log-provider` | `elasticsearch-log-provider`     |
-| Strimzi MCP server         | `strimzi-mcp`                           | `strimzi-mcp-server`             |
+| Module                     | Old `artifactId`                        | New `artifactId`              |
+|----------------------------|-----------------------------------------|-------------------------------|
+| Parent POM                 | `streamshub-mcp`                        | `mcp--servers`                |
+| Shared SPI                 | `streamshub-mcp-common`                 | `common`                      |
+| Prometheus metrics         | `streamshub-metrics-prometheus`         | `metrics-prometheus-provider` |
+| Loki log provider          | `streamshub-loki-log-provider`          | `loki-log-provider`           |
+| Elasticsearch log provider | `streamshub-elasticsearch-log-provider` | `elasticsearch-log-provider`  |
+| Strimzi MCP server         | `strimzi-mcp`                           | `strimzi-mcp-server`          |
 
 Container images move from `quay.io/streamshub/strimzi-mcp` to `quay.io/strimzi/strimzi-mcp-server`.
 
