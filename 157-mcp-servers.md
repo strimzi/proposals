@@ -1,6 +1,6 @@
 # Donate StreamsHub MCP to the Strimzi Organisation
 
-This proposal covers the donation of the [streamshub-mcp](https://github.com/streamshub/streamshub-mcp) repository to the Strimzi organisation as a new `strimzi/mcp-servers` repository.
+This proposal covers the donation of the [streamshub-mcp](https://github.com/streamshub/streamshub-mcp) repository to the Strimzi organisation as a new `strimzi/mcp` repository.
 The donation was formally approved by the StreamsHub maintainers in [streamshub/proposals#11](https://github.com/streamshub/proposals/pull/11).
 
 ## Current situation
@@ -26,7 +26,7 @@ The LLM, guided by prompt templates that encode Strimzi debugging expertise, int
 
 ## Proposal
 
-The entire `streamshub-mcp` repository will be transferred to the Strimzi GitHub organisation under the name `mcp-servers`.
+The entire `streamshub-mcp` repository will be transferred to the Strimzi GitHub organisation under the name `mcp`.
 The last release under the StreamsHub organisation will be `0.3.0`.
 The first release under the Strimzi organisation will be `0.4.0`, continuing the existing version sequence.
 
@@ -36,7 +36,7 @@ The repository is a Maven multi-module project.
 Currently, it contains the following parts:
 
 ```
-mcp-servers/                       # Repository root
+mcp/                       # Repository root
 ├── pom.xml                        # Parent POM with shared dependencies
 ├── common/                        # Shared SPI interfaces and utilities
 ├── metrics-prometheus/            # Prometheus/Thanos/VictoriaMetrics metrics provider
@@ -120,13 +120,13 @@ It is intended as follow-up work under the Strimzi organisation and will be cove
 
 ### Naming and Maven coordinates
 
-The repository name changes from `streamshub-mcp` to `mcp-servers`.
+The repository name changes from `streamshub-mcp` to `mcp`.
 The Maven `groupId` changes from `io.streamshub` to `io.strimzi.mcp`.
 The artefact IDs change accordingly:
 
 | Module                     | Old `artifactId`                        | New `artifactId`              |
 |----------------------------|-----------------------------------------|-------------------------------|
-| Parent POM                 | `streamshub-mcp`                        | `mcp--servers`                |
+| Parent POM                 | `streamshub-mcp`                        | `mcp`                         |
 | Shared SPI                 | `streamshub-mcp-common`                 | `common`                      |
 | Prometheus metrics         | `streamshub-metrics-prometheus`         | `metrics-prometheus-provider` |
 | Loki log provider          | `streamshub-loki-log-provider`          | `loki-log-provider`           |
@@ -145,12 +145,12 @@ The property and environment variable names themselves are already neutral and d
 
 ### Governance and CI/CD
 
-The `mcp-servers` repository adopts the standard Strimzi governance model, including the same maintainer and approver structure, code of conduct, and contribution process.
+The `mcp` repository adopts the standard Strimzi governance model, including the same maintainer and approver structure, code of conduct, and contribution process.
 The repository also adopts Strimzi CI/CD tooling with the minimal necessary changes to accommodate the Maven multi-module build and the system tests that require a Kubernetes cluster.
 
 ### Documentation and website
 
-The `mcp-servers` repository will maintain its own documentation covering installation, configuration, RBAC setup, and the available tools, resources, and prompt templates.
+The `mcp` repository will maintain its own documentation covering installation, configuration, RBAC setup, and the available tools, resources, and prompt templates.
 This documentation will be published to the Strimzi website under a dedicated MCP section and linked from the main Strimzi documentation.
 Release notes for each version will follow the same format as other Strimzi components.
 The StreamsHub site will be updated to redirect users to the Strimzi documentation once the transfer is complete.
@@ -170,7 +170,7 @@ This proposal accepts the following commitments on behalf of the Strimzi organis
 The transition is carried out in the following order:
 
 1. StreamsHub releases `0.3.0` as the final release under the StreamsHub organisation.
-2. The repository is transferred to the Strimzi organisation and renamed to `mcp-servers`.
+2. The repository is transferred to the Strimzi organisation and renamed to `mcp`.
 3. The Strimzi organisation onboards the repository to its CI/CD, Maven Central publishing, and `quay.io/strimzi` image push credentials.
 4. The rename of the Maven coordinates, provider selector values, and container image repository lands on `main`.
 5. Strimzi releases `0.4.0` as the first release under the Strimzi organisation once we finish the transition
@@ -184,7 +184,7 @@ The move is announced through the `0.3.0` release notes, the StreamsHub site, an
 
 ### Affected
 
-- `streamshub/streamshub-mcp` — transferred to `strimzi/mcp-servers`.
+- `streamshub/streamshub-mcp` — transferred to `strimzi/mcp`.
   Nothing remains under the StreamsHub organisation apart from the GitHub redirect created by the transfer.
 - `streamshub/streamshub-site` — upcoming releases will be hosted under the Strimzi organisation.
   The StreamsHub site will be updated to link to the Strimzi release page.
