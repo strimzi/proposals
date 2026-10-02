@@ -60,7 +60,7 @@ This is a hard prerequisite: without JEP-527 in the JDK, no PQHKE is possible on
 #### Impact on custom base images
 
 Users who build their own container images based on alternative distributions (Alpine Linux, Chainguard, etc.) are responsible for updating those images to a JDK runtime that includes JEP-527.
-The requirement is the same regardless of distribution: Java 25 (October 2026 CPU or later), Java 27+, or a backported build of JEP-527 for Java 21 (expected H1 2027 per the [Oracle JRE and JDK Cryptographic Roadmap](https://www.java.com/en/jre-jdk-cryptoroadmap.html)).
+The requirement is the same regardless of distribution: Java 25 (October 2026 CPU or later), Java 27+, or a backported build of JEP-527 for Java 21 (expected H1 2027 per the [Oracle JRE and JDK Cryptographic Roadmap](https://www.java.com/en/jre-jdk-cryptoroadmap.html)) or previous versions.
 Without this, PQHKE is not available on any Java-based connection in that image, regardless of any Strimzi configuration.
 
 ### Force TLS 1.3 on internal Kafka listeners
