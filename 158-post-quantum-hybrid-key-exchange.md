@@ -23,7 +23,9 @@ Organizations in regulated industries are already being required to begin migrat
 
 NIST standardised ML-KEM (FIPS 203) as the Post-Quantum key encapsulation mechanism for TLS.
 The hybrid approach (`X25519MLKEM768`) combines classical `X25519` and `ML-KEM` in the same handshake, so the session key is secure as long as either algorithm holds.
-Non-PQC peers fall back to classical key encapsulation transparently, with no connection failure and no configuration needed on non-PQC clients.
+The fallback is possible because the server's named groups list contains both `X25519MLKEM768` and classical groups such as `X25519`.
+A non-PQC client that does not advertise any hybrid group negotiates the highest classical group that both sides list, with no connection failure and no configuration needed on either side.
+If the server were to offer only `X25519MLKEM768` and no classical groups, non-PQC clients would fail to connect.
 
 The cloud-native ecosystem around Strimzi is already moving in this direction.
 Kubernetes 1.33 (built with Go 1.24) negotiates `X25519MLKEM768` by default on the API server side.
@@ -53,7 +55,8 @@ All of these images will be updated to use Java 25 LTS (post-October 2026 CPU) a
 
 With JEP-527 in the JDK, `x25519mlkem768` is added to the JVM's default named groups automatically and it's at the top of the list.
 No `jdk.tls.namedGroups` configuration is needed at JVM level.
-When both peers support hybrid groups, `X25519MLKEM768` is negotiated; when a peer only supports classical groups, the handshake falls back transparently.
+When both peers support hybrid groups, `X25519MLKEM768` is negotiated.
+When a peer supports only classical groups, TLS group negotiation picks the best group that appears in both peers' lists; because the JVM's default list retains `X25519` and other classical groups below `X25519MLKEM768`, a classical-only peer finds a match and the handshake succeeds transparently.
 
 This is a hard prerequisite: without JEP-527 in the JDK, no PQHKE is possible on any Java-based connection regardless of any other configuration.
 
@@ -91,6 +94,9 @@ Three client scenarios are possible on an external listener:
 * a client connecting via TLS 1.2, able to negotiate only classical algorithms (e.g. `X25519`).
 * a client connecting via TLS 1.3 but without ML-KEM support (e.g. a Java client on a JDK version without JEP-527, or a non-Java client that does not support ML-KEM), able to negotiate only classical algorithms as fallback.
 * a client connecting via TLS 1.3 and supporting ML-KEM, using it as the key exchange mechanism.
+
+These three scenarios coexist on the same listener precisely because the server's named groups list contains both `X25519MLKEM768` and classical groups such as `X25519`. 
+TLS group negotiation is intersection-based: each side advertises its supported groups and the highest-preference group that appears in both lists is selected. Removing classical groups from the server list would break scenarios 1 and 2; adding `X25519MLKEM768`-only enforcement is covered under Future Work (PQC-only enforcement via KIP-1376).
 
 This means that by updating to Java 25 LTS alone, external listeners already gain PQHKE support for capable clients, while gracefully falling back to classical key exchange for clients that do not yet support it.
 
