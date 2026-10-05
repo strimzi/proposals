@@ -71,21 +71,21 @@ Using new terminology will provide:
 
 ### Implementation Details
 
-Since both old and new enum values exist in `KafkaRebalanceState` and `KafkaRebalanceAnnotation`, the existing `valueOf()` in `KafkaRebalanceUtils.rebalanceState()` handles reading both old and new state names correctly without any changes.
+Since both old and new enum values will exist in `KafkaRebalanceState` and `KafkaRebalanceAnnotation`, the existing `valueOf()` in `KafkaRebalanceUtils.rebalanceState()` will handle reading both old and new state names correctly without any changes.
 
-In `KafkaRebalanceAssemblyOperator`, the `rebalanceAnnotation()` method is updated to map both old and new annotation strings to the same new enum values - so `approve` and `execute` both resolve to `KafkaRebalanceAnnotation.execute`, and `refresh` and `dry-run` both resolve to `KafkaRebalanceAnnotation.dryrun`.
-This means users applying either old or new annotation values get the same behaviour, with a deprecation warning logged when old values are detected.
-The handler methods `onPendingProposal` and `onProposalReady` are renamed to `onDryRunInProgress` and `onDryRunComplete`.
-Inside these handlers, the annotation switch cases for `approve` and `refresh` are updated to use `execute` and `dryrun`, and all other references to old enum values are updated throughout the class.
-For the auto-execute annotation, the old key `strimzi.io/rebalance-auto-approval` is passed as a fallback to `booleanAnnotation()` so both old and new keys are accepted.
+In `KafkaRebalanceAssemblyOperator`, the `rebalanceAnnotation()` method will be updated to map both old and new annotation strings to the same new enum values - so `approve` and `execute` will both resolve to `KafkaRebalanceAnnotation.execute`, and `refresh` and `dry-run` will both resolve to `KafkaRebalanceAnnotation.dryrun`.
+This means users applying either old or new annotation values will get the same behaviour, with a deprecation warning logged when old values are detected.
+The handler methods `onPendingProposal` and `onProposalReady` will be renamed to `onDryRunInProgress` and `onDryRunComplete`.
+Inside these handlers, the annotation switch cases for `approve` and `refresh` will be updated to use `execute` and `dryrun`, and all other references to old enum values will be updated throughout the class.
+For the auto-execute annotation, the old key `strimzi.io/rebalance-auto-approval` will be passed as a fallback to `booleanAnnotation()` so both old and new keys will be accepted.
 
 The `strimzi_reconciliations_*` metrics use state names as label values, so label values will change from `PendingProposal`/`ProposalReady` to `DryRunInProgress`/`DryRunComplete`.
 Old metric labels will work as long as old values are supported, but will stop working once old values are removed in a future release.
 
 ### Documentation Updates
 
-The Cruise Control concepts guide, KafkaRebalance API reference, and procedure docs (`proc-generating-optimization-proposals.adoc`, `proc-approving-optimization-proposal.adoc`) need to be updated to reflect new state and annotation names, explain the dry-run nature of the initial proposal, and mark old values as deprecated.
-The release notes should clearly call out the metric label change so users can update their dashboards and alerts before old values are removed.
+The Cruise Control concepts guide, KafkaRebalance API reference, and procedure docs (`proc-generating-optimization-proposals.adoc`, `proc-approving-optimization-proposal.adoc`) will need to be updated to reflect new state and annotation names, explain the dry-run nature of the initial proposal, and mark old values as deprecated.
+The release notes will need to clearly call out the metric label change so users can update their dashboards and alerts before old values are removed.
 
 ## Affected/not affected projects
 
@@ -96,9 +96,9 @@ All other Strimzi projects are not affected as they do not interact with `KafkaR
 
 The following changes are required in the `api` module:
 
-- `KafkaRebalanceState` - add new enum values `DryRunInProgress` and `DryRunComplete` (old values `PendingProposal` and `ProposalReady` kept as deprecated)
-- `KafkaRebalanceAnnotation` - add new enum values `execute` and `dryrun` (old values `approve` and `refresh` kept as deprecated)
-- `ResourceAnnotations` - add new constant `ANNO_STRIMZI_IO_REBALANCE_AUTO_EXECUTE` (old constant `ANNO_STRIMZI_IO_REBALANCE_AUTOAPPROVAL` kept as deprecated)
+- `KafkaRebalanceState` - will add new enum values `DryRunInProgress` and `DryRunComplete` (old values `PendingProposal` and `ProposalReady` will be kept as deprecated)
+- `KafkaRebalanceAnnotation` - will add new enum values `execute` and `dryrun` (old values `approve` and `refresh` will be kept as deprecated)
+- `ResourceAnnotations` - will add new constant `ANNO_STRIMZI_IO_REBALANCE_AUTO_EXECUTE` (old constant `ANNO_STRIMZI_IO_REBALANCE_AUTOAPPROVAL` will be kept as deprecated)
 
 ## Compatibility
 
