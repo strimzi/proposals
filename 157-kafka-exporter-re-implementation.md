@@ -31,7 +31,7 @@ Features not used by Strimzi are explicitly out of scope for the initial impleme
 All the metrics that the tool will export will follow the same naming as the existing Kafka Exporter, but this can change in the future based on community feedback and needs.
 
 To keep the minimal dependency tree we will use the following:
-- `kafka-clients` for `Admin`
+- `kafka-clients` for Kafka Admin API
 - `prometheus-metrics-core` for the metric registry
 - `prometheus-metrics-exporter-httpserver` for the official Prometheus `/metrics` request handler
 - JDK built-in HTTP server for the `/metrics` and management endpoint
@@ -40,12 +40,14 @@ To keep the minimal dependency tree we will use the following:
 
 Metrics collection is decoupled from the Prometheus scrape.
 A background scheduler runs a collection cycle on a configurable interval (default 30 seconds).
-Each cycle executes a sequence of batched `Admin` calls — cluster description, topic listing and description, offset fetching, consumer group listing, group description, and committed offset fetching — and assembles the results into an immutable snapshot.
+Each cycle executes a sequence of batched Kafka `Admin` calls — cluster description, topic listing and description, offset fetching, consumer group listing, group description, and committed offset fetching — and assembles the results into an immutable snapshot.
 The snapshot is atomically swapped into the metrics registry.
 The `/metrics` endpoint only reads the latest snapshot; no Kafka calls happen in the scrape path and HTTP responses are always fast regardless of cluster size.
 
 On collection failure the previous snapshot continues to be served and the readiness probe reflects the unhealthy state.
 This avoids the `up == 0` failure mode seen in the upstream `kafka_exporter`, where scrapes time out under cluster load and dashboards go blind exactly when the cluster is most stressed.
+
+Collection process differs from current Kafka Exporter implementation where it is fully synchronous process triggered by Prometheus HTTP scrape.
 
 #### HTTP Server
 
