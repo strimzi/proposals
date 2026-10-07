@@ -48,6 +48,10 @@ On collection failure the previous snapshot continues to be served and the readi
 This avoids the `up == 0` failure mode seen in the upstream `kafka_exporter`, where scrapes time out under cluster load and dashboards go blind exactly when the cluster is most stressed.
 
 Collection process differs from current Kafka Exporter implementation where it is fully synchronous process triggered by Prometheus HTTP scrape.
+This approach can introduce stale metrics in situations where Kafka metrics collection are running longer than collection interval.
+However, this is basically the same behavior as current Kafka Exporter has because on bigger clusters the next Prometheus scrape request can arrive sooner than Kafka metrics collection finishes.
+
+Each collection will add timestamp metric into the metrics registry and will be exposed to users to provide users an information when the metrics were collected.
 
 #### HTTP Server
 
