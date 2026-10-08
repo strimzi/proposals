@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 158 | [Kafka Exporter re-implementation](./158-kafka-exporter-re-implementation.md) |
 | 157 | [Add SSL/TLS encryption support to MQTT Bridge](./157-add-support-to-ssl-mqtt-bridge.md) |
 | 156 | [Allow Configuring REST Extensions in Kafka Connect and MirrorMaker 2](./156-allow-configuring-connect-rest-extensions.md) |
 | 155 | [Projected Service Account Tokens in Additional Volumes](./155-projected-service-account-tokens-in-additional-volumes.md) |
