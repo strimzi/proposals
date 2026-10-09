@@ -78,6 +78,9 @@ In this state, the operator will do the following:
 - It will count the reconciliation as successful in the `strimzi_reconciliations_successful_total` metric, in the same way as it does for a paused resource, because nothing failed.
 - It will log a `WARN` message on every reconciliation, because a `KafkaUser` which stays in this state over several reconciliations is not an expected situation and should be visible in the logs.
 
+When the reconciliation of the `KafkaUser` is paused with the `strimzi.io/pause-reconciliation` annotation at the same time, the deletion takes precedence and the status reports only the deleting condition.
+The log message will in that case mention that the reconciliation is paused because the resource is scheduled for deletion.
+
 The deletion itself is not changed by this proposal.
 It is still triggered only when the `KafkaUser` is gone from the Kubernetes API, which is the existing `kafkaUser == null` branch in `KafkaUserOperator#reconcile`.
 For the flow described above, this means that the garbage collector is now able to finish the deletion of the `Secret` and to remove the `foregroundDeletion` finalizer.
