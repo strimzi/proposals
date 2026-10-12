@@ -30,19 +30,21 @@ The entire `streamshub-mcp` repository will be transferred to the Strimzi GitHub
 The last release under the StreamsHub organisation will be `0.3.0`.
 The first release under the Strimzi organisation will be `0.4.0`, continuing the existing version sequence.
 
+David Kornel will be a component owner for the Strimzi MCP component (will be proceeded by standard Strimzi maintainer vote process).
+
 ### Repository structure
 
 The repository is a Maven multi-module project.
 Currently, it contains the following parts:
 
 ```
-mcp/                       # Repository root
+mcp/                               # Repository root
 ├── pom.xml                        # Parent POM with shared dependencies
 ├── common/                        # Shared SPI interfaces and utilities
-├── metrics-prometheus/            # Prometheus/Thanos/VictoriaMetrics metrics provider
+├── metrics-prometheus-provider/   # Prometheus/Thanos/VictoriaMetrics metrics provider
 ├── loki-log-provider/             # Grafana Loki log provider
-├── elasticsearch-log-provider/    # Elasticsearch and OpenSearch log provider
-├── strimzi-mcp-server/            # Strimzi MCP server
+├── opensearch-log-provider/       # OpenSearch log provider
+├── mcp-server/                    # Strimzi MCP server
 └── systemtest/                    # System test suite
 ```
 
@@ -56,7 +58,7 @@ This is out of scope for the current proposal.
 The Strimzi MCP server exposes three categories of capabilities to LLM clients.
 
 **MCP Tools** provide read-only structured access to Strimzi infrastructure.
-The tools cover all supported Strimzi custom resources — Kafka, KafkaNodePool, KafkaTopic, KafkaUser, KafkaConnect, KafkaConnector, KafkaBridge, KafkaMirrorMaker2, and KafkaRebalance — as well as the Strimzi Cluster Operator and the Strimzi Drain Cleaner.
+The current tools cover all supported Strimzi custom resources — Kafka, KafkaNodePool, KafkaTopic, KafkaUser, KafkaConnect, KafkaConnector, KafkaBridge, KafkaMirrorMaker2, and KafkaRebalance — as well as the Strimzi Cluster Operator and the Strimzi Drain Cleaner.
 Every resource type has list and get tools.
 Resource types that own a workload additionally have pod and log retrieval tools.
 Metrics tools expose Prometheus-format metrics from Kafka broker and controller pods, KafkaConnect, KafkaBridge, KafkaExporter, and the Strimzi operators.
@@ -95,14 +97,14 @@ The initial set of thirteen prompt templates is listed below.
 
 ### Pluggable provider architecture
 
-The `common` module defines stable SPI contracts that allow alternative implementations to be selected via configuration without forking the repository:
+The `common` module defines SPI contracts that allow alternative implementations to be selected via configuration without forking the repository:
 
 - `MetricsProvider` — selected via `mcp.metrics.provider`.
   The default implementation scrapes Prometheus metrics directly from pod HTTP endpoints.
-  The bundled `metrics-prometheus` module provides an alternative that queries an existing Prometheus, Thanos, or VictoriaMetrics instance.
+  The bundled `metrics-prometheus-provider` module provides an alternative that queries an existing Prometheus, Thanos, or VictoriaMetrics instance.
 - `LogCollectorProvider` — selected via `mcp.log.provider`.
   The default implementation reads logs directly from Kubernetes pod logs via the Fabric8 client.
-  The bundled `loki-log-provider` and `elasticsearch-log-provider` modules provide alternatives for Grafana Loki and Elasticsearch or OpenSearch respectively.
+  The bundled `loki-log-provider` and `opensearch-log-provider` modules provide alternatives for Grafana Loki and OpenSearch respectively.
 - `GuardrailFilter` — a CDI interceptor chain triggered by the `@Guarded` annotation on tool classes.
   Multiple filter beans run in priority order before and after each tool executes: rate limiting per tool category (disabled by default), input sanitisation to strip control characters, secret redaction to remove tokens and passwords from output, response size limiting to prevent oversized context, and internal metrics recording.
   Each concern is an isolated, independently testable bean.
@@ -124,16 +126,16 @@ The repository name changes from `streamshub-mcp` to `mcp`.
 The Maven `groupId` changes from `io.streamshub` to `io.strimzi.mcp`.
 The artefact IDs change accordingly:
 
-| Module                     | Old `artifactId`                        | New `artifactId`              |
-|----------------------------|-----------------------------------------|-------------------------------|
-| Parent POM                 | `streamshub-mcp`                        | `mcp`                         |
-| Shared SPI                 | `streamshub-mcp-common`                 | `common`                      |
-| Prometheus metrics         | `streamshub-metrics-prometheus`         | `metrics-prometheus-provider` |
-| Loki log provider          | `streamshub-loki-log-provider`          | `loki-log-provider`           |
-| Elasticsearch log provider | `streamshub-elasticsearch-log-provider` | `elasticsearch-log-provider`  |
-| Strimzi MCP server         | `strimzi-mcp`                           | `strimzi-mcp-server`          |
+| Module                  | Old `artifactId`                        | New `artifactId`              |
+|-------------------------|-----------------------------------------|-------------------------------|
+| Parent POM              | `streamshub-mcp`                        | `mcp`                         |
+| Shared SPI              | `streamshub-mcp-common`                 | `common`                      |
+| Prometheus metrics      | `streamshub-metrics-prometheus`         | `metrics-prometheus-provider` |
+| Loki log provider       | `streamshub-loki-log-provider`          | `loki-log-provider`           |
+| OpenSearch log provider | `streamshub-elasticsearch-log-provider` | `opensearch-log-provider`     |
+| Strimzi MCP server      | `strimzi-mcp`                           | `mcp-server`                  |
 
-Container images move from `quay.io/streamshub/strimzi-mcp` to `quay.io/strimzi/strimzi-mcp-server`.
+Container images move from `quay.io/streamshub/strimzi-mcp` to `quay.io/strimzi/mcp`.
 
 ### Provider configuration values
 
@@ -141,6 +143,7 @@ The pluggable providers are activated by setting a string value via `mcp.log.pro
 The values currently carry a `streamshub-` prefix, for example `mcp.log.provider=streamshub-kubernetes` and `mcp.metrics.provider=streamshub-pod-scraping`, with `streamshub-loki`, `streamshub-prometheus`, and `streamshub-elasticsearch` selecting the bundled alternatives.
 
 All selector values drop the `streamshub-` prefix in favour of `strimzi-` in `0.4.0`, so that `streamshub-kubernetes` becomes `strimzi-kubernetes`, `streamshub-pod-scraping` becomes `strimzi-pod-scraping`, and so on.
+The only exception is `streamshub-elasticsearch`, which becomes `strimzi-opensearch` to match the renamed `opensearch-log-provider` module.
 The property and environment variable names themselves are already neutral and do not change.
 
 ### Governance and CI/CD
@@ -151,19 +154,28 @@ The repository also adopts Strimzi CI/CD tooling with the minimal necessary chan
 ### Documentation and website
 
 The `mcp` repository will maintain its own documentation covering installation, configuration, RBAC setup, and the available tools, resources, and prompt templates.
-This documentation will be published to the Strimzi website under a dedicated MCP section and linked from the main Strimzi documentation.
+The existing Markdown documentation will be migrated to AsciiDoc by the time of the donation, in line with the other Strimzi projects whose documentation is published on the Strimzi website.
+The documentation will follow the same structure and look as the Operators and Bridge documentation.
+
+A new MCP section will be added to the Documentation page of the Strimzi website alongside the Operators and Bridge sections.
+After each release, the documentation and release data will be updated in the `strimzi.github.io` repository, in the same way as for the Bridge.
+A new MCP section will also be added to the Downloads page, listing the MCP release versions and artifacts, including the container image.
+Adding the MCP server to the website front page is out of scope for this proposal.
+
 Release notes for each version will follow the same format as other Strimzi components.
 The StreamsHub site will be updated to redirect users to the Strimzi documentation once the transfer is complete.
 
-### Commitments
+### Agreements with StreamsHub
 
 The StreamsHub maintainers approved the donation in [streamshub/proposals#11](https://github.com/streamshub/proposals/pull/11).
-This proposal accepts the following commitments on behalf of the Strimzi organisation:
+As part of the donation, the following was agreed with the StreamsHub maintainers:
 
-- All artifacts released under the StreamsHub organisation remain publicly available at their original coordinates.
-  Future releases published under the Strimzi organisation will be publicly available, in whatever form and location the Strimzi maintainers decide upon.
-- Publishing the `io.strimzi.mcp:common` SPI module to Maven Central is the intended goal, so that third-party provider implementations can be built without forking the repository, subject to the Strimzi organisation's standard publishing infrastructure and policies.
-- David Kornel will be nominated as a component owner for the Strimzi MCP component following the standard Strimzi maintainer vote process.
+- StreamsHub keeps all previously released artifacts publicly available at their original coordinates.
+  Future releases and their artifacts published under the Strimzi organisation will be publicly available in whatever form and location the Strimzi maintainers decide upon.
+- The `io.strimzi.mcp:common` SPI module is planned to be published to Maven Central, so that third-party provider implementations can be built without forking the repository.
+  As with any other Strimzi artifact, the Strimzi maintainers may change or stop publishing it in future releases.
+- Any upcoming decisions and changes will be fully in the hands of the Strimzi maintainers.
+  This means there could be breaking changes to follow Strimzi project architecture changes or needs.
 
 ### Transition plan
 
@@ -201,9 +213,9 @@ The move is announced through the `0.3.0` release notes, the StreamsHub site, an
 Users who depend on the Maven SPI modules to build custom provider implementations will need to update their `groupId` to `io.strimzi.mcp` and their `artifactId` coordinates to the new values when upgrading to `0.4.0`.
 The interfaces themselves do not change as part of the code donation, but they might change in the future as part of development.
 
-Users who deploy the server will need to update the container image repository from `quay.io/streamshub/strimzi-mcp` to `quay.io/strimzi/strimzi-mcp-server`.
+Users who deploy the server will need to update the container image repository from `quay.io/streamshub/strimzi-mcp` to `quay.io/strimzi/mcp`.
 
 Users who explicitly configure a log or metrics provider will need to update the selector value, because the `streamshub-` prefix will be replaced by `strimzi-` in `0.4.0`.
 This applies both to `mcp.log.provider` and `mcp.metrics.provider` in `application.properties` and to the `MCP_LOG_PROVIDER` and `MCP_METRICS_PROVIDER` environment variables.
 Deployments that rely on the defaults are not affected, because the defaults change together with the accepted values.
-This is a deliberate breaking change, taken once at the point where the project changes organisation rather than spread over later releases.
+This breaking change is grouped with the organisation move to avoid unnecessary churn for users.
