@@ -111,18 +111,53 @@ As with `metadata.version`, the operator will only attempt safe downgrades using
 If the downgrade would cause changes that might break the cluster, users must perform the required operations manually and downgrade the feature version using the `kafka-features.sh` script.
 Strimzi should not perform operations that could bring the cluster into a non-functional state.
 
-### Kafka version upgrade/downgrade
+### Interaction with Kafka version upgrades and downgrades
 
-There will be no special handling during Kafka version upgrades or downgrades.
-The operator will behave the same way as during normal reconciliation.
-It will try to configure the features on the Kafka side.
-In case of issues — for example, a feature existing in one version of Kafka that does not exist in another — the error will be reported in the `.status` section of the Kafka CR.
+Finalized feature levels are stored in the KRaft metadata log and persist across binary changes.
+They are not part of the broker configuration or the container image.
+Changing the Kafka version in the CR triggers a rolling restart with a new binary, but the finalized feature levels in the metadata log remain unchanged.
 
-### Feature versions during Kafka version upgrades
+#### Upgrades
 
-When upgrading to a new Kafka version, the default finalized version for some features may increase (e.g., a feature that defaulted to version 1 in Kafka 4.2 might default to version 2 in Kafka 4.3).
-Strimzi will not automatically upgrade feature versions — only features explicitly listed in `spec.kafka.features` are managed by the operator.
+Kafka upgrades are safe with regards to features.
+Newer Kafka versions support the same or higher feature versions than older ones.
+During a Kafka binary upgrade, features stay at their current finalized level — they are not automatically upgraded to the new Kafka version's defaults.
+The operator processes feature updates after the rolling restart completes, same as with `metadata.version`.
+Only features explicitly listed in `spec.kafka.features` are managed by the operator.
+
 If a user has `share.version: 1` configured and upgrades to a Kafka version where the default is `share.version: 2`, the feature stays at version 1 until the user updates the CR.
+
+#### Downgrades
+
+Kafka downgrades require more care.
+If a feature is finalized at a version that the target Kafka binary does not support, brokers will refuse to start and the rolling update will stall.
+This means features must be downgraded or disabled **before** the Kafka binary is downgraded.
+
+The recommended procedure for downgrading Kafka when features are configured:
+
+1. Update the `features` list in the CR — downgrade features to versions compatible with the target Kafka version, or set features that do not exist in the target version to `version: 0` to disable them.
+2. Wait for the operator to reconcile and apply the feature changes.
+3. Optionally remove the disabled features from the list.
+4. Update `spec.kafka.version` to the target Kafka version.
+
+If the user changes both the features and the Kafka version in the CR at the same time, the operator will first perform the rolling restart with the new binary.
+If the finalized feature levels are incompatible with the new binary, brokers will fail to start and the rolling update will stall.
+This is consistent with how `metadata.version` downgrades are handled — the metadata version must be downgraded before the Kafka binary.
+
+The downgrade procedure for features must be documented as part of the implementation PR.
+
+### Removing a feature from the list
+
+When a feature is removed from the `features` list, the operator stops managing it.
+The feature stays at whatever version it was last set to in the KRaft metadata log.
+The operator will not reset it to any default value.
+
+There is no Kafka Admin API to determine the default feature version for a given Kafka release.
+The default mappings are hardcoded in the Kafka server binary and only exposed through the `kafka-features.sh version-mapping` CLI command, which is not suitable for use during reconciliation.
+Maintaining a copy of these mappings in Strimzi would create a maintenance burden and a risk of divergence with each Kafka release.
+
+To disable a feature, users should explicitly set it to `version: 0` in the `features` list rather than removing it.
+This makes the intent clear and avoids leaving a feature at an unintended version.
 
 ## Affected/not affected projects
 
@@ -135,4 +170,15 @@ There are no backwards compatibility issues.
 
 ## Rejected alternatives
 
-There are no rejected alternatives at the moment.
+### Automatically upgrading features to match Kafka version defaults
+
+One option considered was to automatically upgrade feature versions to match the defaults of the deployed Kafka version during Kafka upgrades.
+This was rejected because it violates the declarative principle — the operator should only set what the user explicitly declares in the CR.
+Automatically upgrading features could lead to unexpected behavior changes after a Kafka version upgrade.
+
+### Resetting features to defaults when removed from the list
+
+Another option considered was to reset features to their Kafka release defaults when removed from the `features` list.
+This was rejected because there is no Kafka Admin API to determine the default feature versions for a given release.
+Maintaining a mapping of default versions per Kafka release in Strimzi would be error-prone and require updates with every Kafka release.
+Instead, removing a feature from the list means the operator stops managing it, and users should set `version: 0` explicitly to disable a feature.
