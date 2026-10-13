@@ -117,6 +117,7 @@ An opt-in per-namespace Role for sensitive resources (Secrets for certificate me
 If the sensitive Role is not applied in a given namespace, the certificate and pod-scraping features fail closed for that namespace and all other functionality continues to work.
 
 The initial authorization model relies entirely on Kubernetes RBAC.
+The Kubernetes RBAC rights granted to the MCP server are the only restriction to what the MCP users can do.
 MCP-level authentication and authorization is explicitly out of scope for the initial release.
 It is intended as follow-up work under the Strimzi organisation and will be covered by a separate proposal.
 
@@ -201,6 +202,7 @@ The move is announced through the `0.3.0` release notes, the StreamsHub site, an
 - `streamshub/streamshub-site` — upcoming releases will be hosted under the Strimzi organisation.
   The StreamsHub site will be updated to link to the Strimzi release page.
 - Strimzi Maven Central publishing pipeline — the new `io.strimzi` SPI and server artefacts must be onboarded.
+- `strimzi/strimzi.github.io` — Strimzi website repo that will contain MCP documentation. 
 
 ### Not affected
 
