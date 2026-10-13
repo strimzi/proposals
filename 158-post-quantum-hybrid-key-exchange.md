@@ -57,7 +57,7 @@ For more details about the backport of JEP-527 to Java 25 LTS look at OpenJDK 25
 Strimzi should not wait for Java 27 to be the baseline because it's not an LTS release and also because Java 25 LTS will receive JEP-527 via the October 2026 CPU and is already the supported LTS at the time of writing.
 
 This is a runtime update only and no code changes to Strimzi itself are required.
-The change affects every JVM-based Strimzi container image: the operator, Kafka brokers and controllers, Kafka Connect, MirrorMaker 2, Kafka Bridge, and Cruise Control.
+The change affects every JVM-based Strimzi container image: the operator, Kafka brokers and controllers, Kafka Connect, MirrorMaker 2, HTTP Bridge, Cruise Control, Drain Cleaner and MQTT bridge.
 All of these images will be updated to use Java 25 LTS (post-October 2026 CPU) as their JDK runtime base.
 
 With JEP-527 in the JDK, `x25519mlkem768` is added to the JVM's default named groups automatically and it's at the top of the list.
@@ -83,10 +83,25 @@ ssl.enabled.protocols: TLSv1.3
 ```
 
 Both `ssl.protocol` and `ssl.enabled.protocols` are explicitly allowed in `spec.kafka.config` (they are exceptions to the forbidden `ssl.` prefix) and apply globally to all Kafka listeners, both internal and external.
-The plugin is added to the `DEFAULT_GATEKEEPER_PLUGINS` list in the Cluster Operator, so it is active out of the box.
-Users can opt out by overriding the `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` environment variable on the Cluster Operator deployment, or by setting `ssl.enabled.protocols` and `ssl.protocol` explicitly in their `Kafka` CR's `spec.kafka.config`, in which case the plugin respects the user-supplied values and does not override them.
 
-Enforcing TLS 1.3 on all listeners makes the PQHKE guarantee explicit and auditable at the configuration level rather than inferred from runtime negotiation behavior.
+The same plugin also handles `KafkaConnect`, `KafkaMirrorMaker2`, and `KafkaBridge` reconciliations.
+For these components the injected settings are client-side, they control which TLS version the workload advertises when connecting to the Kafka broker.
+
+For `KafkaConnect`, the plugin injects `ssl.protocol: TLSv1.3` and `ssl.enabled.protocols: TLSv1.3` into `spec.config`.
+Both properties are allowed there (they are exceptions to the forbidden `ssl.` prefix).
+
+For `KafkaMirrorMaker2`, MM2 has a single target cluster at `spec.target` and a list of mirrors at `spec.mirrors`, each with a `source` entry.
+The plugin injects `ssl.protocol: TLSv1.3` and `ssl.enabled.protocols: TLSv1.3` into both `spec.target.config` and into `spec.mirrors[*].source.config` for every mirror.
+Both properties are allowed there (they are exceptions to the forbidden `ssl.` prefix).
+
+For `KafkaBridge`, the Bridge exposes separate Kafka client configurations for its three client roles: `spec.consumer.config`, `spec.producer.config`, and `spec.adminClient.config`.
+The plugin injects `ssl.protocol: TLSv1.3` and `ssl.enabled.protocols: TLSv1.3` into all three.
+Both properties are allowed in each of them (they are exceptions to the forbidden `ssl.` prefix).
+
+The plugin is added to the `DEFAULT_GATEKEEPER_PLUGINS` list in the Cluster Operator, so it is active out of the box.
+Users can opt out by overriding the `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` environment variable on the Cluster Operator deployment, or by setting `ssl.enabled.protocols` and `ssl.protocol` explicitly in their `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2`, and `KafkaBridge`, in which case the plugin respects the user-supplied values and does not override them.
+
+Enforcing TLS 1.3 on all listeners and components' clients makes the PQHKE guarantee explicit and auditable at the configuration level rather than inferred from runtime negotiation behavior.
 It also addresses the HNDL threat on the data plane: external user-facing listeners now require TLS 1.3, so capable clients (i.e. Java 25 with JEP-527, Go 1.24+) negotiate `X25519MLKEM768` and the session key is quantum-safe from the moment it is established.
 
 #### Impact on external listener compatibility
@@ -102,17 +117,17 @@ PQC-only enforcement (removing classical groups so that non-ML-KEM clients canno
 
 #### What works after these two changes
 
-| Connection | Port | TLS 1.3 | ML-KEM |
-|---|---|---|---|
-| Broker to broker (replication) | 9091 | Enforced by Gatekeeper plugin | Automatic (JEP-527 in broker JVM) |
-| Controller to controller / broker | 9090 | Enforced by Gatekeeper plugin | Automatic (JEP-527 in broker JVM) |
-| CO / TO / UO Admin client to broker | 9091 | Enforced by Gatekeeper plugin | Automatic (JEP-527 in operator JVM) |
-| CO to Kafka Agent | 8443 | Hardcoded in `KafkaAgentClient` | Automatic (JEP-527 in broker JVM) |
-| CO / TO to Cruise Control HTTP server | 9090 | Hardcoded in operator clients | Automatic (JEP-527 in Cruise Control JVM) |
-| Cruise Control Kafka clients to broker | 9091 | Enforced by Gatekeeper plugin | Automatic (JEP-527 in Cruise Control JVM) |
-| CO / TO / UO to Kubernetes API | 443 | Negotiated by preference | Automatic (K8s 1.33+ Go 1.24, JEP-527 in operator JVM) |
-| Connect / MM2 / Bridge to broker | External | Enforced by Gatekeeper plugin | Automatic (JEP-527 on both JVMs) |
-| Kafka Exporter to broker | 9091 | Enforced by Gatekeeper plugin | Automatic (Go 1.24+ default in crypto/tls) |
+| Connection                              | Port     | TLS 1.3                        | ML-KEM                                                |
+|-----------------------------------------|----------|--------------------------------|-------------------------------------------------------|
+| Broker to broker (replication)          | 9091     | Enforced by Gatekeeper plugin  | Automatic (JEP-527 in broker JVM)                     |
+| Controller to controller / broker       | 9090     | Enforced by Gatekeeper plugin  | Automatic (JEP-527 in broker JVM)                     |
+| CO / TO / UO Admin client to broker     | 9091     | Enforced by Gatekeeper plugin  | Automatic (JEP-527 in operator JVM)                   |
+| CO to Kafka Agent                       | 8443     | Hardcoded in `KafkaAgentClient`| Automatic (JEP-527 in broker JVM)                     |
+| CO / TO to Cruise Control HTTP server   | 9090     | Hardcoded in operator clients  | Automatic (JEP-527 in Cruise Control JVM)             |
+| Cruise Control Kafka clients to broker  | 9091     | Enforced by Gatekeeper plugin  | Automatic (JEP-527 in Cruise Control JVM)             |
+| CO / TO / UO to Kubernetes API          | 443      | Negotiated by preference       | Automatic (K8s 1.33+ Go 1.24, JEP-527 in operator JVM)|
+| Connect / MM2 / Bridge to broker        | External | Enforced by Gatekeeper plugin  | Automatic (JEP-527 on both JVMs)                      |
+| Kafka Exporter to broker                | 9091     | Enforced by Gatekeeper plugin  | Automatic (Go 1.24+ default in crypto/tls)            |
 
 ## Future work: explicit named groups configuration for external listeners (pending KIP-1376)
 
@@ -140,7 +155,7 @@ The Docker base images are updated to Java 25 LTS (post-October 2026 CPU) for th
 * Kafka brokers and controllers
 * Kafka Connect
 * Kafka Mirror Maker 2
-* Kafka Bridge
+* HTTP Bridge
 * Cruise Control
 * MQTT Bridge
 * Drain Cleaner
@@ -152,7 +167,7 @@ The proposal doesn't affect the Kafka Exporter component which is a pre-compiled
 
 ## Compatibility
 
-The `Tls13EnforcerGatekeeperPlugin` default Gatekeeper plugin enforces TLS 1.3 on all listeners.
+The `Tls13EnforcerGatekeeperPlugin` default Gatekeeper plugin enforces TLS 1.3 on all Kafka listeners and components' clients.
 For internal connections (ports 9090 and 9091), this has no backward compatibility risk because every component connecting to them already supports TLS 1.3.
 For external user-facing listeners, this is a breaking change for Kafka clients that only support TLS 1.2: those clients will be rejected while the plugin is active.
 Users with such clients can disable the plugin or set `ssl.enabled.protocols: TLSv1.2,TLSv1.3` in `spec.kafka.config` to restore the previous behavior.
