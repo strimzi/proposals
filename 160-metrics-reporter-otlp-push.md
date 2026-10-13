@@ -74,7 +74,7 @@ The following configurations are added to the *Reporter*:
 | Name | Type | Default | Description |
 |:-----|:-----|:--------|:------------|
 | `prometheus.metrics.reporter.otlp.enable` | Boolean | `false` | Whether to push metrics to an OTLP endpoint. |
-| `prometheus.metrics.reporter.otlp.endpoint` | String | Not set | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. |
+| `prometheus.metrics.reporter.otlp.endpoint` | String | Not set | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. Like `OTEL_EXPORTER_OTLP_ENDPOINT`, it is a base URL, so the `/v1/metrics` path is appended with the `http/protobuf` protocol. |
 | `prometheus.metrics.reporter.otlp.protocol` | String | Not set | The OTLP transport protocol, either `grpc` or `http/protobuf`. |
 | `prometheus.metrics.reporter.otlp.interval.seconds` | Integer | Not set | The interval in seconds between two pushes. |
 | `prometheus.metrics.reporter.otlp.resource.attributes` | List | Empty | A comma-separated list of `key=value` pairs added as resource attributes to the pushed metrics, in the same format as the `OTEL_RESOURCE_ATTRIBUTES` environment variable. |
@@ -101,6 +101,7 @@ Resource attributes from all sources are merged, and the *Reporter* configuratio
 This order matters because the values set through the `OpenTelemetryExporter.Builder` methods have the lowest priority, and are overridden by any `OTEL_*` environment variable.
 For example, a Kafka Connect user who sets `OTEL_EXPORTER_OTLP_ENDPOINT` for tracing would silently send the metrics to the tracing endpoint, even when a different metrics endpoint is configured in the *Reporter*.
 To avoid that, the *Reporter* passes its configuration to the exporter through `PrometheusProperties` (`OpenTelemetryExporter.builder(PrometheusProperties)`), which has precedence over the `OTEL_*` settings.
+The exporter does not append the `/v1/metrics` path to an endpoint passed this way, so the *Reporter* appends it itself when the `http/protobuf` protocol is used.
 
 The settings that the *Reporter* does not expose, such as headers, timeouts, compression and TLS certificates, are configured through the standard `OTEL_EXPORTER_OTLP_*` environment variables or system properties.
 This is the same approach that Strimzi already documents for tracing.
@@ -113,7 +114,8 @@ If each reporter instance started its own exporter, every metric would be pushed
 
 Similar to the existing `HttpServers` class, a new `OtlpExporters` class keeps track of the exporters started in a JVM.
 Reporter instances configured with the same OTLP settings share a single reference-counted exporter, which is closed when the last reporter using it is closed.
-All reporter classes, including `ServerYammerMetricsReporter`, acquire the shared exporter, so the push works regardless of which reporters are configured.
+On brokers, the exporter is started by `ServerKafkaMetricsReporter`, in the same way as the HTTP listener today.
+Because the exporter pushes the whole registry, it also pushes the metrics collected by `ServerYammerMetricsReporter`.
 
 Each exporter pushes the whole registry.
 If reporter instances in the same JVM are configured with different OTLP settings, for example through connector client overrides in Kafka Connect, each distinct set of settings gets its own exporter that pushes all metrics.
@@ -343,6 +345,14 @@ To fix this, the proposal includes the following changes:
 1. The Strimzi tracing agent and the Bridge configure the tracing SDK instance itself, through `AutoConfiguredOpenTelemetrySdk.builder().addPropertiesCustomizer(...)`, instead of setting a JVM-wide system property.
 2. The *Reporter* catches failures when it starts the exporter and reports a clear error message that points to the `otel.metrics.exporter` setting.
 3. We contribute a change to the Prometheus Java client so that its exporter always enables the OTLP metrics exporter of its own SDK instance, in the same way it already disables the traces and logs exporters.
+
+#### Initialization order
+
+When it starts, the `OpenTelemetryExporter` calls `GlobalOpenTelemetry.get()` on the unshaded OpenTelemetry API, if it is on the classpath, to read the resource attributes of the OpenTelemetry Java agent.
+This sets a no-op global instance, so a tracing SDK that registers itself as the global instance afterwards fails to start.
+To avoid this, tracing must be initialized before the OTLP metrics push starts:
+- In Kafka Connect and MirrorMaker 2, the Strimzi tracing agent initializes tracing when the JVM starts, before any reporter is configured.
+- The Bridge initializes tracing before it starts its HTTP server and the OTLP metrics push.
 
 ### Testing
 
