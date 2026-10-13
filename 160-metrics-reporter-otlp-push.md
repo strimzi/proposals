@@ -83,8 +83,9 @@ The following configurations are added to the *Reporter*:
 
 The configuration names use the existing `prometheus.metrics.reporter.` prefix so that all *Reporter* configurations stay consistent.
 
-When a setting is not set, the standard OpenTelemetry configuration applies, as described in the next section.
-If nothing is configured at all, the OpenTelemetry SDK defaults apply, which are the `grpc` protocol, the `http://localhost:4317` endpoint and a 60 seconds interval.
+Nothing is pushed unless `prometheus.metrics.reporter.otlp.enable` is set to `true`.
+When OTLP is enabled and a setting is not set, the standard OpenTelemetry configuration applies, as described in the next section.
+If neither the *Reporter* nor the standard OpenTelemetry configuration sets them, the OpenTelemetry SDK defaults apply, which are the `grpc` protocol, the `http://localhost:4317` endpoint and a 60 seconds interval.
 
 The new configurations are not dynamically reconfigurable.
 Changing them requires restarting the component.
