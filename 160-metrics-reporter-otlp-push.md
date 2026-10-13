@@ -16,6 +16,8 @@ Strimzi provides `PodMonitor` examples so that Prometheus can scrape these endpo
 Users who want to send Strimzi metrics to an OTLP backend currently have two options:
 - Deploy an OpenTelemetry Collector next to each cluster, scrape the Prometheus endpoints with its `prometheus` receiver, and forward the metrics over OTLP.
 - Configure the OpenTelemetry mode of the *Exporter* through its YAML configuration file, and keep using JMX.
+  The resource attributes in this file are static values, and Strimzi uses a single configuration file for all pods of a component, so the pods cannot identify themselves.
+  The `OTEL_RESOURCE_ATTRIBUTES` environment variable does not help either, because the container template only supports static values or references to `Secrets` and `ConfigMaps`, and not the Downward API.
 
 Distributed tracing is configured separately through the `tracing` property with `type: opentelemetry` in `KafkaConnect`, `KafkaMirrorMaker2` and `KafkaBridge`.
 Users configure the tracing exporter through the standard `OTEL_*` environment variables, for example `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT`, set in the container template.
