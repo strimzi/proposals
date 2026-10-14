@@ -1,4 +1,4 @@
-# OTLP push support for the Strimzi Metrics Reporter
+# Support for OTLP push metrics in the Strimzi Metrics Reporter
 
 This proposal adds support for pushing metrics over the [OpenTelemetry Protocol (OTLP)](https://opentelemetry.io/docs/specs/otlp/) to the [Strimzi Metrics Reporter](https://github.com/strimzi/metrics-reporter).
 It also describes how the feature is exposed by the Strimzi Cluster Operator and the HTTP Bridge.
