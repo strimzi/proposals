@@ -49,7 +49,7 @@ The proposal follows three principles:
 - OTLP push is an additional output of the existing *Reporter*, not a new reporter.
   The registry, the collectors, the metric names and the allow list are shared by both outputs.
 - The existing API, configuration names and conventions are kept wherever possible.
-  OTLP push is configured as part of the existing `strimziMetricsReporter` type in the custom resources.
+  In the custom resources, OTLP push is configured with a new `strimziMetricsReporterOtlp` metrics type, next to the existing `strimziMetricsReporter` type, with the same allow list.
 - Concepts that only make sense for pull are not forced onto push.
   Where push needs something new, such as the identity of the source pod, the proposal follows OpenTelemetry conventions instead of inventing Strimzi-specific ones.
 
@@ -61,7 +61,8 @@ The changes are split between the *Reporter*, the Cluster Operator and the HTTP 
 
 The *Reporter* gains an optional OTLP output next to the existing HTTP listener.
 Both outputs are independent, so the *Reporter* can expose the Prometheus endpoint, push over OTLP, or do both at the same time.
-Running both outputs at the same time is useful when migrating from one monitoring pipeline to the other.
+Applications using the *Reporter* directly can run both outputs while they migrate from one monitoring pipeline to the other.
+In the Strimzi custom resources, the type of the metrics configuration selects one of the outputs, as described in [Migration](#migration).
 
 No new reporter classes are added.
 Separate classes would duplicate the collectors and the registry singletons, and `ServerYammerMetricsReporter` does not support creating a second instance.
@@ -171,17 +172,15 @@ The `prometheus-metrics-exporter-opentelemetry` artifact is about 5.7 MB because
 
 #### API
 
-The `strimziMetricsReporter` type gains two optional properties in `values`:
-- `prometheusEndpoint` configures the existing Prometheus endpoint.
-  It has a single `enabled` property, which defaults to `true`.
-  Using an object instead of a boolean leaves room for future options, such as the TLS configuration that [Proposal 143](./143-enable-ssl-for-metrics-reporter.md) deferred to a separate proposal.
-- `otlp` enables and configures the OTLP push.
-  Its presence enables the push.
+A new `strimziMetricsReporterOtlp` type is added to `metricsConfig`.
+It uses the same *Reporter* as the `strimziMetricsReporter` type, with the same allow list and metric names, but it pushes the metrics over OTLP instead of exposing them on a Prometheus endpoint.
+The existing `strimziMetricsReporter` type keeps its current behavior.
 
-The `otlp` object has the following properties:
+The `values` of the new type have the following properties:
 
 | Property | Type | Required | Description |
 |:---------|:-----|:---------|:------------|
+| `allowList` | List of strings | No | A list of regex patterns to filter the metrics to collect, with the same default as for the `strimziMetricsReporter` type. |
 | `endpoint` | String | No | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template. |
 | `protocol` | Enum (`grpc`, `http/protobuf`) | No | The OTLP transport protocol. Defaults to `grpc`. |
 | `intervalSeconds` | Integer | No | The interval in seconds between two pushes. Must be at least 1. Defaults to 60. |
@@ -189,10 +188,10 @@ The `otlp` object has the following properties:
 | `tls` | Object | No | The TLS configuration, with the `trustedCertificates` used to verify the OTLP endpoint. See [TLS and authentication](#tls-and-authentication). |
 | `authentication` | Object | No | The authentication configuration. The `tls` type uses a client certificate for mTLS. See [TLS and authentication](#tls-and-authentication). |
 
-The defaults in the table are the OpenTelemetry SDK defaults.
-The operator does not write default values to the generated configuration, so the standard `OTEL_*` environment variables can still override them.
+The defaults in the table, except for `allowList`, are the OpenTelemetry SDK defaults.
+The operator does not write these default values to the generated configuration, so the standard `OTEL_*` environment variables can still override them.
 
-The following example pushes the metrics over OTLP and disables the Prometheus endpoint:
+The following example pushes the metrics of a Kafka cluster over OTLP:
 
 ```yaml
 apiVersion: kafka.strimzi.io/v1
@@ -203,25 +202,20 @@ spec:
   kafka:
     # ...
     metricsConfig:
-      type: strimziMetricsReporter
+      type: strimziMetricsReporterOtlp
       values:
         allowList:
           - "kafka_server_replicamanager_.*"
           - "kafka_controller_.*"
-        prometheusEndpoint:
-          enabled: false
-        otlp:
-          endpoint: http://otel-collector.observability.svc:4317
-          protocol: grpc
-          intervalSeconds: 30
-          resourceAttributes:
-            - name: deployment.environment.name
-              value: production
+        endpoint: http://otel-collector.observability.svc:4317
+        protocol: grpc
+        intervalSeconds: 30
+        resourceAttributes:
+          - name: deployment.environment.name
+            value: production
 ```
 
-When `prometheusEndpoint` is not set, the Prometheus endpoint stays enabled, so existing resources keep their current behavior.
-
-The same API is available in all resources that already support the `strimziMetricsReporter` type:
+The new type is available in all resources that support the `strimziMetricsReporter` type:
 - `Kafka` (brokers and controllers)
 - `KafkaConnect`
 - `KafkaMirrorMaker2`
@@ -229,17 +223,19 @@ The same API is available in all resources that already support the `strimziMetr
 
 #### Validation
 
-The CRD schema validates the supported `otlp.protocol` values and that `otlp.intervalSeconds` is at least 1.
-A CEL rule validates that at least one output is enabled, so `prometheusEndpoint.enabled: false` is only valid when `otlp` is set.
+The CRD schema validates the supported `protocol` values and that `intervalSeconds` is at least 1.
 The format of the endpoint is validated by the *Reporter*.
+The operator validates the `allowList` in the same way as for the `strimziMetricsReporter` type.
 The CRD schema also validates that each resource attribute has exactly one of `value` and `valueFrom`, in the same way as the environment variables of the container template.
 The operator validates that `valueFrom.fieldRef` only uses the fields supported by the Downward API for environment variables, so that an invalid field is reported in the custom resource status instead of failing when the pods are created.
 
-The operator percent-encodes the names and values of `otlp.resourceAttributes` when generating the configuration, as defined for `OTEL_RESOURCE_ATTRIBUTES`, so they can contain characters such as `,` and `=`.
+The operator percent-encodes the names and values of `resourceAttributes` when generating the configuration, as defined for `OTEL_RESOURCE_ATTRIBUTES`, so they can contain characters such as `,` and `=`.
 
 #### Generated configuration
 
-For brokers and controllers, the operator generates the following *Reporter* configuration for the example above:
+For brokers and controllers, the operator generates the following *Reporter* configuration for the example above.
+The HTTP listener of the *Reporter* is always disabled with this type.
+
 
 ```properties
 prometheus.metrics.reporter.listener.enable=false
@@ -261,31 +257,33 @@ With push, the source has to be identified by resource attributes.
 They can be added centrally by the OpenTelemetry Collector, for example with the `k8sattributes` processor, or by the pods themselves.
 
 The operator does not set any resource attributes by default.
-Users configure them in `otlp.resourceAttributes`, as a list of `name` and `value` pairs.
+Users configure them in `resourceAttributes`, as a list of `name` and `value` pairs.
 Instead of a static `value`, an attribute can take its value from the pod through `valueFrom.fieldRef`, which supports the same fields as the Kubernetes Downward API for environment variables, such as `metadata.name`, `metadata.namespace` and `spec.nodeName`.
 Reading these fields does not require any RBAC permissions, because the kubelet provides them.
 
 The following example sets the attributes of the OpenTelemetry [semantic conventions for Kubernetes](https://opentelemetry.io/docs/specs/semconv/non-normative/k8s-attributes/) that identify the pod:
 
 ```yaml
-otlp:
-  resourceAttributes:
-    - name: k8s.namespace.name
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-    - name: k8s.pod.name
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
-    - name: service.namespace
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-    - name: service.instance.id
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
+metricsConfig:
+  type: strimziMetricsReporterOtlp
+  values:
+    resourceAttributes:
+      - name: k8s.namespace.name
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: k8s.pod.name
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: service.namespace
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: service.instance.id
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
 ```
 
 Some backends need a unique identity for each pod.
@@ -301,7 +299,7 @@ The generated configuration only changes when the custom resource changes, so th
 #### Ports and network policies
 
 Today, the operator opens the metrics container port and adds a `NetworkPolicy` ingress rule for it whenever metrics are configured.
-When `prometheusEndpoint.enabled` is `false`, the operator does not create the metrics port or the `NetworkPolicy` rule, because nothing needs to connect to the pod.
+With the `strimziMetricsReporterOtlp` type, the operator does not create the metrics port or the `NetworkPolicy` rule, because nothing needs to connect to the pod.
 
 Pushing metrics requires egress traffic from the pods to the OTLP endpoint.
 Strimzi does not manage egress network policies, so users who restrict egress traffic have to allow it themselves.
@@ -309,22 +307,24 @@ Strimzi does not manage egress network policies, so users who restrict egress tr
 #### TLS and authentication
 
 TLS is configured in the same way as the TLS connection of Kafka Connect to the Kafka cluster:
-- `otlp.tls.trustedCertificates` is a list of certificates from `Secrets`, used to verify the OTLP endpoint.
-- `otlp.authentication` with `type: tls` configures mTLS, with the client certificate and key from a `Secret` in `certificateAndKey`.
+- `tls.trustedCertificates` is a list of certificates from `Secrets`, used to verify the OTLP endpoint.
+- `authentication` with `type: tls` configures mTLS, with the client certificate and key from a `Secret` in `certificateAndKey`.
 
 ```yaml
-otlp:
-  endpoint: https://otel-collector.observability.svc:4317
-  tls:
-    trustedCertificates:
-      - secretName: otel-collector-ca
-        certificate: ca.crt
-  authentication:
-    type: tls
-    certificateAndKey:
-      secretName: my-otlp-client
-      certificate: tls.crt
-      key: tls.key
+metricsConfig:
+  type: strimziMetricsReporterOtlp
+  values:
+    endpoint: https://otel-collector.observability.svc:4317
+    tls:
+      trustedCertificates:
+        - secretName: otel-collector-ca
+          certificate: ca.crt
+    authentication:
+      type: tls
+      certificateAndKey:
+        secretName: my-otlp-client
+        certificate: tls.crt
+        key: tls.key
 ```
 
 As for Kafka Connect, the operator collects the trusted certificates from all the `Secrets` listed in `trustedCertificates` into an internal `<component_name>-otlp-trusted-certs` `Secret`.
@@ -332,15 +332,15 @@ It passes the trusted certificates and the client certificate and key with the `
 The certificates and the key are therefore never stored in the generated configuration.
 
 Other authentication methods, such as tokens sent in headers, can be configured through the standard `OTEL_EXPORTER_OTLP_HEADERS` environment variable in the container template, using `valueFrom.secretKeyRef` so that the credentials stay in a `Secret`.
-New types can be added to `otlp.authentication` in the future.
+New types can be added to `authentication` in the future.
 
 #### Rolling updates
 
 The *Reporter* OTLP configurations are not dynamically reconfigurable.
-Changing the `otlp` or `prometheusEndpoint` properties triggers a rolling update of the affected pods.
+Changing the configuration of the `strimziMetricsReporterOtlp` type, or switching between the `strimziMetricsReporter` and `strimziMetricsReporterOtlp` types, triggers a rolling update of the affected pods.
 The *Reporter* only reads the certificates when it starts, so the operator also rolls the pods when the content of the trusted certificates or of the client certificate and key changes, for example when they are renewed.
 It does so with a pod annotation containing a hash of the certificates, in the same way as for the certificates of the Kafka Connect connection to the Kafka cluster.
-Changing the allow list keeps its current behavior, so brokers are reconfigured dynamically.
+Changing only the allow list keeps its current behavior, so brokers are reconfigured dynamically.
 
 ### HTTP Bridge
 
@@ -363,20 +363,18 @@ The OTLP output of the *Reporter* stays disabled in the Kafka clients created by
 The Bridge gets the following configurations, which mirror the *Reporter* ones:
 
 ```properties
-bridge.metrics=strimziMetricsReporter
-# disables the /metrics endpoint, defaults to true
-bridge.metrics.endpoint.enable=false
-bridge.metrics.otlp.enable=true
+bridge.metrics=strimziMetricsReporterOtlp
 bridge.metrics.otlp.endpoint=http://otel-collector.observability.svc:4317
 bridge.metrics.otlp.protocol=grpc
 bridge.metrics.otlp.interval.seconds=30
 bridge.metrics.otlp.resource.attributes=deployment.environment.name=production
 ```
 
+Like in the Cluster Operator API, the `strimziMetricsReporterOtlp` value of `bridge.metrics` selects the OTLP push.
+With it, the Bridge pushes the metrics and does not serve them on the `/metrics` endpoint.
+The HTTP server keeps running, because it serves the REST API.
 The Bridge also supports the `bridge.metrics.otlp.ssl.*` configurations, with the same names as the TLS configurations of the *Reporter*.
 The defaults and the precedence with the standard OpenTelemetry configuration are the same as in the *Reporter*.
-OTLP push is only supported with `bridge.metrics=strimziMetricsReporter`, to match the Cluster Operator API.
-`bridge.metrics.endpoint.enable=false` is only valid when `bridge.metrics.otlp.enable=true`.
 
 Like the Kafka clients, the Bridge resolves the configuration provider placeholders in the `bridge.metrics.otlp.resource.attributes` and `bridge.metrics.otlp.ssl.*` configurations.
 It resolves `${strimzienv:...}` placeholders with the Kafka `EnvVarConfigProvider`, and `${strimzisecrets:...}` placeholders with the `KubernetesSecretConfigProvider`, which it only creates when a configuration uses it.
@@ -384,8 +382,7 @@ This way, the operator can generate the resource attributes and the TLS configur
 
 #### Cluster Operator integration
 
-When the `KafkaBridge` resource uses `otlp`, the operator generates the `bridge.metrics.otlp.*` configurations instead of the `kafka.prometheus.metrics.reporter.otlp.*` ones.
-When `prometheusEndpoint.enabled` is `false`, the operator sets `bridge.metrics.endpoint.enable=false`.
+When the `KafkaBridge` resource uses the `strimziMetricsReporterOtlp` type, the operator sets `bridge.metrics=strimziMetricsReporterOtlp` and generates the `bridge.metrics.otlp.*` configurations instead of the `kafka.prometheus.metrics.reporter.otlp.*` ones.
 The Bridge exposes its metrics on its HTTP port, so there is no metrics port or `NetworkPolicy` rule to remove.
 
 ### Interaction with tracing
@@ -397,9 +394,9 @@ Both SDKs read the same standard configuration, which has the following conseque
 #### Shared environment variables
 
 The generic `OTEL_EXPORTER_OTLP_*` environment variables apply to both traces and metrics, unless the *Reporter* configuration sets the corresponding value.
-Users who already use tracing can push metrics to the same collector without configuring the endpoint again, by setting an empty `otlp: {}` object.
-Users who want to send the signals to different backends can set `otlp.endpoint`, or use the signal-specific environment variables, such as `OTEL_EXPORTER_OTLP_TRACES_HEADERS` and `OTEL_EXPORTER_OTLP_METRICS_HEADERS`.
-In the same way, the `OTEL_SERVICE_NAME` set for tracing also applies to the metrics, unless `service.name` is set in `otlp.resourceAttributes`.
+Users who already use tracing can push metrics to the same collector without configuring the endpoint again, by using the `strimziMetricsReporterOtlp` type without an `endpoint`.
+Users who want to send the signals to different backends can set the `endpoint`, or use the signal-specific environment variables, such as `OTEL_EXPORTER_OTLP_TRACES_HEADERS` and `OTEL_EXPORTER_OTLP_METRICS_HEADERS`.
+In the same way, the `OTEL_SERVICE_NAME` set for tracing also applies to the metrics, unless `service.name` is set in `resourceAttributes`.
 
 #### The `otel.metrics.exporter` system property
 
@@ -419,6 +416,29 @@ This sets a no-op global instance, so a tracing SDK that registers itself as the
 To avoid this, tracing must be initialized before the OTLP metrics push starts:
 - In Kafka Connect and MirrorMaker 2, the Strimzi tracing agent initializes tracing when the JVM starts, before any reporter is configured.
 - The Bridge initializes tracing before it starts its HTTP server and the OTLP metrics push.
+
+### Migration
+
+Because the type of the metrics configuration selects the output, a component cannot expose the Prometheus endpoint and push over OTLP at the same time.
+Changing the type from `strimziMetricsReporter` to `strimziMetricsReporterOtlp` rolls the pods, and from then on their metrics are only pushed.
+Each custom resource has its own metrics configuration, so the components can be migrated one at a time, for example the Kafka Connect clusters before the Kafka clusters.
+
+To migrate to an OTLP backend without losing metrics, we recommend the following steps:
+1. Deploy an OpenTelemetry Collector that scrapes the existing Prometheus endpoints with its `prometheus` receiver, and forwards the metrics over OTLP to the new backend.
+   The Collector can discover the pods in the same way as the example `PodMonitor` resources.
+2. Check the metrics, the dashboards and the alerts in the new backend, while Prometheus keeps scraping the pods.
+3. Change the metrics configuration to the `strimziMetricsReporterOtlp` type, with the Collector or the backend as the endpoint.
+   The pods roll and start pushing their metrics.
+4. Remove the scraping configuration from the Collector, and the `PodMonitor` resources from Prometheus.
+
+The Collector only scrapes the pods during the migration, so a single replica is enough, and the drawbacks described in the motivation are acceptable for that time.
+To keep the same series in the new backend, the resource attributes of the pushed metrics should match the labels that the Collector adds when it scrapes the pods.
+
+Users who need to keep feeding an existing Prometheus after the migration can use the Collector the other way around.
+It receives the pushed metrics over OTLP, and either exposes them with its `prometheus` exporter or sends them to Prometheus with remote write.
+Prometheus can also ingest the pushed metrics directly with its OTLP receiver.
+
+Migrating back is done in the same way, by changing the type back to `strimziMetricsReporter`.
 
 ### Testing
 
@@ -441,9 +461,9 @@ It also covers tracing and OTLP metrics push enabled at the same time.
 
 The following projects are affected:
 - `metrics-reporter`: adds the OTLP output.
-- `strimzi-kafka-operator`: adds the API and generates the configuration for `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2` and `KafkaBridge`, and changes the tracing agent.
+- `strimzi-kafka-operator`: adds the `strimziMetricsReporterOtlp` type and generates the configuration for `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2` and `KafkaBridge`, and changes the tracing agent.
   The Kafka container images get the new *Reporter* version, including the exporter dependency.
-- `strimzi-kafka-bridge`: adds the OTLP push and the option to disable the `/metrics` endpoint, and changes how it disables the metrics exporter of the tracing SDK.
+- `strimzi-kafka-bridge`: adds the OTLP push with the `strimziMetricsReporterOtlp` metrics type, and changes how it disables the metrics exporter of the tracing SDK.
 
 The following projects are not affected:
 - `strimzi-kafka-oauth` and `kafka-quotas-plugin`: their metrics already end up in the *Reporter* registry when it is used, so they are pushed as well.
@@ -453,15 +473,15 @@ The following projects are not affected:
 The following metrics are not covered by this proposal, and OTLP push for them can be addressed separately:
 - The metrics of the Strimzi Cluster Operator, Topic Operator and User Operator, which are collected with Micrometer and not with the *Reporter*.
 - The metrics of the other Strimzi projects, such as the Strimzi Drain Cleaner and the Strimzi Access Operator.
-- Cruise Control, which does not support the `strimziMetricsReporter` type.
+- Cruise Control, which supports neither the `strimziMetricsReporter` type nor the new `strimziMetricsReporterOtlp` type.
 - Kafka Exporter, which is not based on the *Reporter*.
   The re-implementation described in [Proposal 158](./158-kafka-exporter-re-implementation.md) could adopt OTLP push later.
 
 ## Compatibility
 
-All new configurations and API properties are optional, and push is disabled by default.
-Existing configurations and custom resources keep their current behavior, including the Prometheus endpoint, which stays enabled unless it is explicitly disabled.
-The new API properties are added to the existing `v1` API, so no new API version is needed.
+The new `strimziMetricsReporterOtlp` type is added next to the existing metrics types, which keep their current behavior.
+The new *Reporter* and Bridge configurations are optional, and push is disabled by default.
+The new type is added to the existing `v1` API, so no new API version is needed.
 
 The change to how tracing disables the metrics exporter of the tracing SDK does not change the tracing behavior.
 
@@ -474,10 +494,9 @@ Providing dashboards for OTLP data is not part of this proposal.
 
 ## Rejected alternatives
 
-### A new `metricsConfig` type
+### Adding OTLP to the `strimziMetricsReporter` type
 
-A new type, for example `openTelemetryMetricsReporter`, would configure the *Reporter* for push only.
-This would make validation slightly simpler, for example by requiring the endpoint.
-However, it would suggest a different implementation, even though the same plugin, allow list and metric names are used.
-It would also make it impossible to expose the Prometheus endpoint and push at the same time, which is useful during a migration.
-OTLP is a transport of the same *Reporter*, so it is modeled as an option of the existing type.
+The OTLP push could be configured with an `otlp` property of the existing `strimziMetricsReporter` type, together with a `prometheusEndpoint.enabled` property to disable the Prometheus endpoint.
+This would allow exposing the Prometheus endpoint and pushing at the same time, for example during a migration.
+However, the Prometheus endpoint would stay enabled by default even when only push is wanted, and a single type would mix the options of pull and push, which makes the API harder to understand.
+The migration is a temporary need that can be addressed in other ways, as described in [Migration](#migration), so the cleaner API was preferred.
