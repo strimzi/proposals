@@ -14,7 +14,8 @@ The HTTP Bridge exposes its metrics on the `/metrics` path of its own HTTP serve
 Strimzi provides `PodMonitor` examples so that Prometheus can scrape these endpoints.
 
 Users who want to send Strimzi metrics to an OTLP backend currently have two options:
-- Deploy an OpenTelemetry Collector next to each cluster, scrape the Prometheus endpoints with its `prometheus` receiver, and forward the metrics over OTLP.
+- Deploy an OpenTelemetry Collector that scrapes the Prometheus endpoints with its `prometheus` receiver, and forwards the metrics over OTLP.
+  A single Collector can scrape several Kafka clusters and other components.
 - Configure the OpenTelemetry mode of the *Exporter* through its YAML configuration file, and keep using JMX.
   The resource attributes in this file are static values, and Strimzi uses a single configuration file for all pods of a component, so the pods cannot identify themselves.
   The `OTEL_RESOURCE_ATTRIBUTES` environment variable does not help either, because the container template only supports static values or references to `Secrets` and `ConfigMaps`, and not the Downward API.
@@ -28,8 +29,10 @@ OTLP is becoming the vendor-neutral standard for transporting telemetry.
 Most observability backends, including Prometheus itself, can ingest OTLP metrics, and some managed backends only accept pushed data.
 
 Scraping the pods with a collector to convert the metrics to OTLP has several drawbacks:
-- Every cluster needs an additional workload with its own configuration and RBAC resources.
-- The scraping has to be coordinated, otherwise every pod is scraped by each collector replica and the metrics are duplicated.
+- An additional workload is needed, with its own configuration and the RBAC resources to discover the pods.
+- The scraping has to be coordinated between the Collector replicas.
+  Each replica discovers and scrapes all the pods on its own, so with more than one replica, for example for high availability, every metric is collected and forwarded several times.
+  Avoiding this requires sharding the targets between the replicas, for example with the target allocator of the OpenTelemetry Operator.
   Running a single replica avoids the duplication, but it is a single point of failure and limits scaling.
 - Many backends need the identity of the source pod, such as `k8s.pod.name` and `k8s.namespace.name`.
   When scraping, this identity has to be reconstructed through relabeling or the `k8sattributes` processor.
@@ -76,14 +79,20 @@ The following configurations are added to the *Reporter*:
 | Name | Type | Default | Description |
 |:-----|:-----|:--------|:------------|
 | `prometheus.metrics.reporter.otlp.enable` | Boolean | `false` | Whether to push metrics to an OTLP endpoint. |
-| `prometheus.metrics.reporter.otlp.endpoint` | String | Not set | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. Like `OTEL_EXPORTER_OTLP_ENDPOINT`, it is a base URL, so the `/v1/metrics` path is appended with the `http/protobuf` protocol. |
-| `prometheus.metrics.reporter.otlp.protocol` | String | Not set | The OTLP transport protocol, either `grpc` or `http/protobuf`. |
-| `prometheus.metrics.reporter.otlp.interval.seconds` | Integer | Not set | The interval in seconds between two pushes. |
+| `prometheus.metrics.reporter.otlp.endpoint` | String | Not set | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. Like `OTEL_EXPORTER_OTLP_ENDPOINT`, it is a base URL, so the `/v1/metrics` path is appended with the `http/protobuf` protocol, as defined in the [OTLP exporter specification](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#endpoint-urls-for-otlphttp). When not set, the standard OpenTelemetry configuration applies, which defaults to `http://localhost:4317`. |
+| `prometheus.metrics.reporter.otlp.protocol` | String | Not set | The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`. |
+| `prometheus.metrics.reporter.otlp.interval.seconds` | Integer | Not set | The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies (`OTEL_METRIC_EXPORT_INTERVAL`), which defaults to 60 seconds. |
 | `prometheus.metrics.reporter.otlp.resource.attributes` | List | Empty | A comma-separated list of `key=value` pairs added as resource attributes to the pushed metrics, in the same format as the `OTEL_RESOURCE_ATTRIBUTES` environment variable. |
+| `prometheus.metrics.reporter.otlp.ssl.truststore.location` | String | Not set | The path to a PEM file with the trusted certificates used to verify the OTLP endpoint. |
+| `prometheus.metrics.reporter.otlp.ssl.truststore.certificates` | String | Not set | The trusted certificates used to verify the OTLP endpoint, in PEM format. |
+| `prometheus.metrics.reporter.otlp.ssl.keystore.location` | String | Not set | The path to a PEM file with the private key and the certificate chain used for mTLS. |
+| `prometheus.metrics.reporter.otlp.ssl.keystore.certificate.chain` | String | Not set | The certificate chain used for mTLS, in PEM format. |
+| `prometheus.metrics.reporter.otlp.ssl.keystore.key` | Password | Not set | The private key used for mTLS, in PEM format. |
 
 The configuration names use the existing `prometheus.metrics.reporter.` prefix so that all *Reporter* configurations stay consistent.
 
 Nothing is pushed unless `prometheus.metrics.reporter.otlp.enable` is set to `true`.
+Otherwise, the *Reporter* ignores the other OTLP configurations and the standard OpenTelemetry environment variables and system properties.
 When OTLP is enabled and a setting is not set, the standard OpenTelemetry configuration applies, as described in the next section.
 If neither the *Reporter* nor the standard OpenTelemetry configuration sets them, the OpenTelemetry SDK defaults apply, which are the `grpc` protocol, the `http://localhost:4317` endpoint and a 60 seconds interval.
 
@@ -106,8 +115,21 @@ For example, a Kafka Connect user who sets `OTEL_EXPORTER_OTLP_ENDPOINT` for tra
 To avoid that, the *Reporter* passes its configuration to the exporter through `PrometheusProperties` (`OpenTelemetryExporter.builder(PrometheusProperties)`), which has precedence over the `OTEL_*` settings.
 The exporter does not append the `/v1/metrics` path to an endpoint passed this way, so the *Reporter* appends it itself when the `http/protobuf` protocol is used.
 
-The settings that the *Reporter* does not expose, such as headers, timeouts, compression and TLS certificates, are configured through the standard `OTEL_EXPORTER_OTLP_*` environment variables or system properties.
+The settings that the *Reporter* does not expose, such as headers, timeouts and compression, are configured through the standard `OTEL_EXPORTER_OTLP_*` environment variables or system properties.
 This is the same approach that Strimzi already documents for tracing.
+
+#### TLS
+
+The `https://` scheme in the endpoint enables TLS.
+By default, the server certificate is validated against the JVM default trust store.
+
+The TLS configurations follow the names of the Kafka PEM configurations, such as `ssl.truststore.certificates`, `ssl.keystore.certificate.chain` and `ssl.keystore.key`.
+Only the PEM format is supported, like in [Proposal 143](./143-enable-ssl-for-metrics-reporter.md).
+The certificates can be provided either as a path to a PEM file or inline, but not both.
+The inline values allow using Kafka configuration providers, which is how the Cluster Operator passes certificates from `Secrets`.
+
+The OpenTelemetry SDK accepts the trusted certificates, the client certificate and the client key as file paths, so the *Reporter* writes the inline values to temporary files that only the current user can read.
+The `PrometheusProperties` of the exporter do not have options for these settings yet, so we contribute them to the Prometheus Java client, mapped to the metrics-specific `otel.exporter.otlp.metrics.certificate`, `otel.exporter.otlp.metrics.client.certificate` and `otel.exporter.otlp.metrics.client.key` OpenTelemetry settings.
 
 #### One exporter per JVM
 
@@ -140,8 +162,6 @@ The integration tests of the *Reporter* must verify this for gauges, counters an
 #### Dependencies
 
 The `prometheus-metrics-exporter-opentelemetry` artifact is about 5.7 MB because it includes the shaded OpenTelemetry SDK.
-The *Reporter* only loads its classes when `prometheus.metrics.reporter.otlp.enable` is `true`.
-Client applications that do not use OTLP can exclude the dependency, and enabling OTLP without it fails with a clear error message.
 
 ### Strimzi Cluster Operator
 
@@ -158,10 +178,12 @@ The `otlp` object has the following properties:
 
 | Property | Type | Required | Description |
 |:---------|:-----|:---------|:------------|
-| `endpoint` | String | No | The OTLP endpoint, which must start with `http://` or `https://`. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template. |
+| `endpoint` | String | No | The OTLP endpoint in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template. |
 | `protocol` | Enum (`grpc`, `http/protobuf`) | No | The OTLP transport protocol. Defaults to `grpc`. |
 | `intervalSeconds` | Integer | No | The interval in seconds between two pushes. Must be at least 1. Defaults to 60. |
-| `resourceAttributes` | Map of strings | No | Additional resource attributes added to the pushed metrics. They override the attributes set by the operator for the same keys. |
+| `resourceAttributes` | List | No | The resource attributes added to the pushed metrics, as a list of `name` and `value` or `valueFrom` pairs. See [Resource attributes](#resource-attributes). |
+| `tls` | Object | No | The TLS configuration, with the `trustedCertificates` used to verify the OTLP endpoint. See [TLS and authentication](#tls-and-authentication). |
+| `authentication` | Object | No | The authentication configuration. The `tls` type uses a client certificate for mTLS. See [TLS and authentication](#tls-and-authentication). |
 
 The defaults in the table are the OpenTelemetry SDK defaults.
 The operator does not write default values to the generated configuration, so the standard `OTEL_*` environment variables can still override them.
@@ -189,7 +211,8 @@ spec:
           protocol: grpc
           intervalSeconds: 30
           resourceAttributes:
-            deployment.environment.name: production
+            - name: deployment.environment.name
+              value: production
 ```
 
 When `prometheusEndpoint` is not set, the Prometheus endpoint stays enabled, so existing resources keep their current behavior.
@@ -202,12 +225,11 @@ The same API is available in all resources that already support the `strimziMetr
 
 #### Validation
 
-The following rules are validated by CEL rules in the CRDs and in the operator:
-- At least one output must be enabled, so `prometheusEndpoint.enabled: false` is only valid when `otlp` is set.
-- `otlp.endpoint` must start with `http://` or `https://`.
-- `otlp.intervalSeconds` must be at least 1.
+The CRD schema validates the supported `otlp.protocol` values and that `otlp.intervalSeconds` is at least 1.
+A CEL rule validates that at least one output is enabled, so `prometheusEndpoint.enabled: false` is only valid when `otlp` is set.
+The format of the endpoint is validated by the *Reporter*.
 
-The operator percent-encodes the values of `otlp.resourceAttributes` when generating the configuration, as defined for `OTEL_RESOURCE_ATTRIBUTES`, so values can contain characters such as `,` and `=`.
+The operator percent-encodes the names and values of `otlp.resourceAttributes` when generating the configuration, as defined for `OTEL_RESOURCE_ATTRIBUTES`, so they can contain characters such as `,` and `=`.
 
 #### Generated configuration
 
@@ -229,27 +251,42 @@ The shared exporter described above ensures that the metrics are pushed only onc
 #### Resource attributes
 
 Pull-based pipelines identify the source of the metrics from the scrape target.
-With push, the pod has to identify itself, so the operator sets resource attributes that follow the OpenTelemetry [semantic conventions for Kubernetes](https://opentelemetry.io/docs/specs/semconv/non-normative/k8s-attributes/):
+With push, the source has to be identified by resource attributes.
+They can be added centrally by the OpenTelemetry Collector, for example with the `k8sattributes` processor, or by the pods themselves.
 
-| Attribute | Value |
-|:----------|:------|
-| `k8s.namespace.name` | The namespace of the pod. |
-| `k8s.pod.name` | The name of the pod. |
-| `k8s.container.name` | The name of the container. |
-| `k8s.node.name` | The name of the node the pod is running on. |
-| `service.name` | The name of the custom resource, which is also the value of the `app.kubernetes.io/instance` label. |
-| `service.namespace` | The namespace of the pod. |
-| `service.instance.id` | `<namespace>.<pod name>.<container name>` |
+The operator does not set any resource attributes by default.
+Users configure them in `otlp.resourceAttributes`, as a list of `name` and `value` pairs.
+Instead of a static `value`, an attribute can take its value from the pod through `valueFrom.fieldRef`, which supports the same fields as the Kubernetes Downward API for environment variables, such as `metadata.name`, `metadata.namespace` and `spec.nodeName`.
+Reading these fields does not require any RBAC permissions, because the kubelet provides them.
 
-Setting `service.instance.id` to a unique value per pod is important.
-Some backends use it to identify the source, for example the Prometheus OTLP receiver maps it to the `instance` label.
-Without it, the series from different pods would collide.
+The following example sets the attributes of the OpenTelemetry [semantic conventions for Kubernetes](https://opentelemetry.io/docs/specs/semconv/non-normative/k8s-attributes/) that identify the pod:
 
-The operator does not set `service.name` when the user sets it, either in `otlp.resourceAttributes` or through the `OTEL_SERVICE_NAME` environment variable in the container template.
-This way, the metrics and the traces of a component can share the same `service.name`, which is required by Strimzi's tracing configuration.
+```yaml
+otlp:
+  resourceAttributes:
+    - name: k8s.namespace.name
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: k8s.pod.name
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: service.namespace
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: service.instance.id
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+```
 
-Values that are known when generating the configuration, such as the namespace, the resource name and the container name, are written as literals.
-Values that are only known inside the pod are passed through environment variables populated from the Downward API, and referenced with the `${strimzienv:...}` placeholders of the `EnvVarConfigProvider`.
+Some backends need a unique identity for each pod.
+For example, the Prometheus OTLP receiver maps `service.namespace`, `service.name` and `service.instance.id` to the `job` and `instance` labels.
+Most Kafka metrics do not have a label identifying the pod, so without a unique identity, either from the pods or added by the Collector, the series from different pods would collide.
+
+For each attribute using `valueFrom`, the operator adds an environment variable populated from the Downward API to the container, and references it with a `${strimzienv:...}` placeholder of the `EnvVarConfigProvider`.
 The operator already configures this provider and uses these placeholders, for example for `broker.rack` and `rest.advertised.host.name`.
 The placeholders allow a single configuration to work for all pods of a component, including Kafka Connect, where all pods share the same configuration.
 
@@ -265,16 +302,30 @@ Strimzi does not manage egress network policies, so users who restrict egress tr
 
 #### TLS and authentication
 
-The `https://` scheme in `otlp.endpoint` enables TLS.
-By default, the server certificate is validated against the JVM default trust store.
+TLS is configured in the same way as the TLS connection of Kafka Connect to the Kafka cluster:
+- `otlp.tls.trustedCertificates` is a list of certificates from `Secrets`, used to verify the OTLP endpoint.
+- `otlp.authentication` with `type: tls` configures mTLS, with the client certificate and key from a `Secret` in `certificateAndKey`.
 
-Custom trusted certificates, client certificates and authentication headers are configured through the standard OpenTelemetry environment variables, such as `OTEL_EXPORTER_OTLP_CERTIFICATE` and `OTEL_EXPORTER_OTLP_HEADERS`.
-Users set them in the container template, and they can mount certificates using additional volumes.
-Credentials stay in Kubernetes `Secrets`, because container template environment variables can reference them with `valueFrom.secretKeyRef`.
-If they were part of the custom resource, they would end up in the generated configuration, which is stored in a `ConfigMap`.
+```yaml
+otlp:
+  endpoint: https://otel-collector.observability.svc:4317
+  tls:
+    trustedCertificates:
+      - secretName: otel-collector-ca
+        certificate: ca.crt
+  authentication:
+    type: tls
+    certificateAndKey:
+      secretName: my-otlp-client
+      certificate: tls.crt
+      key: tls.key
+```
 
-This is the same approach that Strimzi already documents for tracing.
-First-class TLS configuration in the custom resource, using the `CertSecretSource` pattern used elsewhere in the Strimzi API, can be added later without breaking this API.
+As for Kafka Connect, the operator passes the certificates and the key with the `KubernetesSecretConfigProvider` (`strimzisecrets`) to the inline `ssl.*` configurations of the *Reporter*, and gives the pods access to the `Secrets` they need.
+The certificates and the key are therefore never stored in the generated configuration.
+
+Other authentication methods, such as tokens sent in headers, can be configured through the standard `OTEL_EXPORTER_OTLP_HEADERS` environment variable in the container template, using `valueFrom.secretKeyRef` so that the credentials stay in a `Secret`.
+New types can be added to `otlp.authentication` in the future.
 
 #### Rolling updates
 
@@ -313,6 +364,7 @@ bridge.metrics.otlp.interval.seconds=30
 bridge.metrics.otlp.resource.attributes=deployment.environment.name=production
 ```
 
+The Bridge also supports the `bridge.metrics.otlp.ssl.*` configurations, with the same names as the TLS configurations of the *Reporter*.
 The defaults and the precedence with the standard OpenTelemetry configuration are the same as in the *Reporter*.
 OTLP push is only supported with `bridge.metrics=strimziMetricsReporter`, to match the Cluster Operator API.
 `bridge.metrics.endpoint.enable=false` is only valid when `bridge.metrics.otlp.enable=true`.
@@ -337,6 +389,7 @@ Both SDKs read the same standard configuration, which has the following conseque
 The generic `OTEL_EXPORTER_OTLP_*` environment variables apply to both traces and metrics, unless the *Reporter* configuration sets the corresponding value.
 Users who already use tracing can push metrics to the same collector without configuring the endpoint again, by setting an empty `otlp: {}` object.
 Users who want to send the signals to different backends can set `otlp.endpoint`, or use the signal-specific environment variables, such as `OTEL_EXPORTER_OTLP_TRACES_HEADERS` and `OTEL_EXPORTER_OTLP_METRICS_HEADERS`.
+In the same way, the `OTEL_SERVICE_NAME` set for tracing also applies to the metrics, unless `service.name` is set in `otlp.resourceAttributes`.
 
 #### The `otel.metrics.exporter` system property
 
@@ -360,7 +413,7 @@ To avoid this, tracing must be initialized before the OTLP metrics push starts:
 ### Testing
 
 The *Reporter* gets integration tests that push metrics to an OpenTelemetry Collector running in a container.
-They verify the metric names, the attributes and the resource attributes for both protocols.
+They verify the metric names, the attributes and the resource attributes for both protocols, with and without TLS.
 
 The Cluster Operator gets unit tests for the generated configurations, the ports and the network policies, and a system test based on the existing `StrimziMetricsReporterST`.
 The system test deploys an OpenTelemetry Collector and checks that metrics from brokers, controllers, Kafka Connect, MirrorMaker 2 and the Bridge arrive with the expected resource attributes.
@@ -384,10 +437,15 @@ The following projects are affected:
 
 The following projects are not affected:
 - `strimzi-kafka-oauth` and `kafka-quotas-plugin`: their metrics already end up in the *Reporter* registry when it is used, so they are pushed as well.
-- Cruise Control: it does not support the `strimziMetricsReporter` type.
-- Kafka Exporter: it is not based on the *Reporter*.
+
+## Out of scope
+
+The following metrics are not covered by this proposal, and OTLP push for them can be addressed separately:
+- The metrics of the Strimzi Cluster Operator, Topic Operator and User Operator, which are collected with Micrometer and not with the *Reporter*.
+- The metrics of the other Strimzi projects, such as the Strimzi Drain Cleaner and the Strimzi Access Operator.
+- Cruise Control, which does not support the `strimziMetricsReporter` type.
+- Kafka Exporter, which is not based on the *Reporter*.
   The re-implementation described in [Proposal 158](./158-kafka-exporter-re-implementation.md) could adopt OTLP push later.
-- The metrics of the Strimzi operators themselves.
 
 ## Compatibility
 
