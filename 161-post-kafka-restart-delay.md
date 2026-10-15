@@ -8,7 +8,7 @@ Both default to no delay, so the current behaviour is unchanged unless a user op
 ## Current situation
 
 Rolling updates of Kafka nodes are performed by the `KafkaRoller`.
-Before restarting a node, it checks with `KafkaAvailability` that no partition would drop below `min.insync.replicas`.
+Before restarting a node, it checks that no partition would drop below `min.insync.replicas` for brokers, and that the controller quorum would stay available for controllers.
 After the restart, it waits for the pod to become ready and immediately moves on to the next node, often in less than a second.
 
 The availability check is a point-in-time check.
@@ -22,9 +22,9 @@ If the node drops out while the next one is down, partitions with replicas on bo
 
 This happened during a Kubernetes node upgrade where two nodes hosting brokers A and B were drained in parallel and the Strimzi Drain Cleaner annotated both pods.
 The `KafkaRoller` restarted A, A became ready and rejoined the in-sync replicas, and about 10 seconds later B was restarted.
-About 20 seconds after B began its controlled shutdown, the controller fenced A because of a slow disk, and producers got `NOT_ENOUGH_REPLICAS` for a few minutes.
+About 20 seconds after B began its controlled shutdown, the controller fenced A, which had stopped responding because of a slow disk, and producers got `NOT_ENOUGH_REPLICAS` for a few minutes.
 Waiting for the in-sync replicas would not have helped, because A was already in them when B was checked.
-A delay of 30 seconds would have deferred the restart of B.
+A delay of 60 seconds would have deferred the restart of B.
 
 A delay between restarts was already part of the new `KafkaRoller` design in [PR #103 in strimzi/proposals](https://github.com/strimzi/proposals/pull/103), which was closed without being merged.
 This proposal adds only that piece to the existing `KafkaRoller`.
@@ -41,7 +41,7 @@ It is not applied when a node is only reconfigured without a restart, or when a 
 It is not preserved across a Cluster Operator restart.
 It does not cover pods deleted outside the Cluster Operator, or Kafka Connect and MirrorMaker 2, which use a different roller.
 
-The reconciliation stays in progress during the delay, so each restarted node adds the delay to the duration of the rolling update, and a rolling update can continue past the end of a maintenance time window.
+The reconciliation stays in progress during the delay, so each restarted node adds the delay to the duration of the rolling update, and a rolling update that started inside a maintenance time window can run past its end.
 
 ### Environment variable `STRIMZI_POST_KAFKA_RESTART_DELAY_MS`
 
@@ -50,11 +50,11 @@ A new Cluster Operator environment variable sets the delay for all Kafka cluster
 | Property | Value |
 |:---------|:------|
 | Name | `STRIMZI_POST_KAFKA_RESTART_DELAY_MS` |
-| Type | Non-negative integer, milliseconds |
+| Type | Integer, milliseconds, `0` or less disables the delay |
 | Default | `0`, no delay |
 | Scope | All `Kafka` clusters managed by the operator |
 
-The name follows the existing duration settings such as `STRIMZI_OPERATION_TIMEOUT_MS`, which all use milliseconds and the `_MS` suffix.
+The name follows the other timeout and interval settings such as `STRIMZI_OPERATION_TIMEOUT_MS`, which use milliseconds and the `_MS` suffix.
 It includes `KAFKA` because it applies only to Kafka nodes, and `POST` because the delay is applied after a restart.
 
 An operator-wide setting fits the motivating case, where a Kubernetes node upgrade drains nodes under every cluster the operator manages.
@@ -67,8 +67,8 @@ A new annotation on the `Kafka` resource overrides the operator-wide value for t
 |:---------|:------|
 | Name | `strimzi.io/post-kafka-restart-delay-ms` |
 | Resource | `Kafka` |
-| Type | Non-negative integer, milliseconds |
-| Default | Not set, the environment variable applies |
+| Type | Integer, milliseconds, `0` or less disables the delay |
+| Default | Unset, the environment variable applies |
 
 This lets users enable the delay on the clusters where a restarted node needs time to stabilise, for example production clusters, and keep immediate restarts on others.
 
@@ -87,7 +87,7 @@ The annotation, when set, always wins over the environment variable for its clus
 | Not set | Set | The annotation value |
 | Set | Set | The annotation value, including `0`, which disables the delay for that cluster |
 
-If the annotation value is not a non-negative integer, the operator logs a warning and treats the annotation as not set.
+If the annotation value is not an integer, the operator logs a warning and treats the annotation as not set.
 
 ### Implementation
 
@@ -97,7 +97,7 @@ If the annotation value is not a non-negative integer, the operator logs a warni
 - `KafkaRoller` takes the delay as a constructor parameter and sleeps for it after a restarted pod becomes ready, logging an `INFO` message with the pod name and the delay.
 
 No new state is persisted and no new coordination between reconciliations is introduced.
-Unit tests cover the environment variable parsing, the delay being applied after each restart and not after reconfigurations or failed restarts, and the annotation precedence including `0` and invalid values.
+Unit tests cover the environment variable parsing and the delay being applied after each restart and not after reconfigurations or failed restarts, and will cover the annotation precedence including `0` and invalid values.
 
 The environment variable is implemented in [PR #13212 in strimzi-kafka-operator](https://github.com/strimzi/strimzi-kafka-operator/pull/13212).
 The annotation can be added to the same pull request or to a follow-up one.
