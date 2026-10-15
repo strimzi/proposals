@@ -52,6 +52,7 @@ The finalized features from the same call will be used to determine the current 
 For each valid feature in the list, the `KafkaFeatureManager` will go through the following stages:
 
 * Using the finalized features from the initial `describeFeatures()` call, it will determine the current version of the feature (features not present in the finalized map are treated as version 0 — disabled).
+  * If the current version of the feature is the same as the desired version, skip all steps below.
   * If the feature is not enabled or has a lower version than the desired version, it will mark the operation as an upgrade and use the `UPGRADE` flag.
   * If the feature is enabled and the current version is higher than the desired one, it will mark the operation as a downgrade and use the `SAFE_DOWNGRADE` flag.
 * It will try to update the feature using the `updateFeatures` Admin client operation.
