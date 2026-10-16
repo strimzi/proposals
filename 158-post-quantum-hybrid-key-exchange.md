@@ -75,7 +75,7 @@ Strimzi will continue to work correctly with custom images based on a JDK withou
 ### Enforce TLS 1.3 on all Kafka listeners via a Gatekeeper plugin
 
 Strimzi provides the [Gatekeeper](https://github.com/strimzi/proposals/blob/main/144-Strimzi-Gatekeeper-plugin-system.md) plugin system that allows mutating plugins to modify a `Kafka` custom resource at the beginning of each reconciliation before the operator processes it.
-This proposal ships a new default mutating Gatekeeper plugin, `Tls13EnforcerGatekeeperPlugin`, that injects the following into `spec.kafka.config` during the entry phase of every `Kafka` reconciliation:
+This proposal ships a new mutating Gatekeeper plugin, `Tls13EnforcerGatekeeperPlugin`, that injects the following into `spec.kafka.config` during the entry phase of every `Kafka` reconciliation:
 
 ```yaml
 ssl.protocol: TLSv1.3
@@ -98,11 +98,27 @@ For `KafkaBridge`, the Bridge exposes separate Kafka client configurations for i
 The plugin injects `ssl.protocol: TLSv1.3` and `ssl.enabled.protocols: TLSv1.3` into all three.
 Both properties are allowed in each of them (they are exceptions to the forbidden `ssl.` prefix).
 
-The plugin is added to the `DEFAULT_GATEKEEPER_PLUGINS` list in the Cluster Operator, so it is active out of the box.
-Users can opt out by overriding the `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` environment variable on the Cluster Operator deployment, or by setting `ssl.enabled.protocols` and `ssl.protocol` explicitly in their `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2`, and `KafkaBridge`, in which case the plugin respects the user-supplied values and does not override them.
-
 Enforcing TLS 1.3 on all listeners and components' clients makes the PQHKE guarantee explicit and auditable at the configuration level rather than inferred from runtime negotiation behavior.
 It also addresses the HNDL threat on the data plane: external user-facing listeners now require TLS 1.3, so capable clients (i.e. Java 25 with JEP-527, Go 1.24+) negotiate `X25519MLKEM768` and the session key is quantum-safe from the moment it is established.
+
+#### Phased enablement
+
+Because enforcing TLS 1.3 on external listeners is a breaking change for TLS 1.2-only clients, the plugin is rolled out across consecutive Strimzi releases rather than being enabled by default immediately.
+
+In 1.4.0 and 1.5.0, `Tls13EnforcerGatekeeperPlugin` is shipped as an available but optional plugin: it is not added to `DEFAULT_GATEKEEPER_PLUGINS`.
+Users who want to opt in early can add it to the `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` environment variable on the Cluster Operator deployment.
+The release notes include a warning that the plugin will be moved to `DEFAULT_GATEKEEPER_PLUGINS` in 1.6.0, giving users time to prepare.
+
+In 1.6.0 the plugin is promoted to `DEFAULT_GATEKEEPER_PLUGINS` and is active out of the box.
+Users can still opt out at that point by removing the plugin from `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS`, or by setting `ssl.enabled.protocols` and `ssl.protocol` explicitly in their `Kafka`, `KafkaConnect`, `KafkaMirrorMaker2`, and `KafkaBridge` resources; in the latter case the plugin respects the user-supplied values and does not override them.
+
+The following table summarises the rollout schedule:
+
+| Release | Plugin status                     | Notes                                                                                                |
+|---------|-----------------------------------|------------------------------------------------------------------------------------------------------|
+| 1.4.0   | Available, not enabled by default | Opt in via `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS`. Warns it will be default in 1.6.0.                  |
+| 1.5.0   | Available, not enabled by default | Same as 1.4.0.                                                                                       |
+| 1.6.0   | Enabled by default                | Opt out via `STRIMZI_GATEKEEPER_DEFAULT_PLUGINS` or explicit `ssl.enabled.protocols`/`ssl.protocol`. |
 
 #### Impact on external listener compatibility
 
@@ -167,10 +183,10 @@ The proposal doesn't affect the Kafka Exporter component which is a pre-compiled
 
 ## Compatibility
 
-The `Tls13EnforcerGatekeeperPlugin` default Gatekeeper plugin enforces TLS 1.3 on all Kafka listeners and components' clients.
-For internal connections (ports 9090 and 9091), this has no backward compatibility risk because every component connecting to them already supports TLS 1.3.
-For external user-facing listeners, this is a breaking change for Kafka clients that only support TLS 1.2: those clients will be rejected while the plugin is active.
-Users with such clients can disable the plugin or set `ssl.enabled.protocols: TLSv1.2,TLSv1.3` in `spec.kafka.config` to restore the previous behavior.
+The `Tls13EnforcerGatekeeperPlugin` Gatekeeper plugin enforces TLS 1.3 on all Kafka listeners and components' clients once it is active.
+In 1.4.0 and 1.5.0 the plugin is optional and not enabled by default, so both releases are fully backward compatible: no existing TLS behavior changes unless the user explicitly enables the plugin.
+Starting from 1.6.0, when the plugin is promoted to `DEFAULT_GATEKEEPER_PLUGINS`, the behavior changes: for internal connections (ports 9090 and 9091) this has no backward compatibility risk because every component connecting to them already supports TLS 1.3, but for external user-facing listeners this is a breaking change for Kafka clients that only support TLS 1.2, as those clients will be rejected while the plugin is active.
+Users with such clients can disable the plugin or set `ssl.enabled.protocols: TLSv1.2,TLSv1.3` in custom resources to restore the previous behavior.
 
 PQHKE works as a hybrid: when both peers support `X25519MLKEM768`, they use it; when either side does not (for example, a component still running on Java 21), the handshake falls back to classical key exchange transparently.
 No connection is broken by the JDK upgrade alone.
