@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 159 | [Post-Quantum Hybrid Key Exchange (PQHKE) support in Strimzi](./159-post-quantum-hybrid-key-exchange.md) |
 | 158 | [Kafka Exporter re-implementation](./158-kafka-exporter-re-implementation.md) |
 | 157 | [Add SSL/TLS encryption support to MQTT Bridge](./157-add-support-to-ssl-mqtt-bridge.md) |
 | 156 | [Allow Configuring REST Extensions in Kafka Connect and MirrorMaker 2](./156-allow-configuring-connect-rest-extensions.md) |
