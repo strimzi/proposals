@@ -26,75 +26,104 @@ The blockers named in #9994 no longer apply:
 
 * Reloading certificates with a different DN or SANs needs KIP-978 (`ssl.allow.dn.changes`, `ssl.allow.san.changes`), available since Kafka 3.8.0 and therefore in every Kafka version Strimzi supports today.
 * Preparing keystore files inside the container is obsolete since the PEM change above: the broker reads the certificate from the Secret whenever the listener is (re)configured.
-* Tracking the currently used certificate does not require reading sensitive values back from Kafka: the operator already records the applied thumbprint in the Pod annotation.
+* Knowing which certificate a broker uses does not need support from Kafka: the operator can connect to the listener and look at the certificate it serves.
 
 ## Proposal
 
-A broker node qualifies for a certificate reload when the feature gate is enabled and the only change detected for it is a custom listener certificate thumbprint.
-For such a node, the operator reloads the certificate instead of restarting it:
+A broker node qualifies for a certificate reload when the new `DynamicCertificateReload` feature gate is enabled and the only reason to restart it is a changed custom listener certificate thumbprint.
+Any other restart reason restarts the node as today, and the new certificate is loaded at startup.
+Controller-only nodes are always restarted, because KRaft controller listeners cannot be reconfigured dynamically.
+CA renewals and cluster-CA-signed server certificates are out of scope.
 
-1. The per-node Secrets are updated with the new certificate and key (happens today already), before any reload call, so the config provider reads the new material.
-2. The operator sets `listener.name.<listener>.ssl.keystore.certificate.chain` and `.key` as per-broker dynamic configurations via `incrementalAlterConfigs`, using the same `${strimzisecrets:...}` placeholders as the static configuration.
-3. The broker resolves the placeholders from the Secret, validates the new keystore, and swaps the SSL context of the listener.
-4. On success, the operator patches the thumbprint annotation on the Pod.
-5. On failure, it falls back to restarting the node through the KafkaRoller (new restart reason, e.g. `CustomListenerCertificatesUpdated`).
+### Reload and verification
 
-The reload is a dedicated step with its own `incrementalAlterConfigs` call, separate from the normal configuration reconciliation, whose diff deliberately skips listener-prefixed options (see the cleanup section below).
-The reload is done node by node, like dynamic configuration updates today.
-Because the config provider reads the Secret from the Kubernetes API, there is no dependency on kubelet volume propagation.
+The reload is done by the `KafkaRoller`, node by node:
 
-The thumbprint annotation is the record of what is applied: it is only updated after a successful reload, and a reload is only triggered when it differs from the desired thumbprint.
-This keeps the mechanism idempotent; if the operator crashes in between, the next reconciliation just reloads the same certificate again.
-With the feature gate enabled, the annotation is excluded from the Pod revision calculation and evaluated separately in the rolling update decision, so it can be patched without triggering a restart.
+1. The per-node Secrets already contain the new certificate and key, because `certificateSecrets()` runs before `rollingUpdate()` in the Kafka reconciliation.
+2. The operator sets `listener.name.<listener>.ssl.keystore.certificate.chain` and `.key` as per-broker dynamic configurations through `incrementalAlterConfigs`, using the same `${strimzisecrets:...}` placeholders as the static configuration.
+   Setting a broker configuration to its current value is not a no-op: the KRaft controller still emits the record ([KAFKA-14136](https://issues.apache.org/jira/browse/KAFKA-14136)), and the broker re-resolves the placeholders, reading the Secret from the Kubernetes API.
+3. The operator opens a TLS connection to the listener of the pod (`<pod>.<cluster>-kafka-brokers.<namespace>.svc:<port>`), completes the handshake, and compares the thumbprint of the served certificate with the desired one.
+   It retries until they match, for at most 60 seconds or the operation timeout, whichever is shorter.
+4. Only when the served certificate matches does the operator patch the thumbprint annotation on the Pod.
+5. If any step fails or times out, the node is restarted with a new restart reason, `CustomListenerCertificatesChanged`, and the usual restart event.
 
-Everything else keeps the current rolling update behavior: CA renewals and replacements, cluster-CA-signed server certificates, and any other configuration or Pod change.
-KRaft controller listeners cannot be dynamically reconfigured in Kafka at all, so controllers are out of scope.
-The behavior is introduced behind a new feature gate (e.g. `DynamicCertificateReload`) with the usual alpha, beta, GA progression, and each reload is recorded as a Kubernetes event on the Pod.
+The verification step answers why the annotation can be trusted.
+A successful `incrementalAlterConfigs` call only means that the receiving broker validated the request; the target broker applies it asynchronously when it replays the metadata record, and `describeConfigs` redacts the PEM values.
+The served certificate is the only observable state, so the annotation records what was seen on the wire, not what was requested.
+A completed handshake also proves that the broker holds the matching private key; Kafka itself does not catch a mismatched key when the certificate is not trusted by the listener's own truststore.
+For listeners with TLS client authentication, the operator connects without a client certificate; with TLS 1.3 the broker rejects it only after the handshake completes, so the check works.
+Such listeners limited to TLS 1.2 fail the check and keep being restarted.
 
-### DN and SAN validation
+The steps are idempotent.
+If the operator stops between steps 2 and 4, the next reconciliation finds a stale annotation and repeats the reload, which is harmless.
 
-With the feature gate enabled, the operator sets `ssl.allow.dn.changes=true` and `ssl.allow.san.changes=true` on broker nodes.
-These options are broker-wide, so they also lift the DN and SAN checks for dynamic keystore updates on the replication and control plane listeners, not just on the custom-certificate listeners.
-This does not weaken the security model in practice: dynamic keystore updates can only be issued by the operator or by someone who already holds equivalent Kafka admin access, and the certificate source of truth remains the user-provided Secret, protected by RBAC.
-Both options are static, so enabling the gate on an existing cluster costs one last rolling update.
+The reload does not take the broker down, so the `KafkaRoller` availability checks (`canRoll`) are skipped for it.
+A reload can be combined with a dynamic configuration update of the same broker in the same pass.
 
-### Cleaning up the dynamic overrides
+### Pod revision and the PodSet
 
-The overrides set by this mechanism are per-broker dynamic configurations that live in the cluster metadata, independent of the pod.
-`KafkaConfigurationDiff` will not manage them: it already classifies listener-prefixed options as custom configuration and skips them in both directions, neither setting nor removing them (see the note on `isCustomConfigurationOption` in `KafkaConfiguration`).
-This is convenient during reloads, but it means the overrides are never cleaned up automatically, and a stale override takes precedence over the static configuration.
+The annotation stays in the PodSet Pod template, so new or recreated pods get the right value.
+The StrimziPodSet controller does not update existing pods, so the only writer of the annotation on a running pod is the `KafkaRoller` after a verified reload.
 
-The operator therefore removes the overrides explicitly in two cases:
+`PodRevision.getRevision()` removes the annotation before hashing, the same way it already strips container resources for in-place resizing.
+`ReconcilerUtils.reasonsToRestartPod()` compares the annotation of the pod with the PodSet template separately (`PodRevision.hasChanged()`) and adds `CustomListenerCertificatesChanged` when they differ.
+The `KafkaRoller` then reloads instead of restarting when the gate is enabled and this is the only reason.
 
-* When the listener stops using a custom certificate (`brokerCertChainAndKey` removed from the `Kafka` resource); otherwise the broker keeps serving the old custom certificate from the stale override.
-* When the feature gate is disabled; the operator deletes the overrides and falls back to the rolling update behavior.
+The exclusion does not depend on the feature gate.
+With the gate disabled, the separate comparison still adds the restart reason, so a changed certificate restarts the node as today.
+Because the revision formula changes, clusters with custom listener certificates get one rolling update when the operator is upgraded.
 
-After a broker restart the static and dynamic configurations resolve to the same value, so a leftover override is not harmful in itself, but removing it keeps the running configuration honest.
+### DN and SAN changes
 
-### To be validated with a proof of concept
+With the feature gate enabled, the operator sets `listener.name.<listener>.ssl.allow.dn.changes=true` and `listener.name.<listener>.ssl.allow.san.changes=true` for listeners with custom certificates only.
+The replication and control plane listeners keep Kafka's DN and SAN checks.
+Both options are static, so enabling or disabling the gate rolls the brokers once.
 
-The PEM keystore configs (`ssl.keystore.key`, `ssl.keystore.certificate.chain`) are in Kafka's reconfigurable SSL config set, so per-listener dynamic updates of them are supported.
-Their behavior together with config providers is not documented, but the Kafka code supports both halves of the reload trigger:
+### Network policies
 
-* When a dynamic override arrives from the metadata log, the broker merges it with the static configuration and constructs a new `KafkaConfig`; the merged configuration contains the `config.providers` definitions from `server.properties`, so `${strimzisecrets:...}` placeholders are resolved at that point and the Secret is read fresh from the Kubernetes API.
-* Setting an override to its existing value is not a no-op: for broker resources, the KRaft controller emits the configuration record even when the value is unchanged, precisely to trigger such reloads on the brokers ([KAFKA-14136](https://issues.apache.org/jira/browse/KAFKA-14136)).
+The verification connects from the operator to the listener.
+With the feature gate enabled, the operator adds itself to the generated `NetworkPolicy` rule of each listener that has custom certificates and `networkPolicyPeers` set.
+Listeners without `networkPolicyPeers` are already open.
+If the operator cannot reach the listener, for example because of a user-managed policy, the verification times out and the node is restarted.
 
-Together this means the operator can set the same placeholder value on every rotation and rely on the broker to re-resolve it.
-Since neither behavior is a documented contract, the implementation starts with a proof of concept that exercises the full path, and the system tests pin it down for future Kafka versions.
+### Cleaning up dynamic overrides
 
-If placeholders turn out not to resolve in dynamic configurations, the fallback is to set the PEM values inline, at the cost of persisting the private key in the KRaft metadata log.
+The overrides are per-broker dynamic configurations stored in the cluster metadata.
+`KafkaConfigurationDiff` skips listener-prefixed options in both directions, so it neither sets nor removes them.
+
+An override for a listener that still uses a custom certificate is harmless: it contains the same placeholders as the static configuration.
+An override is stale when its listener was removed or no longer uses a custom certificate, because it points to Secret keys that no longer exist.
+Kafka still starts with a stale override (it logs an error and uses the static configuration), but other dynamic configuration updates of that broker fail until it is removed.
+
+These changes always restart the broker, so the `KafkaRoller` deletes the stale overrides of a broker right before restarting it, whether the gate is enabled or not.
+They are not deleted earlier because a running broker would fall back to the keystore it loaded at startup.
+A failed deletion is logged and does not block the restart; it is retried before the next restart.
+
+## Proof of concept
+
+An implementation is available in [acgtun/strimzi-kafka-operator#4](https://github.com/acgtun/strimzi-kafka-operator/pull/4).
+It was tested on minikube with Kafka 4.3.1, 3 controllers, 3 brokers, and Calico enforcing network policies, with producers, consumers, and a TLS probe running against the listeners:
+
+* Rotations with the same placeholders reload on all brokers without restarts or client errors, including DN and SAN changes, NodePort and TLS client authentication listeners, and several listeners at once.
+* The operator is allowed by the generated `NetworkPolicy`, and other pods are still blocked.
+* Blocking the operator from the listener, or rotating to a certificate with a mismatched key, fails the verification and restarts the node.
+* With the gate disabled, rotations restart the brokers as today; toggling the gate rolls the brokers once.
+* A broker with an unresolvable dynamic override starts with its static configuration.
+
+System tests will pin the behavior down for future Kafka versions.
 
 ## Affected/not affected projects
 
-Only the Cluster Operator is affected (KafkaRoller, StrimziPodSet revision handling, and the new reload and cleanup logic).
+Only the Cluster Operator is affected (`KafkaRoller`, Pod revision handling, broker configuration, and network policy generation).
 The KafkaAgent, the other operands, and plugins such as the quotas plugin are not affected.
 
 ## Compatibility
 
 There are no API changes.
 All supported Kafka versions include KIP-226, KIP-651, and KIP-978, so there is no per-version handling.
-Disabling the feature gate makes the operator remove the dynamic overrides it created and return to the rolling update behavior.
-Downgrading to an operator without this feature is a corner case: the old operator does not know about the overrides, so they should be removed (by disabling the gate first, or manually) before the downgrade to avoid a stale override taking precedence over the static configuration.
+The feature gate starts as alpha and disabled by default.
+After downgrading to an operator without this feature, leftover overrides stay harmless as long as the listeners keep their custom certificates.
+If a listener later stops using a custom certificate, its overrides have to be removed manually with `kafka-configs.sh`.
 
 ## Rejected alternatives
 
@@ -105,7 +134,17 @@ This approach is obsolete since the PEM change: there are no keystore files to w
 ### Setting the PEM values inline in the dynamic configuration
 
 Setting the values inline would guarantee a value change on every rotation, but it persists the private key in the KRaft metadata log.
-It is kept only as a fallback if placeholders turn out not to work in dynamic configurations.
+The proof of concept shows that placeholders work, so this is not needed.
+
+### Trusting the `incrementalAlterConfigs` result
+
+The call returns before the target broker applies the change, so the operator would record a certificate that might not be served yet, or ever.
+
+### Kafka support for reporting the loaded certificate
+
+Kafka could expose a version or identifier of the loaded certificate, so the operator would not need to connect to the listener.
+This needs a KIP, and the TLS check gives the same guarantee with the Kafka versions Strimzi supports today.
+It can replace the TLS check if such support is added.
 
 ### Reloading operator-managed server certificates too
 
