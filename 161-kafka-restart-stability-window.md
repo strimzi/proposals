@@ -49,6 +49,8 @@ When the effective window is greater than zero, the `KafkaRoller` handles each n
 3. If every check passes, including one at the end of the window, it restarts the node.
 4. If any check fails, it treats it like a failed check today: it retries with the same backoff, and when the check passes again, it starts a new window from the beginning.
 
+![Kafka node rolling restart with a stability window](./images/161-kafka-restart-stability-window.png)
+
 The two conditions for restarting a node are therefore that restarting it would not take any partition below `min.insync.replicas` or make the controller quorum unavailable, and that this has stayed true for the whole window.
 The check covers every partition with a replica on the node about to be restarted, so the window also catches a replica on a third node dropping out, not only the previously restarted node.
 
