@@ -9,7 +9,7 @@ The User Operator watches `KafkaUser` resources and the `Secrets` it generates f
 Every event from these two informers, as well as every periodic reconciliation, enqueues the affected `KafkaUser` for reconciliation.
 `KafkaUserOperator#reconcile` then decides what to do based on a single condition - when the `KafkaUser` is present in the informer cache, the user is created or updated, and when it is not present, the user is deleted from Kafka together with its `Secret`.
 
-The `metadata.deletionTimestamp` field is not taken into account anywhere in this flow.
+Kubernetes marks a resource for deletion by setting the `metadata.deletionTimestamp` field which is not taken into account anywhere in the `KafkaUser` handling flow.
 A `KafkaUser` which is marked for deletion, but is still present in the Kubernetes API because it has a pending finalizer, is therefore reconciled as a regular resource.
 
 The `Secret` generated for a `KafkaUser` has an owner reference pointing to the `KafkaUser` with `blockOwnerDeletion: true`.
