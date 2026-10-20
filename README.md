@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 161 | [Honor the `deletionTimestamp` on `KafkaUser` resources](./161-honor-deletion-timestamp-in-the-user-operator.md) |
 | 160 | [Strimzi MCP Servers](./160-mcp-servers.md) |
 | 159 | [Post-Quantum Hybrid Key Exchange (PQHKE) support in Strimzi](./159-post-quantum-hybrid-key-exchange.md) |
 | 158 | [Kafka Exporter re-implementation](./158-kafka-exporter-re-implementation.md) |
