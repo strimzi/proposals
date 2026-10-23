@@ -5,7 +5,7 @@ It addresses [strimzi/strimzi-kafka-operator#3984](https://github.com/strimzi/st
 
 ## Current situation
 
-Today, brokers on `internal` listeners advertise their Pod DNS names, such as `kafka-cluster-broker-0.kafka-cluster.myproject.svc`. These names only resolve inside the Kubernetes cluster.
+Today, brokers on `internal` listeners advertise their Pod DNS names, such as `kafka-cluster-broker-0.kafka-cluster.myproject.svc`, which only resolves inside the Kubernetes cluster.
 
 `advertisedHostTemplate` supports only the `{nodeId}` and `{nodePodName}` placeholders.
 The operator can't render the Pod IP into the broker configuration, because the IP is only known once the Pod starts.
