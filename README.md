@@ -9,6 +9,7 @@ This repository lists proposals for the Strimzi project. A template for new prop
 
 | #  | Title                                                                 |
 |:--:|:----------------------------------------------------------------------|
+| 162 | [IP Advertised Listeners](./162-ip-advertised-listeners.md) |
 | 161 | [Honor the `deletionTimestamp` on `KafkaUser` resources](./161-honor-deletion-timestamp-in-the-user-operator.md) |
 | 160 | [Strimzi MCP Servers](./160-mcp-servers.md) |
 | 159 | [Post-Quantum Hybrid Key Exchange (PQHKE) support in Strimzi](./159-post-quantum-hybrid-key-exchange.md) |
