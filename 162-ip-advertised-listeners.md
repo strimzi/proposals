@@ -51,7 +51,8 @@ The environment variable and the init container are added to broker nodes only w
 | `{nodePodInterfaceIp:<interface>}`, optionally with `:ipv4` or `:ipv6` | The IP on a network interface, for example one added by Multus (IPv4 if it has one) | `kafka-init` container |
 
 
-Like the existing placeholders, they work on every listener type.
+The new placeholders are supported only on `internal` listeners.
+Clients connect to the Pod IPs directly, so the other listener types add nothing except a bootstrap address: a load balancer for `loadbalancer`, or a node IP and node port for `nodeport`, which could be supported in a follow-up.
 If a requested address doesn't exist, the init container fails, so a broker never starts with the wrong address.
 
 #### Primary Pod IP
@@ -261,7 +262,7 @@ This was added in Kafka 3.8 ([KIP-899](https://cwiki.apache.org/confluence/displ
   It resolves the keys in `POD_ADDRESSES` from `POD_IPS` and `java.net.NetworkInterface` with the rules above, and writes them to `/opt/kafka/init/pod.address`.
    It needs no Kubernetes API access and no extra permissions.
 5. Skip templates with the new placeholders when collecting certificate SANs in `KafkaListenersReconciler`.
-6. Validate the placeholders in `ListenersValidator`: a known IP family, a valid interface name, and use only in `advertisedHostTemplate`.
+6. Validate the placeholders in `ListenersValidator`: use only on `internal` listeners and only in `advertisedHostTemplate`, a known IP family, and a valid interface name.
 7. Document Pod IP listeners, including the bootstrap address, TLS, and the recommended client settings.
 8. Add unit tests, and a system test where clients keep producing and consuming through a `{nodePodIp}` listener during a rolling update of the brokers.
 
