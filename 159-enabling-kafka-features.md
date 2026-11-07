@@ -33,31 +33,50 @@ spec:
 ```
 
 The `features` field takes a list of features that the user wants to upgrade, downgrade, or enable.
-There will be a list of forbidden features that cannot be configured using this field — for example `kraft.version` or `metadata.version`.
+There will be a list of forbidden features that cannot be configured using this field.
+Currently the forbidden features will be `kraft.version` and `metadata.version`.
 `metadata.version` should be configured using the `metadataVersion` field in the Kafka spec.
+`kraft.version` is related to the static and dynamic quorum, the implementation of this field is part of a different proposal.
 
 A validation method in `KafkaCluster.fromCrd()` will check for duplicates and usage of forbidden features.
 In both cases, an `InvalidResourceException` will be thrown — either indicating that a forbidden feature is configured or that there are duplicate entries for the same feature.
+The reconciliation will fail, the Kafka CR will be moved to the `NotReady` state, and the validation error will be stored in the `.status` section.
 
 If the list of features is valid, the operator will use a new class named `KafkaFeatureManager` to configure them.
 Today, we are already using the Admin client's features endpoint for changing `metadata.version` — this is handled inside `KRaftMetadataManager`.
 The `KafkaFeatureManager` will extract the shared feature update logic from `KRaftMetadataManager`.
 From then on, `KRaftMetadataManager` will use `KafkaFeatureManager` for changing `metadata.version`, instead of handling it directly, avoiding code duplication.
 
+As `metadata.version` is itself a Kafka feature, the two classes could eventually be merged into a single `KafkaFeatureManager` that handles all features.
+This proposal keeps them separate to limit the scope of the initial change, but the full unification will be explored during the implementation.
+
+The whole process described below runs on every reconciliation in which the `features` list is not empty.
 Before processing individual features, the `KafkaFeatureManager` will call `describeFeatures()` once to get both the supported and finalized features from Kafka.
 The supported features will be used to verify that the features specified by the user actually exist in the running Kafka version.
 If a feature from the user's list is not present in the supported features, it will be skipped and a warning will be stored in the Kafka's `.status` section with `KafkaFeatureUnsupported` reason.
 The finalized features from the same call will be used to determine the current version of each feature.
 
+Features are changed through the `Admin.updateFeatures()` method of the Kafka Admin API.
+It takes a map of feature names to `FeatureUpdate` objects.
+Each `FeatureUpdate` holds the target version level and an `UpgradeType`, which tells Kafka what kind of change is being requested.
+The `UpgradeType` enum has four values — `UNKNOWN`, `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
+The operator will use only `UPGRADE` and `SAFE_DOWNGRADE`, as described in the [Feature downgrade](#feature-downgrade) section.
+
 For each valid feature in the list, the `KafkaFeatureManager` will go through the following stages:
 
 * Using the finalized features from the initial `describeFeatures()` call, it will determine the current version of the feature (features not present in the finalized map are treated as version 0 — disabled).
   * If the current version of the feature is the same as the desired version, skip all steps below.
-  * If the feature is not enabled or has a lower version than the desired version, it will mark the operation as an upgrade and use the `UPGRADE` flag.
-  * If the feature is enabled and the current version is higher than the desired one, it will mark the operation as a downgrade and use the `SAFE_DOWNGRADE` flag.
-* It will try to update the feature using the `updateFeatures` Admin client operation.
+  * If the feature is not enabled or has a lower version than the desired version, it will build the `FeatureUpdate` with the `UPGRADE` upgrade type.
+  * If the feature is enabled and the current version is higher than the desired one, it will build the `FeatureUpdate` with the `SAFE_DOWNGRADE` upgrade type.
+* It will try to update the feature using the `Admin.updateFeatures()` operation.
   * In case of an error during the update, the error will be stored in the Kafka's `.status` section with `KafkaFeatureUpdateFailed` reason. The remaining features will still be processed.
-* At the end, the operator will list all enabled features in the Kafka's `.status` section.
+* At the end, the operator will list all features supported by the running Kafka version in the Kafka's `.status` section.
+
+The list in the status is not limited to the features configured in `.spec.kafka.features`.
+It contains every feature supported by the running Kafka version, including the ones that are disabled (shown with `version: 0`) and the forbidden ones such as `kraft.version`.
+The only exception is `metadata.version`, which already has its own dedicated field in the Kafka status.
+The reason for listing everything is that there is currently no easy way for users to find out the default version of a feature for a given Kafka release.
+Having the complete list in the status gives users the full picture without having to dig through the Kafka source code or run a script.
 
 The status section will then look like this:
 ```yaml
@@ -68,6 +87,8 @@ The status section will then look like this:
       status: "True"
       type: Ready
     kafkaFeatures:
+    - name: kraft.version
+      version: 0
     - name: group.version
       version: 1
     - name: streams.version
@@ -75,7 +96,7 @@ The status section will then look like this:
     - name: transaction.version
       version: 2
     - name: eligible.leader.replicas.version
-      version: 1
+      version: 0
     - name: share.version
       version: 1
 ```
@@ -94,6 +115,8 @@ And in case of a failed update operation:
         status: "True"
         type: Ready
     kafkaFeatures:
+      - name: kraft.version
+        version: 0
       - name: group.version
         version: 1
       - name: streams.version
@@ -101,7 +124,7 @@ And in case of a failed update operation:
       - name: transaction.version
         version: 2
       - name: eligible.leader.replicas.version
-        version: 1
+        version: 0
       - name: share.version
         version: 1
 ```
@@ -120,13 +143,23 @@ Changing the Kafka version in the CR triggers a rolling restart with a new binar
 
 #### Upgrades
 
-Kafka upgrades are safe with regards to features.
-Newer Kafka versions support the same or higher feature versions than older ones.
 During a Kafka binary upgrade, features stay at their current finalized level — they are not automatically upgraded to the new Kafka version's defaults.
 The operator processes feature updates after the rolling restart completes, same as with `metadata.version`.
 Only features explicitly listed in `spec.kafka.features` are managed by the operator.
 
 If a user has `share.version: 1` configured and upgrades to a Kafka version where the default is `share.version: 2`, the feature stays at version 1 until the user updates the CR.
+
+Upgrades between minor Kafka versions are safe with regards to features.
+According to [KIP-584](https://cwiki.apache.org/confluence/spaces/KAFKA/pages/148643048/KIP-584+Versioning+scheme+for+features#KIP584%3AVersioningschemeforfeatures-Non-goals), increasing the minimum supported version level of a feature is called a feature *deprecation* and is an incompatible change that requires a major Kafka release.
+Dropping support for a feature version in a minor release would break backwards compatibility and could even make running clusters unusable, so Kafka does not do it.
+In practice this means that within a minor release line the supported version range of a feature can only grow, and a feature version that was valid before the upgrade stays valid after it.
+
+It can, however, happen in a major Kafka release — for example in a hypothetical Kafka 5.0.0 that drops support for `share.version: 1`.
+Such a change should be announced and the affected feature versions deprecated long before the major release.
+When that happens, the procedure is the same as for a Kafka downgrade — users have to check the Kafka release notes for the recommended migration path, which will most likely be to move the feature to a supported version, or to disable it with `version: 0` before upgrading the Kafka binary.
+
+If the user keeps a feature in `.spec.kafka.features` that the new Kafka version no longer supports, the operator behaves the same way as in any other unsupported-feature case.
+The `describeFeatures()` call will not list the feature among the supported ones, so the operator will skip it and add a warning with the `KafkaFeatureUnsupported` reason to the Kafka's `.status` section.
 
 #### Downgrades
 
@@ -145,7 +178,23 @@ If the user changes both the features and the Kafka version in the CR at the sam
 If the finalized feature levels are incompatible with the new binary, brokers will fail to start and the rolling update will stall.
 This is consistent with how `metadata.version` downgrades are handled — the metadata version must be downgraded before the Kafka binary.
 
-The downgrade procedure for features must be documented as part of the implementation PR.
+##### Recovery
+
+Sometimes, it can happen that users will apply both changes - change of versions of both Kafka and a feature - in a single update.
+The cluster will not be broken completely in that case.
+The operator rolls the nodes one by one and waits for each of them to become ready before continuing.
+The first node rolled with the new binary will fail to start and the rolling update will stop there, leaving the remaining nodes running on the original Kafka version.
+
+To recover, the user has to:
+
+1. Revert `.spec.kafka.version` in the Kafka CR back to the original Kafka version.
+2. Wait for the operator to roll the failed node back and for the cluster to become ready again.
+3. Downgrade or disable the affected features as described in the procedure above, and wait for the operator to apply the changes.
+4. Change `.spec.kafka.version` to the target Kafka version again.
+
+The same recovery procedure applies to a major Kafka upgrade that drops support for a finalized feature version.
+
+The downgrade procedure for features, together with the recovery steps, must be documented as part of the implementation PR.
 
 ### Removing a feature from the list
 
@@ -176,10 +225,3 @@ There are no backwards compatibility issues.
 One option considered was to automatically upgrade feature versions to match the defaults of the deployed Kafka version during Kafka upgrades.
 This was rejected because it violates the declarative principle — the operator should only set what the user explicitly declares in the CR.
 Automatically upgrading features could lead to unexpected behavior changes after a Kafka version upgrade.
-
-### Resetting features to defaults when removed from the list
-
-Another option considered was to reset features to their Kafka release defaults when removed from the `features` list.
-This was rejected because there is no Kafka Admin API to determine the default feature versions for a given release.
-Maintaining a mapping of default versions per Kafka release in Strimzi would be error-prone and require updates with every Kafka release.
-Instead, removing a feature from the list means the operator stops managing it, and users should set `version: 0` explicitly to disable a feature.
