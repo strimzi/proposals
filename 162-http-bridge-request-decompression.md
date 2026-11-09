@@ -27,7 +27,7 @@ The Bridge decompresses the body before JSON parsing, OpenAPI validation, and en
 
 The Bridge will support gzip and Zstandard.
 Both are registered HTTP content codings.
-The Bridge will use the decompression support available through Vert.x and Netty and validate the `Content-Encoding` header to enforce the supported encodings.
+The Bridge will use the decompression support available through Vert.x and validate the `Content-Encoding` header to enforce the supported encodings.
 A future proposal can add Snappy or LZ4 if users request them.
 
 | Algorithm | `Content-Encoding` |
@@ -52,13 +52,22 @@ Requests without `Content-Encoding`, or with `Content-Encoding: identity`, go th
 After decompression, the Bridge sends the same records to Kafka as it would for the equivalent uncompressed request.
 The Kafka producer still applies its configured `compression.type`, independent of the HTTP request compression.
 
+#### Multiple content encodings
+
+HTTP allows multiple content encodings to be applied sequentially, for example `Content-Encoding: gzip, zstd`.
+The Bridge will support only a single content encoding per request.
+A single compression algorithm addresses the data transfer reduction use case motivating this proposal.
+Supporting multiple encodings would add additional complexity without an identified use case.
+Requests specifying multiple content encodings will be rejected, even when each encoding is individually supported.
+
 ### Error handling
 
 The Bridge returns errors in the existing error response format:
 
 | Condition | HTTP status |
 |-----------|-------------|
-| Unsupported encoding or multiple content encodings | `415 Unsupported Media Type` |
+| Unsupported content encoding | `415 Unsupported Media Type` |
+| Multiple content encodings not supported | `415 Unsupported Media Type` |
 | Invalid compressed body | `400 Bad Request` |
 
 ## Affected/not affected projects
