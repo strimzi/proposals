@@ -20,7 +20,7 @@ This proposal addresses [strimzi/strimzi-kafka-bridge#1198](https://github.com/s
 ## Proposal
 
 The Bridge will accept compressed bodies on all client API endpoints that accept a request body.
-Clients enable compression per request with the `Content-Encoding` header, and users do not need to change the Bridge configuration.
+Request decompression will be enabled by default, and clients choose whether to compress each request using the `Content-Encoding` header.
 The Bridge decompresses the body before JSON parsing, OpenAPI validation, and endpoint processing.
 
 ### Supported compression algorithms
@@ -94,7 +94,8 @@ httpServerConfig.setCompressionConfig(
 
 To reject unsupported encodings, the Bridge will add a router root handler that returns `415 Unsupported Media Type` for any request that still has a `Content-Encoding` other than `identity`.
 This works because Vert.x removes the `Content-Encoding` header from requests it decodes, so a remaining header means an unsupported encoding or a comma-separated encoding list.
-Decompression failures will be mapped to `400 Bad Request`.
+The Bridge will add error handling to return decompression failures as `400 Bad Request` in its existing error format.
+During the PoC, Vert.x returned a `500` without this handling, suggesting a server error rather than an invalid request.
 
 ### Testing
 
@@ -113,7 +114,9 @@ The documentation will be updated with the supported encodings, the new error re
 
 ### Metrics
 
-The existing `strimzi_bridge_http_server_request_bytes` metric remains unchanged and measures the body size after decompression.
+Both existing metrics remain unchanged.
+`strimzi_bridge_http_server_request_bytes` measures the body size after decompression, and `strimzi_bridge_http_server_requests_total` counts rejected requests under their HTTP status in the `code` label.
+The Bridge will also log decompression failures at `ERROR` level, since they cannot be distinguished from other `400` responses in the request counter.
 
 ## Affected/not affected projects
 
