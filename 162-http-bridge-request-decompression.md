@@ -25,18 +25,18 @@ The Bridge decompresses the body before JSON parsing, OpenAPI validation, and en
 
 ### Supported compression algorithms
 
-The Bridge will support gzip and Zstandard.
-Both are registered HTTP content codings.
-The Bridge will use the decompression support available through Vert.x and validate the `Content-Encoding` header to enforce the supported encodings.
-
-**Note:** For `zstd` decompression decompression needs no additional library, because `zstd-jni` is already a transitive dependency of `kafka-clients`.
-
-A future proposal can add Snappy or LZ4 if users request them.
+The Bridge will use the decompression support built into Vert.x and support the encodings it decodes with the libraries the Bridge already ships:
 
 | Algorithm | `Content-Encoding` |
 |-----------|--------------------|
 | gzip | `gzip` |
+| Deflate | `deflate` |
+| Snappy (framed) | `snappy` |
 | Zstandard | `zstd` |
+
+**Note:** Zstandard decompression needs no additional library, because `zstd-jni` is already a transitive dependency of `kafka-clients`.
+
+Brotli is not supported, because it would require adding the `brotli4j` dependency.
 
 ### Request handling
 
@@ -61,7 +61,8 @@ HTTP allows multiple content encodings to be applied sequentially, for example `
 The Bridge will support only a single encoding per request, which is enough for the data transfer reduction use case.
 
 Supporting multiple encodings would require custom logic in the Bridge to apply the decoders in reverse order, as Vert.x does not handle this automatically.
-Requests specifying multiple encodings will therefore be rejected, even when each encoding is individually supported.
+Requests specifying multiple encodings in a single `Content-Encoding` header will be rejected with `415 Unsupported Media Type`.
+Repeated `Content-Encoding` headers cannot be reliably rejected using Vert.x's built-in decompression, because Netty's [`HttpContentDecoder`](https://github.com/netty/netty/blob/netty-4.2.20.Final/codec-http/src/main/java/io/netty/handler/codec/http/HttpContentDecoder.java#L92) reads only the first value and removes all occurrences when it selects a decoder.
 
 ### Error handling
 
@@ -84,20 +85,26 @@ httpServerConfig.setCompressionConfig(
     new CompressionConfig()
         .setDecompressionEnabled(true)
         .addGzip()
+        .addDeflate()
+        .addSnappy()
         .addZstd());
 ```
 
-The Bridge will validate the `Content-Encoding` header in a router root handler, before the request body is validated, and map any decompression failures to the errors above.
+**Note:** Vert.x decodes all supported encodings regardless of which compressors are listed, and only requires the list to be non-empty to enable decompression.
+
+To reject unsupported encodings, the Bridge will add a router root handler that returns `415 Unsupported Media Type` for any request that still has a `Content-Encoding` other than `identity`.
+This works because Vert.x removes the `Content-Encoding` header from requests it decodes, so a remaining header means an unsupported encoding or a comma-separated encoding list.
+Decompression failures will be mapped to `400 Bad Request`.
 
 ### Testing
 
 Integration tests will cover the following scenarios:
 
-- gzip and zstd requests produce the same Kafka records as uncompressed requests
+- gzip, Deflate, Snappy, and Zstandard requests produce the same Kafka records as uncompressed requests
 - Requests with no `Content-Encoding` or with `identity` go through the existing processing path
 - Unsupported encodings are rejected with `415 Unsupported Media Type`
-- Stacked encodings are rejected with `415 Unsupported Media Type`
-- Corrupt compressed bodies are rejected with `400 Bad Request`
+- Comma-separated encodings are rejected with `415 Unsupported Media Type`
+- Corrupt compressed bodies are rejected with `400 Bad Request` in the existing error format
 - Empty compressed bodies get the same response as empty uncompressed requests
 
 ### Documentation
@@ -107,8 +114,6 @@ The documentation will be updated with the supported encodings, the new error re
 ### Metrics
 
 The existing `strimzi_bridge_http_server_request_bytes` metric remains unchanged and measures the body size after decompression.
-A new `strimzi_bridge_http_server_request_received_bytes` metric will measure the body size before decompression for all requests, with the same labels plus an `encoding` label (`identity` for requests without compression).
-This allows users to compare body sizes before and after decompression and see how much data transfer compression saves.
 
 ## Affected/not affected projects
 
