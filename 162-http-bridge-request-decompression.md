@@ -28,6 +28,9 @@ The Bridge decompresses the body before JSON parsing, OpenAPI validation, and en
 The Bridge will support gzip and Zstandard.
 Both are registered HTTP content codings.
 The Bridge will use the decompression support available through Vert.x and validate the `Content-Encoding` header to enforce the supported encodings.
+
+**Note:** For `zstd` decompression decompression needs no additional library, because `zstd-jni` is already a transitive dependency of `kafka-clients`.
+
 A future proposal can add Snappy or LZ4 if users request them.
 
 | Algorithm | `Content-Encoding` |
@@ -55,10 +58,10 @@ The Kafka producer still applies its configured `compression.type`, independent 
 #### Multiple content encodings
 
 HTTP allows multiple content encodings to be applied sequentially, for example `Content-Encoding: gzip, zstd`.
-The Bridge will support only a single content encoding per request.
-A single compression algorithm addresses the data transfer reduction use case motivating this proposal.
-Supporting multiple encodings would add additional complexity without an identified use case.
-Requests specifying multiple content encodings will be rejected, even when each encoding is individually supported.
+The Bridge will support only a single encoding per request, which is enough for the data transfer reduction use case.
+
+Supporting multiple encodings would require custom logic in the Bridge to apply the decoders in reverse order, as Vert.x does not handle this automatically.
+Requests specifying multiple encodings will therefore be rejected, even when each encoding is individually supported.
 
 ### Error handling
 
@@ -69,6 +72,43 @@ The Bridge returns errors in the existing error response format:
 | Unsupported content encoding | `415 Unsupported Media Type` |
 | Multiple content encodings not supported | `415 Unsupported Media Type` |
 | Invalid compressed body | `400 Bad Request` |
+
+An empty body with `Content-Encoding: gzip` gets the same response as an empty uncompressed request.
+
+### Implementation
+
+Request decompression will be enabled in [http server configuration](https://github.com/strimzi/strimzi-kafka-bridge/blob/main/src/main/java/io/strimzi/kafka/bridge/http/HttpBridge.java#L357):
+
+```java
+httpServerConfig.setCompressionConfig(
+    new CompressionConfig()
+        .setDecompressionEnabled(true)
+        .addGzip()
+        .addZstd());
+```
+
+The Bridge will validate the `Content-Encoding` header in a router root handler, before the request body is validated, and map any decompression failures to the errors above.
+
+### Testing
+
+Integration tests will cover the following scenarios:
+
+- gzip and zstd requests produce the same Kafka records as uncompressed requests
+- Requests with no `Content-Encoding` or with `identity` go through the existing processing path
+- Unsupported encodings are rejected with `415 Unsupported Media Type`
+- Stacked encodings are rejected with `415 Unsupported Media Type`
+- Corrupt compressed bodies are rejected with `400 Bad Request`
+- Empty compressed bodies get the same response as empty uncompressed requests
+
+### Documentation
+
+The documentation will be updated with the supported encodings, the new error responses, and an example of a compressed request.
+
+### Metrics
+
+The existing `strimzi_bridge_http_server_request_bytes` metric remains unchanged and measures the body size after decompression.
+A new `strimzi_bridge_http_server_request_compressed_bytes` metric will measure the compressed body size of compressed requests, with the same labels plus an `encoding` label.
+This allows users to compare compressed and decompressed body sizes and see how much data transfer compression saves.
 
 ## Affected/not affected projects
 
@@ -84,3 +124,10 @@ Existing clients that send uncompressed requests keep working without changes.
 
 Users who already run a reverse proxy in front of the Bridge can decompress requests there, for example by creating an `EnvoyFilter` if using Istio.
 Users without a reverse proxy would have to deploy and maintain one only to decompress requests for the Bridge.
+
+### Accept compressed Kafka record batches
+
+Clients could send compressed batches in [Kafka's record-batch format](https://kafka.apache.org/41/implementation/message-format/#record-batch), allowing the Bridge to forward them without decompression and recompression.
+
+This approach is rejected because it requires a new client request format and a separate sending implementation, as the Java Kafka client has no public API for sending prebuilt batches.
+The proposed solution works with the existing request format and Java Kafka client. The trade-off is that the Bridge decompresses requests and recompresses them when Kafka producer compression is enabled.
