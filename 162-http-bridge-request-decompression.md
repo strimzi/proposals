@@ -107,8 +107,8 @@ The documentation will be updated with the supported encodings, the new error re
 ### Metrics
 
 The existing `strimzi_bridge_http_server_request_bytes` metric remains unchanged and measures the body size after decompression.
-A new `strimzi_bridge_http_server_request_compressed_bytes` metric will measure the compressed body size of compressed requests, with the same labels plus an `encoding` label.
-This allows users to compare compressed and decompressed body sizes and see how much data transfer compression saves.
+A new `strimzi_bridge_http_server_request_received_bytes` metric will measure the body size before decompression for all requests, with the same labels plus an `encoding` label (`identity` for requests without compression).
+This allows users to compare body sizes before and after decompression and see how much data transfer compression saves.
 
 ## Affected/not affected projects
 
