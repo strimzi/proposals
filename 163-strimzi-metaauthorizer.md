@@ -14,7 +14,7 @@ Every Strimzi-based Apache Kafka cluster has several internal components that co
 * User Operator
 * Cruise Control
 * Kafka Exporter
-* (In the future) Strimzi Sova / Extra Metrics
+* Strimzi Sova / Extra Metrics
 
 These components connect to the internal control plane (`CONTROLPLANE-9090`) and replication (`REPLICATION-9091`) listeners.
 They authenticate either using mTLS (for example `User:CN=my-cluster-entity-topic-operator,O=io.strimzi`) or, with the [SEP-150 proposal](https://github.com/strimzi/proposals/blob/main/150-configurable-security-of-internal-communication.md), using Kubernetes Service Account tokens (for example `User:system:serviceaccount:myproject:my-cluster-entity-operator`).
@@ -33,7 +33,7 @@ The same super-users are used regardless of whether the user uses the `simple` a
 ## Motivation
 
 Configuring the internal components as super-users is simple and robust.
-But it gives every component much more rights than it actually needs:
+But it gives every component many more rights than it actually needs:
 
 * Kafka Exporter only needs to describe topics and consumer groups to export the metrics.
   But as a super-user, it can read and write all data, delete topics, or change ACLs.
@@ -102,7 +102,7 @@ The third row of the table is needed because of how KRaft forwards requests.
 The brokers forward many administrative requests (for example `CreateTopics`, `DeleteTopics`, `CreatePartitions`, `CreateAcls`, `DeleteAcls`, `AlterClientQuotas`, or `IncrementalAlterConfigs` for topics) to the controllers wrapped in an `Envelope` request.
 The controller authorizes the `Envelope` request with the principal of the broker.
 Then it authorizes the inner request with the principal of the original client, but with the name of the controller listener (`CONTROLPLANE-9090`).
-To not break the forwarded requests of the regular users, requests from all principals that do not belong to the internal Strimzi components are delegated even on the internal listeners.
+To avoid breaking the forwarded requests of the regular users, requests from all principals that do not belong to the internal Strimzi components are delegated even on the internal listeners.
 The forwarded requests from the internal components are authorized using the hardcoded rules.
 
 When no user-configured authorizer is set, the Meta-Authorizer allows all requests that would be delegated (the same as running Kafka without an authorizer).
@@ -125,15 +125,15 @@ The implied Kafka operations apply as well (`Read`, `Write`, `Delete`, and `Alte
 | Kafka Exporter               | `Describe`                                           | All topics: `Describe`                                                                                       | All groups: `Describe` |
 | Strimzi Sova / Extra Metrics | `Describe`                                           | All topics: `Describe`                                                                                       | All groups: `Describe` |
 
-The components use the following Kafka APIs:
+The components use the following Kafka protocol APIs:
 
-* **Cluster Operator**: `DescribeCluster`, `DescribeMetadataQuorum`, `ListTopics`, `DescribeTopics`, `DescribeConfigs` (brokers and topics), `IncrementalAlterConfigs` (brokers and broker loggers), `UpdateFeatures`, `UnregisterBroker`, `UnregisterController`, `DescribeClientQuotas`, and `AlterClientQuotas`.
-* **Topic Operator**: `CreateTopics`, `DeleteTopics`, `CreatePartitions`, `DescribeTopics`, `DescribeConfigs` (topics and brokers), `IncrementalAlterConfigs` (topics), `ListPartitionReassignments`, and `DescribeCluster`.
-* **User Operator**: `DescribeAcls`, `CreateAcls`, `DeleteAcls`, `DescribeUserScramCredentials`, `AlterUserScramCredentials`, `DescribeClientQuotas`, and `AlterClientQuotas`.
-* **Cruise Control**: `DescribeCluster`, `ListTopics`, `DescribeTopics`, `DescribeConfigs`, `DescribeLogDirs`, `DescribeReplicaLogDirs`, `AlterPartitionReassignments`, `ListPartitionReassignments`, `ElectLeaders`, `AlterReplicaLogDirs`, `IncrementalAlterConfigs` (replication throttles on brokers and topics), `CreateTopics` and `CreatePartitions` (for its own topics), and producing to and consuming from its own topics.
+* **Cluster Operator**: `DescribeCluster`, `DescribeQuorum`, `Metadata`, `DescribeTopicPartitions`, `DescribeConfigs` (brokers and topics), `IncrementalAlterConfigs` (brokers and broker loggers), `UpdateFeatures`, `UnregisterBroker`, `UnregisterController`, `DescribeClientQuotas`, and `AlterClientQuotas`.
+* **Topic Operator**: `CreateTopics`, `DeleteTopics`, `CreatePartitions`, `Metadata`, `DescribeTopicPartitions`, `DescribeConfigs` (topics and brokers), `IncrementalAlterConfigs` (topics), `ListPartitionReassignments`, and `DescribeCluster`.
+* **User Operator**: `DescribeAcls`, `CreateAcls`, `DeleteAcls`, `DescribeUserScramCredentials`, `AlterUserScramCredentials`, `DescribeClientQuotas`, `AlterClientQuotas`, and `DescribeCluster`.
+* **Cruise Control**: `DescribeCluster`, `Metadata`, `DescribeTopicPartitions`, `DescribeConfigs`, `DescribeLogDirs`, `AlterPartitionReassignments`, `ListPartitionReassignments`, `ElectLeaders`, `AlterReplicaLogDirs`, `IncrementalAlterConfigs` (replication throttles on brokers and topics), `CreateTopics` and `CreatePartitions` (for its own topics), and `InitProducerId`, `Produce`, `ListOffsets`, and `Fetch` (for producing to and consuming from its own topics).
   The Cruise Control consumers use manual partition assignment without a consumer group, so no group rules are needed.
-* **Kafka Exporter**: `Metadata`, `ListOffsets`, `ListGroups`, `DescribeGroups`, and `OffsetFetch`.
-* **Strimzi Sova**: `Metadata`, `ListOffsets`, `ListGroups`, `DescribeGroups`, and `OffsetFetch`.
+* **Kafka Exporter**: `Metadata`, `ListOffsets`, `FindCoordinator`, `ListGroups`, `DescribeGroups`, and `OffsetFetch`.
+* **Strimzi Sova / Extra Metrics**: `Metadata`, `ListOffsets`, `FindCoordinator`, `ListGroups`, `DescribeGroups`, and `OffsetFetch`.
 
 The names of the Cruise Control topics can be customized by the user in the `Kafka` custom resource.
 So they are configurable in the Meta-Authorizer as well.
@@ -161,6 +161,7 @@ strimzi.metaauthorizer.topicoperator.user=User:CN=my-cluster-entity-topic-operat
 strimzi.metaauthorizer.useroperator.user=User:CN=my-cluster-entity-user-operator,O=io.strimzi
 strimzi.metaauthorizer.kafkaexporter.user=User:CN=my-cluster-kafka-exporter,O=io.strimzi
 strimzi.metaauthorizer.cruisecontrol.user=User:CN=my-cluster-cruise-control,O=io.strimzi
+strimzi.metaauthorizer.extrametrics.user=User:CN=my-cluster-extra-metrics,O=io.strimzi
 strimzi.metaauthorizer.cruisecontrol.topics=strimzi.cruisecontrol.metrics,strimzi.cruisecontrol.modeltrainingsamples,strimzi.cruisecontrol.partitionmetricsamples
 
 # User-configured super-users only
@@ -177,6 +178,7 @@ super.users=User:CN=my-admin
 | `strimzi.metaauthorizer.useroperator.user`     | Principal of the User Operator                                                                               |
 | `strimzi.metaauthorizer.kafkaexporter.user`    | Principal of Kafka Exporter                                                                                  |
 | `strimzi.metaauthorizer.cruisecontrol.user`    | Principal of Cruise Control                                                                                  |
+| `strimzi.metaauthorizer.extrametrics.user`     | Principal of Strimzi Sova / Extra Metrics                                                                    |
 | `strimzi.metaauthorizer.cruisecontrol.topics`  | Comma-separated list of the Cruise Control topics (defaults to the default Strimzi Cruise Control topics)    |
 
 The principals use the Kafka `<type>:<name>` format.
@@ -213,31 +215,80 @@ The Meta-Authorizer therefore needs to be tested against all supported Kafka ver
 The prototype is built against Kafka 4.4 and also compiles against Kafka 4.3.
 If the internal interface changes in a future Kafka version, we can release separate Meta-Authorizer artifacts for different Kafka versions and use them in the corresponding third-party libraries of the Kafka container images.
 
+### Impact on Upgradability
+
+The Strimzi Meta-Authorizer can potentially affect the upgradability of Strimzi.
+As long as all the components were treated as super-users, they were always authorized to do whatever changes or new features we added to the Strimzi code base.
+This might not be the case with the Meta-Authorizer.
+
+It might happen that a new feature or a new Apache Kafka API used in Strimzi version X will need new permissions.
+That means that we would need to prepare and release a new version of the Meta-Authorizer and include it in the Kafka container images released as part of Strimzi version X.
+However, these new rules would take effect only after the initial rolling update of the Kafka nodes that follows the upgrade to Strimzi version X.
+
+This affects mainly the Strimzi Cluster Operator and its `CaReconciler` and `KafkaReconciler` classes, which run before and during this rolling update.
+The Kafka nodes themselves are not affected, because they are allowed everything anyway.
+And the other operators and tools, such as Cruise Control or Kafka Exporter, are rolled only after the initial Kafka rolling update.
+
+Given that the Cluster Operator already requires many access rights, we do not expect a major impact.
+And in case there is an impact caused by a new feature, we can deal with it in several ways:
+
+* Skip the feature or API call until the initial rolling update is complete (by checking the `Kafka` CR status that tracks the operator version)
+* Delay the rollout of such a new feature using a feature gate (the Meta-Authorizer with the new rules is rolled out first while the feature gate is still disabled by default)
+* Move the new API calls in the reconciliation to after the initial rolling update
+
+The most dangerous situation would be if an existing method in a new version of the Kafka Admin API suddenly started to require a different ACL operation or resource.
+In such a case, we would need to postpone the Kafka client update in the Cluster Operator until the new Meta-Authorizer is rolled out.
+But such changes to the Kafka Admin API client would be unexpected and would likely break the backwards compatibility of the Kafka Admin API.
+
 ### Behavior Differences Compared to the Super-Users
 
 Apart from the restricted rights of the internal components, there are some other differences in behavior compared to the super-users:
 
 * The authorization decisions for the internal components are logged by the `io.strimzi.kafka.metaauthorizer.MetaAuthorizer` logger and not by the Kafka `kafka.authorizer.logger` logger.
-  Denied requests are logged on the `INFO` level, allowed requests on the `DEBUG` level.
+  Denied requests are logged at the `INFO` level, allowed requests at the `DEBUG` level.
 * The authorization metrics of the `StandardAuthorizer` (such as `authorization-allowed-rate-per-minute`) count only the decisions of the user-configured authorizer and not the decisions made by the Meta-Authorizer for the internal components.
 * The internal components cannot get any additional rights through ACLs or through the rules of the user-configured authorizer on the internal listeners.
 * The internal component principals are not super-users on the user listeners anymore.
-  If they are used on a user listener, they are authorized by the user-configured authorizer as any other user.
+  If they are used on a user listener, they are authorized by the user-configured authorizer like any other user.
 
-### Known Limitation
+### Known Limitations
+
+This proposal provides a clear improvement compared to the current situation, where each component is a super-user on all listeners for all requests.
+However, there are still some limitations, as described below.
+Fixing them would require changes in Apache Kafka or significant trade-offs that are currently not worth it.
+
+#### No Listener on Forwarded Requests
 
 The brokers forward many requests to the controllers without authorizing them first (for example `CreateTopics`, `DeleteTopics`, `CreatePartitions`, `CreateAcls`, `DeleteAcls`, `AlterClientQuotas`, `AlterUserScramCredentials`, or `IncrementalAlterConfigs` for topics).
 The controller authorizes them with the original principal, but with the controller listener name.
-It cannot tell on which listener the client originally connected.
+So it cannot tell on which listener the client originally connected and whether the request came from a user on a user listener or from an internal component.
 
 So when a client authenticates on a user listener with a principal that is identical to the principal of one of the internal components, it will get the hardcoded rules of the component for the forwarded requests.
-For example, a client authenticated as the Topic Operator on a user listener will be able to create and delete topics.
-But it will not be able to read or write data, because the produce and fetch requests are authorized directly by the broker.
 
-This is still an improvement compared to the current situation, where such a client would be a super-user on all listeners for all requests.
-And it would get only the rules of the one component it impersonates, and only for the forwarded requests.
-We also do not expect regular users to have the same usernames as the internal components.
-Fixing this would require changes in Apache Kafka to pass the original listener name to the controller as part of the forwarded request.
+#### Coarse-Grained Kafka Authorization
+
+Unfortunately, the Apache Kafka authorization model is quite coarse-grained.
+Many very different API calls are authorized using the same operations and resource types.
+For example, the `Alter` operation on the `Cluster` resource is used for:
+
+* Managing ACLs
+* Managing SCRAM-SHA users
+* Moving replicas and electing leaders
+* Updating features and unregistering brokers
+
+So the same permission is needed by the Cluster Operator, Cruise Control, and the User Operator.
+As a result, even with the reduced (minimal) permissions, the credentials of any of these components can be used to add ACLs for other users or to create new SCRAM-SHA users.
+
+The authorizer has access to the API key of each request, including the requests forwarded to the controllers.
+So in theory, we could authorize the internal components based on an allow-list of the API calls, which would provide better granularity.
+However, such granular rules might cause issues with upgradability, because any new API call needed by the Cluster Operator would require the new rules to be rolled out to the Kafka nodes first (see the _Impact on Upgradability_ section above).
+
+Another approach might be to deny-list some especially dangerous API calls, such as managing ACLs or SCRAM-SHA users.
+It is not likely that the Cluster Operator or Cruise Control would ever need these calls (especially not without us planning for it ahead).
+So a deny-list might not impact the upgradability so significantly.
+However, some components, such as the User Operator, actually need these access rights.
+So it is questionable whether it would provide a practical security improvement.
+In many situations, someone who can steal the credentials of a single component or impersonate it can likely do the same for the other components as well.
 
 ### Feature Gate
 
@@ -252,7 +303,7 @@ The following table shows the expected graduation of the `UseMetaAuthorizer` fea
 
 When the feature gate is disabled, the Cluster Operator will configure the authorization in the same way as today (with the user-configured authorizer and the internal components as super-users).
 When the feature gate is enabled, the Cluster Operator will configure the Meta-Authorizer as described in this proposal.
-The feature gate has effect only on Kafka clusters with enabled authorization.
+The feature gate has an effect only on Kafka clusters with enabled authorization.
 Kafka clusters without authorization are not affected.
 
 The Meta-Authorizer will be part of the Kafka container images regardless of the feature gate state.
@@ -288,7 +339,7 @@ Each Kafka version can use the Meta-Authorizer version (or artifact) that is com
 The hardcoded rules are coupled to the Kafka APIs used by the Strimzi components.
 When a component starts using a new Kafka API, the rules need to be updated in the Meta-Authorizer repository first.
 A new Meta-Authorizer version then needs to be released and used in the Kafka container images before the change to the component can be released.
-However, such changes should be relatively rare and known well ahead.
+However, such changes should be relatively rare and known well in advance.
 The Meta-Authorizer integration tests and the Strimzi system tests running with the feature gate enabled should catch any missing rules.
 Many of the components (such as Cruise Control, Kafka Exporter, or Strimzi Sova) are already developed outside of the operators repository, so the rules cannot be kept together with all the components anyway.
 
@@ -367,7 +418,7 @@ The following results were measured with 8 parallel threads, 10000 ACLs, and 10 
 | Topic Operator, allowed request                                     |  15.9 µs |        0.169 µs | 94x faster         |
 | Cruise Control, idempotent producer initialization check            |  1.72 µs |        0.033 µs | 53x faster         |
 
-With 8 threads, every `StandardAuthorizer` call is around 6-7 times slower than with a single thread in both setups.
+With 8 threads, every `StandardAuthorizer` call is around 6 to 15 times slower than with a single thread in both setups.
 The main reason is the contention on the synchronized authorization metrics of the `StandardAuthorizer`.
 The regular users show no meaningful difference between both setups.
 The forwarded request runs the same code as the regular allowed request with one additional `HashMap` lookup and its difference is within the measurement error of the baseline (±17%).
@@ -393,7 +444,7 @@ The internal components, which do not use the `StandardAuthorizer` anymore, avoi
 ### Documentation
 
 The feature gate will be documented in the feature gates section of the documentation.
-The documentation will also describe the rules for each of the internal components, the behavior differences compared to the super-users, and the known limitation.
+The documentation will also describe the rules for each of the internal components, the behavior differences compared to the super-users, and the known limitations.
 
 ## Affected Projects
 
@@ -416,11 +467,26 @@ When the feature gate is enabled, the behavior changes for the internal componen
 * The internal component principals are no longer super-users on the user listeners.
 * ACLs or other rules configured for the internal components in the user-configured authorizer have no effect on the internal listeners.
 * The authorization decisions for the internal components are logged by a different logger and are not included in the `StandardAuthorizer` metrics.
-* The performance might differ.
+* The authorization performance changes slightly (see the _Performance Impact_ section).
 
 However, the Strimzi `Kafka` custom resource API does not change.
 And we do not expect these changes to have a major impact on Strimzi users.
 
 ## Rejected Alternatives
 
-There are currently no rejected alternatives.
+### Authorizing the Internal Components Based on the API Calls
+
+Instead of using the ACL operations and resource types, the hardcoded rules could allow-list the exact Kafka protocol APIs used by each internal component.
+The authorizer has access to the API key of each request (including the requests forwarded from the brokers to the controllers), so this would be technically possible.
+It would provide better granularity than the coarse-grained Kafka ACL operations.
+For example, the User Operator could be allowed to manage ACLs and SCRAM-SHA credentials, while the Cluster Operator and Cruise Control could not, even though all of them need the `Alter` operation on the `Cluster` resource.
+
+This was rejected because it would make the rules much more fragile:
+
+* Every new API call used by any of the components would require a new Meta-Authorizer release to be rolled out to the Kafka nodes first (see the _Impact on Upgradability_ section).
+* The protocol APIs used by the Admin API methods can change between Kafka versions without any change in the component code (for example, the `describeTopics` method moved from the `Metadata` API to the `DescribeTopicPartitions` API).
+  The same applies to the other Kafka client libraries used by the components, such as the Sarama library used by Kafka Exporter.
+* The API names, their versions, and the APIs that Kafka forwards to the controllers can differ between Kafka versions.
+
+The security benefit would also be limited, because the User Operator needs the most sensitive APIs anyway, and in many situations someone who can steal the credentials of one component can likely do the same for the other components as well.
+A deny-list of selected sensitive APIs for some components can be considered in the future (see the _Coarse-Grained Kafka Authorization_ section).
