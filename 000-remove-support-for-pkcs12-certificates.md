@@ -23,9 +23,11 @@ on the [community call on September 13th 2026](https://youtu.be/eyZpjVnTzQI?si=U
 ## Proposal
 
 The env var `STRIMZI_PKCS12_KEYSTORE_GENERATION` will be set to false by default in the 1.5.0 release of Strimzi. 
-This is two releases after it was announced as deprecated.
+This is two releases after it was announced as deprecated. 
+The 1.4.0 release notes will include a note that this env var is going to change in the 1.5.0 release.
 
-The env var and any related code will be removed two releases later, in the 1.7.0 release.
+The env var and any related code will be removed three releases later, in the 1.8.0 release. 
+The 1.7.0 release notes will include a note that it is the last release to include the env var.
 
 ## Affected/not affected projects
 
